@@ -1,17 +1,10 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
  */
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -25,4 +18,38 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Magic number configuration table
+ * Stores trading account identifiers with their associated user details
+ */
+export const magicNumbers = mysqlTable("magic_numbers", {
+  id: int("id").autoincrement().primaryKey(),
+  magicNumber: varchar("magicNumber", { length: 20 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  password: varchar("password", { length: 255 }).notNull(),
+  profitShare: decimal("profitShare", { precision: 5, scale: 4 }).notNull().default("0.3500"),
+  showAllData: boolean("showAllData").notNull().default(false),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MagicNumber = typeof magicNumbers.$inferSelect;
+export type InsertMagicNumber = typeof magicNumbers.$inferInsert;
+
+/**
+ * Trading sessions table
+ * Tracks user login sessions with magic number associations
+ */
+export const tradingSessions = mysqlTable("trading_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionToken: varchar("sessionToken", { length: 255 }).notNull().unique(),
+  magicNumberId: int("magicNumberId").notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TradingSession = typeof tradingSessions.$inferSelect;
+export type InsertTradingSession = typeof tradingSessions.$inferInsert;

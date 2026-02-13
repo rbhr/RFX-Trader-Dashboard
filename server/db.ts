@@ -1,11 +1,10 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -89,4 +88,76 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Magic Number queries
+export async function getMagicNumberByNumber(magicNumber: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(magicNumbers)
+    .where(eq(magicNumbers.magicNumber, magicNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getAllActiveMagicNumbers() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(magicNumbers)
+    .where(eq(magicNumbers.isActive, true))
+    .orderBy(magicNumbers.name);
+}
+
+export async function createMagicNumber(data: InsertMagicNumber) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(magicNumbers).values(data);
+  return result;
+}
+
+// Trading Session queries
+export async function createTradingSession(data: InsertTradingSession) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(tradingSessions).values(data);
+  return result;
+}
+
+export async function getTradingSessionByToken(sessionToken: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select({
+      session: tradingSessions,
+      magicNumber: magicNumbers,
+    })
+    .from(tradingSessions)
+    .innerJoin(magicNumbers, eq(tradingSessions.magicNumberId, magicNumbers.id))
+    .where(eq(tradingSessions.sessionToken, sessionToken))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function deleteTradingSession(sessionToken: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(tradingSessions).where(eq(tradingSessions.sessionToken, sessionToken));
+}
+
+export async function cleanupExpiredSessions() {
+  const db = await getDb();
+  if (!db) return;
+
+  const now = new Date();
+  await db.delete(tradingSessions).where(eq(tradingSessions.expiresAt, now));
+}
