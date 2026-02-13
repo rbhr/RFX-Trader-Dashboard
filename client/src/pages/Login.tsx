@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { TrendingUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
 
-  const { data: magicNumbers, isLoading: loadingMagicNumbers } = trpc.trading.getMagicNumbers.useQuery();
+
   const loginMutation = trpc.trading.login.useMutation({
     onSuccess: (data) => {
       toast.success(`Welcome back, ${data.name}!`);
@@ -82,18 +82,14 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="magicNumber">Magic Number</Label>
-              <Select value={magicNumber} onValueChange={setMagicNumber} disabled={loadingMagicNumbers}>
-                <SelectTrigger id="magicNumber">
-                  <SelectValue placeholder={loadingMagicNumbers ? "Loading..." : "Select your magic number"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {magicNumbers?.map((mn) => (
-                    <SelectItem key={mn.magicNumber} value={mn.magicNumber}>
-                      {mn.name} - #{mn.magicNumber}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                id="magicNumber"
+                type="text"
+                value={magicNumber}
+                onChange={(e) => setMagicNumber(e.target.value)}
+                placeholder="Enter your magic number"
+                disabled={loginMutation.isPending}
+              />
             </div>
 
             <div className="space-y-2">
