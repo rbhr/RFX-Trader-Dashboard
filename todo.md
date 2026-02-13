@@ -40,3 +40,6 @@
 
 ## Changes Requested
 - [x] Change magic number login field from dropdown to text input
+
+## Bugs to Fix
+- [x] Login not redirecting to dashboard after successful authentication (Fixed: Added cookie-parser middleware)
