@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { appendFileSync } from "fs";
+
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -396,13 +396,10 @@ export const appRouter = router({
         }
 
         // Check if we have a stored MC account ID
-        appendFileSync('/home/ubuntu/check-mc-debug.log', `[${new Date().toISOString()}] Checking MC status for trader ${trader.id}, mcAccountId: ${trader.mcAccountId}\n`);
         if (trader.mcAccountId) {
           // Verify the account still exists in MetaCopier
           try {
-            appendFileSync('/home/ubuntu/check-mc-debug.log', `[${new Date().toISOString()}] Calling getAccountById for ${trader.mcAccountId}\n`);
             const accountDetails = await metaCopierService.getAccountById(trader.mcAccountId);
-            appendFileSync('/home/ubuntu/check-mc-debug.log', `[${new Date().toISOString()}] Account found, returning exists=true\n`);
             return {
               exists: true,
               accountId: trader.mcAccountId,
@@ -410,7 +407,6 @@ export const appRouter = router({
             };
           } catch (error: any) {
             // Account ID stored but account doesn't exist anymore
-            appendFileSync('/home/ubuntu/check-mc-debug.log', `[${new Date().toISOString()}] Error getting account: ${error.message}\n`);
             console.warn(`[checkMetaCopierStatus] Stored account ID ${trader.mcAccountId} not found in MetaCopier`);
           }
         }
