@@ -153,10 +153,18 @@ class MetaCopierService {
         }
       );
       
+      const accountId = response.id;
+      
+      // Add features: HFT mode, Socket, Trade guardrails, Data collector
+      await this.addAccountFeatures(accountId);
+      
+      // Add risk limit: Actual, Absolute $300, fulfil in 1 second, close all
+      await this.addRiskLimit(accountId);
+      
       return {
         success: true,
-        accountId: response.id,
-        message: 'Account created successfully',
+        accountId,
+        message: 'Account created successfully with features and risk limits',
       };
     } catch (error: any) {
       console.error('[MetaCopier] Error creating account:', error);
@@ -164,6 +172,96 @@ class MetaCopierService {
         success: false,
         message: error.response?.data?.message || 'Failed to create MetaCopier account',
       };
+    }
+  }
+
+  /**
+   * Add features to a MetaCopier account
+   */
+  private async addAccountFeatures(accountId: string): Promise<void> {
+    try {
+      // HFT mode (type 24)
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features`,
+        'POST',
+        {
+          type: { id: 24 },
+          setting: { activateHftMode: true }
+        }
+      );
+
+      // Socket (type 25)
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features`,
+        'POST',
+        {
+          type: { id: 25 },
+          setting: { activateSocket: true }
+        }
+      );
+
+      // Trade guardrails (type 37)
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features`,
+        'POST',
+        {
+          type: { id: 37 },
+          setting: {
+            maxLotSizeThreshold: 0,
+            enabled: true,
+            aggregatePerSymbol: false,
+            maxOpenTimeSeconds: 0,
+            symbolsConfiguration: {}
+          }
+        }
+      );
+
+      // Data collector (type 35)
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features`,
+        'POST',
+        {
+          type: { id: 35 },
+          setting: {
+            activateDataCollector: true,
+            collectionIntervalSeconds: 60,
+            recordEquity: true,
+            recordBalance: true,
+            recordFloatingPnL: true,
+            normalizeValues: false,
+            retentionDays: 90
+          }
+        }
+      );
+
+      console.log(`[MetaCopier] Added features to account ${accountId}`);
+    } catch (error) {
+      console.error('[MetaCopier] Error adding features:', error);
+      // Don't throw - account is created, features are optional
+    }
+  }
+
+  /**
+   * Add risk limit to a MetaCopier account
+   */
+  private async addRiskLimit(accountId: string): Promise<void> {
+    try {
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/riskLimits`,
+        'POST',
+        {
+          riskType: { id: 4 }, // Actual
+          absoluteRiskLimit: 300.0,
+          fulfillSeconds: 1,
+          closeAllOpenPositions: true,
+          active: true
+        }
+      );
+
+      console.log(`[MetaCopier] Added risk limit to account ${accountId}`);
+    } catch (error) {
+      console.error('[MetaCopier] Error adding risk limit:', error);
+      // Don't throw - account is created, risk limit is optional
     }
   }
 }

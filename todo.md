@@ -112,3 +112,13 @@
 
 ## Active Bugs
 - [x] MetaCopier account creation fails with "Failed to create MC account" error (Fixed: Updated API parameters to match MetaCopier API spec)
+
+## MC Account Management Enhancements
+- [ ] Add "Remove MC Configuration" button to Check MC dialog (DEFERRED - need to remove copiers first)
+- [ ] Create deletion confirmation dialog with magic number authorization (DEFERRED)
+- [ ] Implement backend API method to delete MC account (DEFERRED - must remove copiers, then stop, then delete)
+- [ ] NOTE: Account deletion requires: 1) Remove all copiers attached to account, 2) Stop account, 3) Delete account
+- [x] Add features to MC account creation: Data collector, HFT mode, Socket, Trade guardrails
+- [x] Add risk limit to MC account creation: Actual, Absolute $300, fulfil in 1 second, close all open trades
+- [ ] Test MC account deletion flow (DEFERRED)
+- [x] Test enhanced MC account creation with features and risk limits
