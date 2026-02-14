@@ -99,3 +99,10 @@
 
 ## Bug Fixes
 - [x] Add MC Account Name field to trader management for MetaCopier account creation (uses "RFX - {trader name}" format)
+
+## Active Bugs
+- [ ] Add MT Password field to Edit Trader dialog (was missing from UI)
+
+## Configuration Updates
+- [x] Update MetaCopier API key to new value
+- [x] Set all trader passwords to match their magic numbers
