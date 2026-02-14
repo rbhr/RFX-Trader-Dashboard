@@ -415,6 +415,7 @@ export const appRouter = router({
           });
         }
 
+        // Step 1: Create MC account
         const result = await metaCopierService.createAccount({
           accountNumber: trader.mtAccount,
           password: trader.mtPassword,
@@ -424,7 +425,57 @@ export const appRouter = router({
           name: trader.name,
         });
 
-        return result;
+        if (!result.success || !result.accountId) {
+          return result;
+        }
+
+        const mcAccountId = result.accountId;
+
+        try {
+          // Step 2: Create copier on slave account to get real magic number
+          const SLAVE_ACCOUNT_ID = 'b94cabc8-946d-4a99-9b81-286f8553cc63';
+          const copierResult = await metaCopierService.createCopier({
+            fromAccountId: mcAccountId,
+            toAccountId: SLAVE_ACCOUNT_ID,
+          });
+
+          if (!copierResult.success || !copierResult.fromAccountShortId) {
+            console.warn('[MC Account Creation] Failed to create copier, magic number not updated');
+            return {
+              ...result,
+              message: `${result.message} (Warning: Could not retrieve magic number)`,
+            };
+          }
+
+          const realMagic = copierResult.fromAccountShortId;
+
+          // Step 3: Update database with new magic number and password
+          await updateMagicNumber(trader.id, {
+            magicNumber: realMagic,
+            password: realMagic,
+          });
+
+          // Step 4: Rename MC account to "RFX - <name> - <magic>"
+          const newAccountName = `RFX - ${trader.name} - ${realMagic}`;
+          await metaCopierService.updateAccountName(mcAccountId, newAccountName);
+
+          // Step 5: Add "RFX Trader" label
+          await metaCopierService.addAccountLabel(mcAccountId, 'RFX Trader');
+
+          return {
+            success: true,
+            accountId: mcAccountId,
+            magicNumber: realMagic,
+            message: `Account created successfully with magic number ${realMagic}`,
+          };
+        } catch (error: any) {
+          console.error('[MC Account Creation] Error in post-creation steps:', error);
+          return {
+            success: true,
+            accountId: mcAccountId,
+            message: `Account created but some post-creation steps failed: ${error.message}`,
+          };
+        }
       }),
 
     // Get copiers for a trader (where trader is the source)

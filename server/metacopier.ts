@@ -332,6 +332,79 @@ class MetaCopierService {
   }
 
   /**
+   * Create a copier on a slave account
+   */
+  async createCopier(params: {
+    fromAccountId: string;
+    toAccountId: string;
+  }): Promise<{ success: boolean; copierId?: string; fromAccountShortId?: string; message?: string }> {
+    try {
+      const response = await this.fetchWithAuth<any>(
+        `/accounts/${params.toAccountId}/copiers`,
+        'POST',
+        {
+          fromAccountId: params.fromAccountId,
+          status: { id: 2 }, // Active
+          copyMode: { id: 1 }, // Copy mode (default)
+          lotMultiplier: 1.0,
+          maxLotSize: 0,
+          minLotSize: 0,
+          copyStopLoss: true,
+          copyTakeProfit: true,
+          reverseSignals: false,
+        }
+      );
+      
+      return {
+        success: true,
+        copierId: response.id,
+        fromAccountShortId: response.fromAccountShortId,
+        message: 'Copier created successfully',
+      };
+    } catch (error: any) {
+      console.error('[MetaCopier] Error creating copier:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to create copier',
+      };
+    }
+  }
+
+  /**
+   * Update account name/alias
+   */
+  async updateAccountName(accountId: string, name: string): Promise<void> {
+    try {
+      await this.fetchWithAuth(
+        `/accounts/${accountId}`,
+        'PUT',
+        { alias: name }
+      );
+      console.log(`[MetaCopier] Updated account ${accountId} name to ${name}`);
+    } catch (error) {
+      console.error('[MetaCopier] Error updating account name:', error);
+      throw new Error('Failed to update account name');
+    }
+  }
+
+  /**
+   * Add label to account
+   */
+  async addAccountLabel(accountId: string, label: string): Promise<void> {
+    try {
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/labels`,
+        'POST',
+        { name: label }
+      );
+      console.log(`[MetaCopier] Added label "${label}" to account ${accountId}`);
+    } catch (error) {
+      console.error('[MetaCopier] Error adding label:', error);
+      throw new Error('Failed to add label to account');
+    }
+  }
+
+  /**
    * Add risk limit to a MetaCopier account
    */
   private async addRiskLimit(accountId: string): Promise<void> {

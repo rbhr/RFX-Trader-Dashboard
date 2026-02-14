@@ -139,3 +139,17 @@
 - [x] Set magic number default to 99999 in Add Trader form
 - [x] Format profit share as percentage in Edit Trader dialog
 - [x] Enable editing of Lifetime Profit, Lifetime Share, Lifetime Income in Edit Trader dialog
+
+## Password Fix
+- [x] Update all trader passwords to match their magic numbers
+- [x] Verify traders can login with magic number as password
+
+## Bulk Trader Creation
+- [x] Create 17 new traders from CSV file with unique magic numbers, 35% profit share, London MC region
+
+## MC Account Creation Enhancement
+- [x] Create copier on slave account (b94cabc8-946d-4a99-9b81-286f8553cc63) when MC account is created
+- [x] Retrieve real magic number from copier's fromAccountShortId
+- [x] Update database with new magic number and set password to match
+- [x] Rename MC account to "RFX - <name> - <magic>"
+- [x] Add "RFX Trader" label to MC account

@@ -1,0 +1,106 @@
+{
+  "query": "SELECT id, name, magicNumber, password FROM magic_numbers WHERE isAdmin = 0 LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, name, magicNumber, password FROM magic_numbers WHERE isAdmin = 0 LIMIT 20;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "Saif",
+      "magicNumber": "53436",
+      "password": "$2b$10$jg9Ck9.U.2aSo5gSN1IeU.lME0kfKuSj1MGp48/bJVrUoUn4T.tC."
+    },
+    {
+      "id": "2",
+      "name": "Sonia",
+      "magicNumber": "841",
+      "password": "$2b$10$bLo1JJU4HXNIa1Me56v13.YHxDdEFq7edhTz4NiERvI.6fB6y90vy"
+    },
+    {
+      "id": "3",
+      "name": "Feroz",
+      "magicNumber": "46330",
+      "password": "$2b$10$bhv2DTqHlsPdWi0HTrU8humVISbijzctNnMf711B/bItCI4IyV90e"
+    },
+    {
+      "id": "4",
+      "name": "Bisma",
+      "magicNumber": "13495",
+      "password": "$2b$10$AdAZJ820mZQN7/UytMKcWe.0S0ZRVioee/chuanZWA6xCs0OYu/hS"
+    },
+    {
+      "id": "5",
+      "name": "Ahmed",
+      "magicNumber": "7833",
+      "password": "$2b$10$WP0qLcCOX0o3F5.HiqMKXOXTXE8RpPaz5YDaLnCSBFlVViG5duM7G"
+    },
+    {
+      "id": "6",
+      "name": "Melanie",
+      "magicNumber": "56235",
+      "password": "$2b$10$a8CHipQ5OvyMAOgX.2MvQO6LpP/f.wpzxGL0vUSnFZiqGtKz5g2/i"
+    },
+    {
+      "id": "7",
+      "name": "Gulam",
+      "magicNumber": "46347",
+      "password": "$2b$10$okkYk19VnfjFZede46tOOO.uBRUSIKAImEa.xggLywKDgbq5WYKSi"
+    },
+    {
+      "id": "8",
+      "name": "Ali",
+      "magicNumber": "20126",
+      "password": "$2b$10$cLWtQjPOMzQraQZfSkdZ7ePpI5tk39XxfKn4i0mhlZmezLq9sbzr."
+    },
+    {
+      "id": "9",
+      "name": "Kashif",
+      "magicNumber": "25768",
+      "password": "$2b$10$NtLdEYVGYUIoKxdXQ8obVOx.YGjDRjdc3maZwnKReJEuMg.0Mo/5y"
+    },
+    {
+      "id": "10",
+      "name": "Zeeshan",
+      "magicNumber": "23356",
+      "password": "$2b$10$9twEEet.7sI.SO4blIQ1GOqa.T66Hmbo7N/tYRTTGQtslC9qrlSqy"
+    },
+    {
+      "id": "11",
+      "name": "Sameer",
+      "magicNumber": "54121",
+      "password": "$2b$10$BjXGjwRVugRc1JkYtcDAPuGJIUpesPLTwoNvNrKeEspDtA/cZwx6i"
+    },
+    {
+      "id": "12",
+      "name": "Tarique",
+      "magicNumber": "6653",
+      "password": "$2b$10$8jknKNnzXLzH04sI9th78OAk4SPBH7XiQPX.7bh9gwc1kCEgEjpSK"
+    },
+    {
+      "id": "13",
+      "name": "Zarab",
+      "magicNumber": "15806",
+      "password": "$2b$10$33zhjcI62JYc51TD5DljQ.qWctYIEh5wJ6ha6InnIzj5eLw1Zqakq"
+    },
+    {
+      "id": "14",
+      "name": "SoniaX",
+      "magicNumber": "840",
+      "password": "$2b$10$QzkefKmvm7GwLRcpVsae1Ovz3fvQpocoEzk8A2BoWNOrTUcn9Nf1G"
+    },
+    {
+      "id": "15",
+      "name": "Richard",
+      "magicNumber": "6868",
+      "password": "$2b$10$3VaTgxTTOBlNXpeq3q.hr./lj9JWRuLF7hactx13sNN10w8L143EK"
+    },
+    {
+      "id": "16",
+      "name": "Ali",
+      "magicNumber": "57399",
+      "password": "$2b$10$Y78hcTWnXs4sCROOJ8gmHOmXl/C0N8arVylKYs2tEvY1t20lBnlB2"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmagicNumber\tpassword\n1\tSaif\t53436\t$2b$10$jg9Ck9.U.2aSo5gSN1IeU.lME0kfKuSj1MGp48/bJVrUoUn4T.tC.\n2\tSonia\t841\t$2b$10$bLo1JJU4HXNIa1Me56v13.YHxDdEFq7edhTz4NiERvI.6fB6y90vy\n3\tFeroz\t46330\t$2b$10$bhv2DTqHlsPdWi0HTrU8humVISbijzctNnMf711B/bItCI4IyV90e\n4\tBisma\t13495\t$2b$10$AdAZJ820mZQN7/UytMKcWe.0S0ZRVioee/chuanZWA6xCs0OYu/hS\n5\tAhmed\t7833\t$2b$10$WP0qLcCOX0o3F5.HiqMKXOXTXE8RpPaz5YDaLnCSBFlVViG5duM7G\n6\tMelanie\t56235\t$2b$10$a8CHipQ5OvyMAOgX.2MvQO6LpP/f.wpzxGL0vUSnFZiqGtKz5g2/i\n7\tGulam\t46347\t$2b$10$okkYk19VnfjFZede46tOOO.uBRUSIKAImEa.xggLywKDgbq5WYKSi\n8\tAli\t20126\t$2b$10$cLWtQjPOMzQraQZfSkdZ7ePpI5tk39XxfKn4i0mhlZmezLq9sbzr.\n9\tKashif\t25768\t$2b$10$NtLdEYVGYUIoKxdXQ8obVOx.YGjDRjdc3maZwnKReJEuMg.0Mo/5y\n10\tZeeshan\t23356\t$2b$10$9twEEet.7sI.SO4blIQ1GOqa.T66Hmbo7N/tYRTTGQtslC9qrlSqy\n11\tSameer\t54121\t$2b$10$BjXGjwRVugRc1JkYtcDAPuGJIUpesPLTwoNvNrKeEspDtA/cZwx6i\n12\tTarique\t6653\t$2b$10$8jknKNnzXLzH04sI9th78OAk4SPBH7XiQPX.7bh9gwc1kCEgEjpSK\n13\tZarab\t15806\t$2b$10$33zhjcI62JYc51TD5DljQ.qWctYIEh5wJ6ha6InnIzj5eLw1Zqakq\n14\tSoniaX\t840\t$2b$10$QzkefKmvm7GwLRcpVsae1Ovz3fvQpocoEzk8A2BoWNOrTUcn9Nf1G\n15\tRichard\t6868\t$2b$10$3VaTgxTTOBlNXpeq3q.hr./lj9JWRuLF7hactx13sNN10w8L143EK\n16\tAli\t57399\t$2b$10$Y78hcTWnXs4sCROOJ8gmHOmXl/C0N8arVylKYs2tEvY1t20lBnlB2\n",
+  "stderr": "",
+  "execution_time_ms": 1735
+}
