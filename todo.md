@@ -122,3 +122,15 @@
 - [x] Add risk limit to MC account creation: Actual, Absolute $300, fulfil in 1 second, close all open trades
 - [ ] Test MC account deletion flow (DEFERRED)
 - [x] Test enhanced MC account creation with features and risk limits
+
+## Copier Management Feature
+- [x] Remove "Remove MC Configuration" button from Check MC dialog (not needed - Check MC is for status only)
+- [x] Add backend API method to fetch all copiers for a trader (where trader is source)
+- [x] Add backend API method to disable copier
+- [x] Add backend API method to set copier to "Manage" mode (no new trades)
+- [x] Add backend API method to activate copier
+- [x] Add backend API method to remove copier (check for open positions first)
+- [x] Add "Copiers" button to trader list
+- [x] Build Copiers dialog showing all copiers with status
+- [x] Add D/M/A/X action buttons for each copier
+- [x] Test copier management actions

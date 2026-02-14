@@ -426,6 +426,77 @@ export const appRouter = router({
 
         return result;
       }),
+
+    // Get copiers for a trader (where trader is the source)
+    getCopiers: tradingProcedure
+      .input(z.object({ traderId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+
+        // Check if trader has MC account
+        const mcStatus = await metaCopierService.checkAccountExists(trader.mtAccount || '');
+        if (!mcStatus.exists || !mcStatus.accountId) {
+          return [];
+        }
+
+        const copiers = await metaCopierService.getCopiersBySourceAccount(mcStatus.accountId);
+        return copiers;
+      }),
+
+    // Update copier status (Disable, Manage, Activate)
+    updateCopierStatus: tradingProcedure
+      .input(z.object({
+        traderId: z.number(),
+        toAccountId: z.string(),
+        copierId: z.string(),
+        status: z.enum(['ACTIVE', 'DISABLED', 'MANAGE']),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        await metaCopierService.updateCopierStatus(
+          input.toAccountId,
+          input.copierId,
+          input.status
+        );
+
+        return { success: true };
+      }),
+
+    // Remove copier
+    removeCopier: tradingProcedure
+      .input(z.object({
+        traderId: z.number(),
+        toAccountId: z.string(),
+        copierId: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        // Check for open positions
+        const hasOpenPositions = await metaCopierService.copierHasOpenPositions(input.toAccountId);
+        if (hasOpenPositions) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cannot remove copier with open positions"
+          });
+        }
+
+        await metaCopierService.removeCopier(input.toAccountId, input.copierId);
+
+        return { success: true };
+      }),
   }),
 });
 

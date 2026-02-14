@@ -242,6 +242,96 @@ class MetaCopierService {
   }
 
   /**
+   * Get all copiers where the specified account is the source
+   */
+  async getCopiersBySourceAccount(sourceAccountId: string): Promise<any[]> {
+    try {
+      // Get all accounts
+      const accounts = await this.fetchWithAuth<any[]>('/accounts');
+      const copiers: any[] = [];
+      
+      // Check each account for copiers that use sourceAccountId as the source
+      for (const account of accounts) {
+        if (account.countCopier && account.countCopier > 0) {
+          const accountCopiers = await this.fetchWithAuth<any[]>(
+            `/accounts/${account.id}/copiers`
+          );
+          
+          for (const copier of accountCopiers) {
+            if (copier.fromAccountId === sourceAccountId) {
+              copiers.push({
+                ...copier,
+                toAccountId: account.id,
+                toAccountAlias: account.alias,
+              });
+            }
+          }
+        }
+      }
+      
+      return copiers;
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching copiers:', error);
+      throw new Error('Failed to fetch copiers');
+    }
+  }
+
+  /**
+   * Update copier status
+   */
+  async updateCopierStatus(toAccountId: string, copierId: string, status: 'ACTIVE' | 'DISABLED' | 'MANAGE'): Promise<void> {
+    try {
+      // Map status to MetaCopier status IDs
+      const statusMap: Record<string, number> = {
+        'ACTIVE': 2,    // Active
+        'DISABLED': 3,  // Disabled
+        'MANAGE': 4,    // Manage (no new trades)
+      };
+      
+      await this.fetchWithAuth(
+        `/accounts/${toAccountId}/copiers/${copierId}`,
+        'PUT',
+        {
+          status: { id: statusMap[status] }
+        }
+      );
+    } catch (error) {
+      console.error('[MetaCopier] Error updating copier status:', error);
+      throw new Error('Failed to update copier status');
+    }
+  }
+
+  /**
+   * Remove a copier
+   */
+  async removeCopier(toAccountId: string, copierId: string): Promise<void> {
+    try {
+      await this.fetchWithAuth(
+        `/accounts/${toAccountId}/copiers/${copierId}`,
+        'DELETE'
+      );
+    } catch (error) {
+      console.error('[MetaCopier] Error removing copier:', error);
+      throw new Error('Failed to remove copier');
+    }
+  }
+
+  /**
+   * Check if copier has open positions
+   */
+  async copierHasOpenPositions(toAccountId: string): Promise<boolean> {
+    try {
+      const positions = await this.fetchWithAuth<any[]>(
+        `/accounts/${toAccountId}/positions`
+      );
+      return positions.length > 0;
+    } catch (error) {
+      console.error('[MetaCopier] Error checking open positions:', error);
+      return false; // Assume no positions on error
+    }
+  }
+
+  /**
    * Add risk limit to a MetaCopier account
    */
   private async addRiskLimit(accountId: string): Promise<void> {

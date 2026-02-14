@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users } from "lucide-react";
 
 interface Trader {
   id: number;
@@ -58,6 +58,7 @@ export default function ManageTraders() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [mcStatusDialogOpen, setMcStatusDialogOpen] = useState(false);
+  const [copiersDialogOpen, setCopiersDialogOpen] = useState(false);
   const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null);
   const [mcStatus, setMcStatus] = useState<{ exists: boolean; accountId?: string; mtAccount?: string } | null>(null);
 
@@ -75,6 +76,10 @@ export default function ManageTraders() {
 
   const utils = trpc.useUtils();
   const { data: traders, isLoading } = trpc.admin.listTraders.useQuery();
+  const { data: copiers, refetch: refetchCopiers } = trpc.admin.getCopiers.useQuery(
+    { traderId: selectedTrader?.id || 0 },
+    { enabled: copiersDialogOpen && !!selectedTrader }
+  );
 
   const updateTrader = trpc.admin.updateTrader.useMutation({
     onSuccess: () => {
@@ -195,6 +200,59 @@ export default function ManageTraders() {
   const handleCreateMcAccount = () => {
     if (!selectedTrader) return;
     createMcAccount.mutate({ traderId: selectedTrader.id });
+  };
+
+  const handleViewCopiers = (trader: Trader) => {
+    setSelectedTrader(trader);
+    setCopiersDialogOpen(true);
+  };
+
+  const updateCopierStatus = trpc.admin.updateCopierStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Copier status updated");
+      refetchCopiers();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const removeCopier = trpc.admin.removeCopier.useMutation({
+    onSuccess: () => {
+      toast.success("Copier removed successfully");
+      refetchCopiers();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleCopierAction = (copier: any, action: 'D' | 'M' | 'A' | 'X') => {
+    if (!selectedTrader) return;
+
+    if (action === 'X') {
+      if (confirm(`Remove copier to ${copier.toAccountAlias}? This will check for open positions first.`)) {
+        removeCopier.mutate({
+          traderId: selectedTrader.id,
+          toAccountId: copier.toAccountId,
+          copierId: copier.id,
+        });
+      }
+      return;
+    }
+
+    const statusMap = {
+      'D': 'DISABLED' as const,
+      'M': 'MANAGE' as const,
+      'A': 'ACTIVE' as const,
+    };
+
+    updateCopierStatus.mutate({
+      traderId: selectedTrader.id,
+      toAccountId: copier.toAccountId,
+      copierId: copier.id,
+      status: statusMap[action],
+    });
   };
 
   const handleSubmitEdit = () => {
@@ -353,6 +411,14 @@ export default function ManageTraders() {
                             ) : (
                               "Check MC"
                             )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewCopiers(trader)}
+                            disabled={!trader.mtAccount}
+                          >
+                            <Users className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="outline"
@@ -709,6 +775,106 @@ export default function ManageTraders() {
                 </Button>
               )}
               <Button variant="outline" onClick={() => setMcStatusDialogOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Copiers Dialog */}
+        <Dialog open={copiersDialogOpen} onOpenChange={setCopiersDialogOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Copiers for {selectedTrader?.name}</DialogTitle>
+              <DialogDescription>
+                Manage copiers that are copying from this trader's account
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {copiers && copiers.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>To Account</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {copiers.map((copier: any) => (
+                      <TableRow key={copier.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{copier.toAccountAlias}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {copier.toAccountNumber}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              copier.status === 'ACTIVE'
+                                ? 'bg-green-100 text-green-800'
+                                : copier.status === 'DISABLED'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}
+                          >
+                            {copier.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopierAction(copier, 'D')}
+                              disabled={copier.status === 'DISABLED'}
+                              title="Disable copier"
+                            >
+                              D
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopierAction(copier, 'M')}
+                              disabled={copier.status === 'MANAGE'}
+                              title="Manage mode (no new trades)"
+                            >
+                              M
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopierAction(copier, 'A')}
+                              disabled={copier.status === 'ACTIVE'}
+                              title="Activate copier"
+                            >
+                              A
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleCopierAction(copier, 'X')}
+                              title="Remove copier (checks for open positions)"
+                            >
+                              X
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No copiers found for this trader
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCopiersDialogOpen(false)}>
                 Close
               </Button>
             </DialogFooter>
