@@ -275,7 +275,8 @@ export const appRouter = router({
         mtAccount: t.mtAccount,
         mtServer: t.mtServer,
         mtPassword: t.mtPassword,
-        mtLocation: t.mtLocation,
+        mtVersion: t.mtVersion,
+        mcLocation: t.mcLocation,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
         lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
@@ -294,7 +295,8 @@ export const appRouter = router({
         mtAccount: z.string().optional(),
         mtServer: z.string().optional(),
         mtPassword: z.string().optional(),
-        mtLocation: z.string().optional(),
+        mtVersion: z.string().optional(),
+        mcLocation: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
@@ -309,7 +311,8 @@ export const appRouter = router({
           mtAccount: input.mtAccount || null,
           mtServer: input.mtServer || null,
           mtPassword: input.mtPassword || null,
-          mtLocation: input.mtLocation || null,
+          mtVersion: input.mtVersion || null,
+          mcLocation: input.mcLocation || null,
         });
 
         return { success: true };
@@ -326,7 +329,8 @@ export const appRouter = router({
         mtAccount: z.string().optional(),
         mtServer: z.string().optional(),
         mtPassword: z.string().optional(),
-        mtLocation: z.string().optional(),
+        mtVersion: z.string().optional(),
+        mcLocation: z.string().optional(),
         lifetimeProfit: z.number().optional(),
         lifetimeProfitShare: z.number().optional(),
         lifetimeIncome: z.number().optional(),
@@ -346,7 +350,8 @@ export const appRouter = router({
         if (data.mtAccount !== undefined) updateData.mtAccount = data.mtAccount;
         if (data.mtServer !== undefined) updateData.mtServer = data.mtServer;
         if (data.mtPassword !== undefined) updateData.mtPassword = data.mtPassword;
-        if (data.mtLocation !== undefined) updateData.mtLocation = data.mtLocation;
+        if (data.mtVersion !== undefined) updateData.mtVersion = data.mtVersion;
+        if (data.mcLocation !== undefined) updateData.mcLocation = data.mcLocation;
         if (data.lifetimeProfit !== undefined) updateData.lifetimeProfit = data.lifetimeProfit.toString();
         if (data.lifetimeProfitShare !== undefined) updateData.lifetimeProfitShare = data.lifetimeProfitShare.toString();
         if (data.lifetimeIncome !== undefined) updateData.lifetimeIncome = data.lifetimeIncome.toString();
@@ -403,7 +408,7 @@ export const appRouter = router({
         }
 
         const trader = await getMagicNumberById(input.traderId);
-        if (!trader || !trader.mtAccount || !trader.mtPassword || !trader.mtServer || !trader.mtLocation) {
+        if (!trader || !trader.mtAccount || !trader.mtPassword || !trader.mtServer || !trader.mtVersion || !trader.mcLocation) {
           throw new TRPCError({ 
             code: "BAD_REQUEST", 
             message: "Trader MT account details incomplete" 
@@ -414,7 +419,7 @@ export const appRouter = router({
           accountNumber: trader.mtAccount,
           password: trader.mtPassword,
           server: trader.mtServer,
-          location: trader.mtLocation,
+          location: trader.mcLocation,
         });
 
         return result;

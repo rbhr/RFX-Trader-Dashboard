@@ -88,7 +88,8 @@ describe("Trader Management - Create Trader", () => {
       mtAccount: "12345678",
       mtServer: "TestBroker-Live",
       mtPassword: "mtpass",
-      mtLocation: "MT4",
+      mtVersion: "MT5",
+      mcLocation: "London",
     });
 
     // Verify the trader was created
@@ -100,6 +101,7 @@ describe("Trader Management - Create Trader", () => {
     expect(parseFloat(created!.profitShare)).toBe(0.30);
     expect(created!.mtAccount).toBe("12345678");
     expect(created!.mtServer).toBe("TestBroker-Live");
-    expect(created!.mtLocation).toBe("MT4");
+    expect(created!.mtVersion).toBe("MT5");
+    expect(created!.mcLocation).toBe("London");
   });
 });

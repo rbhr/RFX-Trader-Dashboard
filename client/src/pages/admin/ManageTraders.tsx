@@ -44,7 +44,8 @@ interface Trader {
   mtAccount: string | null;
   mtServer: string | null;
   mtPassword: string | null;
-  mtLocation: string | null;
+  mtVersion: string | null;
+  mcLocation: string | null;
   lifetimeProfit: number;
   lifetimeProfitShare: number;
   lifetimeIncome: number;
@@ -68,7 +69,8 @@ export default function ManageTraders() {
     mtAccount: "",
     mtServer: "",
     mtPassword: "",
-    mtLocation: "MT4",
+    mtVersion: "MT5",
+    mcLocation: "London",
   });
 
   const utils = trpc.useUtils();
@@ -141,7 +143,8 @@ export default function ManageTraders() {
       mtAccount: "",
       mtServer: "",
       mtPassword: "",
-      mtLocation: "MT4",
+      mtVersion: "MT5",
+      mcLocation: "London",
     });
   };
 
@@ -155,7 +158,8 @@ export default function ManageTraders() {
       mtAccount: trader.mtAccount || "",
       mtServer: trader.mtServer || "",
       mtPassword: trader.mtPassword || "",
-      mtLocation: trader.mtLocation || "MT4",
+      mtVersion: trader.mtVersion || "MT5",
+      mcLocation: trader.mcLocation || "London",
     });
     setEditDialogOpen(true);
   };
@@ -202,7 +206,8 @@ export default function ManageTraders() {
       profitShare: formData.profitShare,
       mtAccount: formData.mtAccount || undefined,
       mtServer: formData.mtServer || undefined,
-      mtLocation: formData.mtLocation || undefined,
+      mtVersion: formData.mtVersion || undefined,
+      mcLocation: formData.mcLocation || undefined,
     };
 
     if (formData.password) {
@@ -230,7 +235,8 @@ export default function ManageTraders() {
       mtAccount: formData.mtAccount || undefined,
       mtServer: formData.mtServer || undefined,
       mtPassword: formData.mtPassword || undefined,
-      mtLocation: formData.mtLocation || undefined,
+      mtVersion: formData.mtVersion || undefined,
+      mcLocation: formData.mcLocation || undefined,
     });
   };
 
@@ -264,7 +270,8 @@ export default function ManageTraders() {
                   <TableHead>Profit Share</TableHead>
                   <TableHead>MT Account</TableHead>
                   <TableHead>MT Server</TableHead>
-                  <TableHead>MT Location</TableHead>
+                  <TableHead>MT Version</TableHead>
+                  <TableHead>MC Location</TableHead>
                   <TableHead className="text-right">Lifetime Profit</TableHead>
                   <TableHead className="text-right">Lifetime Share</TableHead>
                   <TableHead className="text-right">Lifetime Income</TableHead>
@@ -286,26 +293,30 @@ export default function ManageTraders() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="1"
-                          step="0.01"
-                          value={trader.profitShare}
-                          onChange={(e) => {
-                            const newValue = parseFloat(e.target.value);
-                            if (!isNaN(newValue) && newValue >= 0 && newValue <= 1) {
-                              handleUpdateProfitShare(trader, newValue);
-                            }
-                          }}
-                          className="w-20 h-8 text-sm"
-                        />
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={(trader.profitShare * 100).toFixed(1)}
+                            onChange={(e) => {
+                              const newValue = parseFloat(e.target.value) / 100;
+                              if (!isNaN(newValue) && newValue >= 0 && newValue <= 1) {
+                                handleUpdateProfitShare(trader, newValue);
+                              }
+                            }}
+                            className="w-16 h-8 text-sm"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="font-mono text-sm">{trader.mtAccount || "-"}</span>
                       </TableCell>
                       <TableCell className="text-sm">{trader.mtServer || "-"}</TableCell>
-                      <TableCell className="text-sm">{trader.mtLocation || "-"}</TableCell>
+                      <TableCell className="text-sm">{trader.mtVersion || "-"}</TableCell>
+                      <TableCell className="text-sm">{trader.mcLocation || "-"}</TableCell>
                       <TableCell className="text-right">
                         <span className={trader.lifetimeProfit >= 0 ? "text-success" : "text-destructive"}>
                           ${trader.lifetimeProfit.toFixed(2)}
@@ -463,17 +474,31 @@ export default function ManageTraders() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="mtLocation">Platform</Label>
+                    <Label htmlFor="mtVersion">MT Version</Label>
                     <select
-                      id="mtLocation"
-                      value={formData.mtLocation}
-                      onChange={(e) => setFormData({ ...formData, mtLocation: e.target.value })}
+                      id="mtVersion"
+                      value={formData.mtVersion}
+                      onChange={(e) => setFormData({ ...formData, mtVersion: e.target.value })}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="MT4">MT4</option>
                       <option value="MT5">MT5</option>
                     </select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mcLocation">MetaCopier Location</Label>
+                  <select
+                    id="mcLocation"
+                    value={formData.mcLocation}
+                    onChange={(e) => setFormData({ ...formData, mcLocation: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="London">London</option>
+                    <option value="New York">New York</option>
+                    <option value="Berlin">Berlin</option>
+                    <option value="Singapore">Singapore</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -569,17 +594,31 @@ export default function ManageTraders() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-mtLocation">Platform</Label>
+                    <Label htmlFor="edit-mtVersion">MT Version</Label>
                     <select
-                      id="edit-mtLocation"
-                      value={formData.mtLocation}
-                      onChange={(e) => setFormData({ ...formData, mtLocation: e.target.value })}
+                      id="edit-mtVersion"
+                      value={formData.mtVersion}
+                      onChange={(e) => setFormData({ ...formData, mtVersion: e.target.value })}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="MT4">MT4</option>
                       <option value="MT5">MT5</option>
                     </select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-mcLocation">MetaCopier Location</Label>
+                  <select
+                    id="edit-mcLocation"
+                    value={formData.mcLocation}
+                    onChange={(e) => setFormData({ ...formData, mcLocation: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="London">London</option>
+                    <option value="New York">New York</option>
+                    <option value="Berlin">Berlin</option>
+                    <option value="Singapore">Singapore</option>
+                  </select>
                 </div>
               </div>
             </div>

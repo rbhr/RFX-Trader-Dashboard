@@ -35,7 +35,9 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   mtAccount: varchar("mtAccount", { length: 50 }),
   mtServer: varchar("mtServer", { length: 100 }),
   mtPassword: varchar("mtPassword", { length: 255 }),
-  mtLocation: varchar("mtLocation", { length: 100 }),
+  mtVersion: varchar("mtVersion", { length: 10 }).default("MT5"),
+  // MetaCopier Configuration
+  mcLocation: varchar("mcLocation", { length: 50 }).default("London"),
   // Profit Tracking
   lifetimeProfit: decimal("lifetimeProfit", { precision: 15, scale: 2 }).default("0.00"),
   lifetimeProfitShare: decimal("lifetimeProfitShare", { precision: 15, scale: 2 }).default("0.00"),

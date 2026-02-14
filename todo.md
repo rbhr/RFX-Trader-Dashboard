@@ -86,3 +86,13 @@
 - [x] Calculate and display lifetime metrics
 - [x] Test all CRUD operations
 - [x] Test MetaCopier integration
+
+## Schema and UI Updates
+- [x] Rename mtLocation field to mtVersion (MT4/MT5)
+- [x] Add new mcLocation field for MetaCopier server location
+- [x] Update database schema with new fields
+- [x] Update Manage Traders UI to show MT Version and MetaCopier Location dropdowns
+- [x] Set MT5 as default MT version
+- [x] Set London as default MetaCopier location
+- [x] Add location options: London, New York, Berlin, Singapore
+- [x] Update profit share display to show as percentage (e.g., "35.8%" instead of "0.358")

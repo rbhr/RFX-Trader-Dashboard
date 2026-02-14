@@ -29,6 +29,13 @@
       "when": 1771032749930,
       "tag": "0003_lyrical_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1771036276192,
+      "tag": "0004_wide_lionheart",
+      "breakpoints": true
     }
   ]
 }
