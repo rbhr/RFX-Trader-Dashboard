@@ -490,6 +490,7 @@ class MetaCopierService {
         active: true
       };
       
+      appendFileSync('/home/ubuntu/risk-limit-debug.log', `[${new Date().toISOString()}] Adding risk limit to account ${accountId}\n`);
       console.log(`[MetaCopier] Adding risk limit to account ${accountId}:`, riskLimitData);
       
       const response = await this.fetchWithAuth(
@@ -498,8 +499,10 @@ class MetaCopierService {
         riskLimitData
       );
 
+      appendFileSync('/home/ubuntu/risk-limit-debug.log', `[${new Date().toISOString()}] Risk limit added successfully to ${accountId}\n`);
       console.log(`[MetaCopier] Risk limit added successfully:`, response);
     } catch (error: any) {
+      appendFileSync('/home/ubuntu/risk-limit-debug.log', `[${new Date().toISOString()}] Error adding risk limit to ${accountId}: ${error.message}\n`);
       console.error('[MetaCopier] Error adding risk limit:', {
         accountId,
         error: error.message,
@@ -507,6 +510,19 @@ class MetaCopierService {
         status: error.response?.status,
       });
       // Don't throw - account is created, risk limit is optional
+    }
+  }
+
+  /**
+   * Get account by ID
+   */
+  async getAccountById(accountId: string): Promise<any> {
+    try {
+      const account = await this.fetchWithAuth<any>(`/accounts/${accountId}`, 'GET');
+      return account;
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching account by ID:', error);
+      throw new Error('Account not found');
     }
   }
 

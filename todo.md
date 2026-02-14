@@ -187,3 +187,16 @@
 - [x] Create endpoint to fetch accounts with "RFX Master" label
 - [x] Add Live Account Number dropdown to Edit Trader dialog
 - [x] Update backend to save Live Account Number when editing trader
+
+## Add SC Traders
+- [x] Create 5 new traders (SC1-SC5) with Fusion Markets demo accounts
+
+## Fix Risk Limits Not Being Added
+- [ ] Investigate why addRiskLimit is not being called during account creation
+- [ ] Fix async/await or calling issue
+- [ ] Test that risk limits are actually added
+
+## Store MC Account ID
+- [x] Add mcAccountId field to traders table schema
+- [x] Update account creation to save MC account ID to database
+- [x] Update check MC status to use stored account ID instead of searching

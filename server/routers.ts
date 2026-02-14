@@ -277,6 +277,7 @@ export const appRouter = router({
         mtPassword: t.mtPassword,
         mtVersion: t.mtVersion,
         mcLocation: t.mcLocation,
+        mcAccountId: t.mcAccountId,
         liveAccountNumber: t.liveAccountNumber,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
         lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
@@ -393,6 +394,23 @@ export const appRouter = router({
           });
         }
 
+        // Check if we have a stored MC account ID
+        if (trader.mcAccountId) {
+          // Verify the account still exists in MetaCopier
+          try {
+            const accountDetails = await metaCopierService.getAccountById(trader.mcAccountId);
+            return {
+              exists: true,
+              accountId: trader.mcAccountId,
+              mtAccount: trader.mtAccount,
+            };
+          } catch (error) {
+            // Account ID stored but account doesn't exist anymore
+            console.warn(`[checkMetaCopierStatus] Stored account ID ${trader.mcAccountId} not found in MetaCopier`);
+          }
+        }
+
+        // Fallback: search by MT account number
         const status = await metaCopierService.checkAccountExists(trader.mtAccount);
 
         return {
@@ -460,10 +478,11 @@ export const appRouter = router({
           const realMagic = copierResult.fromAccountShortId;
           const copierId = copierResult.copierId;
 
-          // Step 3: Update database with new magic number and password
+          // Step 3: Update database with new magic number, password, and MC account ID
           await updateMagicNumber(trader.id, {
             magicNumber: realMagic,
             password: realMagic,
+            mcAccountId: mcAccountId,
           });
 
           // Step 4: Delete the temporary copier (we only needed it to get the magic number)

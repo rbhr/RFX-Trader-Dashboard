@@ -1,0 +1,1 @@
+ALTER TABLE `magic_numbers` ADD `mcAccountId` varchar(100);

@@ -1,0 +1,40 @@
+{
+  "query": "SELECT magicNumber, name, mtAccount, mtServer FROM magic_numbers WHERE name LIKE 'SC%' ORDER BY name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT magicNumber, name, mtAccount, mtServer FROM magic_numbers WHERE name LIKE 'SC%' ORDER BY name;",
+  "rows": [
+    {
+      "magicNumber": "99001",
+      "name": "SC1",
+      "mtAccount": "276849",
+      "mtServer": "fusionmarkets-demo"
+    },
+    {
+      "magicNumber": "99002",
+      "name": "SC2",
+      "mtAccount": "276851",
+      "mtServer": "fusionmarkets-demo"
+    },
+    {
+      "magicNumber": "99003",
+      "name": "SC3",
+      "mtAccount": "276854",
+      "mtServer": "fusionmarkets-demo"
+    },
+    {
+      "magicNumber": "99004",
+      "name": "SC4",
+      "mtAccount": "276857",
+      "mtServer": "fusionmarkets-demo"
+    },
+    {
+      "magicNumber": "99005",
+      "name": "SC5",
+      "mtAccount": "276858",
+      "mtServer": "fusionmarkets-demo"
+    }
+  ],
+  "messages": [],
+  "stdout": "magicNumber\tname\tmtAccount\tmtServer\n99001\tSC1\t276849\tfusionmarkets-demo\n99002\tSC2\t276851\tfusionmarkets-demo\n99003\tSC3\t276854\tfusionmarkets-demo\n99004\tSC4\t276857\tfusionmarkets-demo\n99005\tSC5\t276858\tfusionmarkets-demo\n",
+  "stderr": "",
+  "execution_time_ms": 1498
+}
