@@ -122,18 +122,34 @@ class MetaCopierService {
     password: string;
     server: string;
     location: string;
+    mtVersion: string;
     name: string;
   }): Promise<{ success: boolean; accountId?: string; message?: string }> {
     try {
+      // Map location to region ID
+      const regionMap: Record<string, number> = {
+        'London': 2,
+        'New York': 1,
+        'Berlin': 3,
+        'Singapore': 4,
+      };
+      
+      // Map MT version to type ID
+      const typeMap: Record<string, number> = {
+        'MT4': 0,
+        'MT5': 1,
+      };
+      
       const response = await this.fetchWithAuth<any>(
         '/accounts',
         'POST',
         {
-          login: params.accountNumber,
-          password: params.password,
-          server: params.server,
-          platform: params.location, // MT4 or MT5
-          name: `RFX - ${params.name}`,
+          alias: `RFX - ${params.name}`,
+          loginAccountNumber: params.accountNumber,
+          loginAccountPassword: params.password,
+          loginServer: params.server,
+          type: { id: typeMap[params.mtVersion] || 1 },
+          region: { id: regionMap[params.location] || 2 },
         }
       );
       

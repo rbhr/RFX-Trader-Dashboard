@@ -420,6 +420,7 @@ export const appRouter = router({
           password: trader.mtPassword,
           server: trader.mtServer,
           location: trader.mcLocation,
+          mtVersion: trader.mtVersion,
           name: trader.name,
         });
 

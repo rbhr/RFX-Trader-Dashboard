@@ -109,3 +109,6 @@
 
 ## Critical Bugs
 - [x] New MetaCopier API key not working - can't check status anymore (Fixed: Updated to correct key)
+
+## Active Bugs
+- [x] MetaCopier account creation fails with "Failed to create MC account" error (Fixed: Updated API parameters to match MetaCopier API spec)
