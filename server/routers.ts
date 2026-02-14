@@ -9,7 +9,12 @@ import {
   getAllActiveMagicNumbers, 
   createTradingSession, 
   getTradingSessionByToken,
-  deleteTradingSession 
+  deleteTradingSession,
+  getAllMagicNumbers,
+  getMagicNumberById,
+  updateMagicNumber,
+  deleteMagicNumber,
+  createMagicNumber
 } from "./db";
 import { 
   metaCopierService, 
@@ -249,6 +254,171 @@ export const appRouter = router({
         profitSharePercent: profitShareValue,
       };
     }),
+  }),
+
+  admin: router({
+    // List all traders
+    listTraders: tradingProcedure.query(async ({ ctx }) => {
+      // Check if user is admin
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+
+      const traders = await getAllMagicNumbers();
+      return traders.map(t => ({
+        id: t.id,
+        magicNumber: t.magicNumber,
+        name: t.name,
+        profitShare: parseFloat(t.profitShare),
+        isActive: t.isActive,
+        isAdmin: t.isAdmin,
+        mtAccount: t.mtAccount,
+        mtServer: t.mtServer,
+        mtPassword: t.mtPassword,
+        mtLocation: t.mtLocation,
+        lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
+        lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
+        lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      }));
+    }),
+
+    // Create new trader
+    createTrader: tradingProcedure
+      .input(z.object({
+        magicNumber: z.string(),
+        name: z.string(),
+        password: z.string(),
+        profitShare: z.number().min(0).max(1),
+        mtAccount: z.string().optional(),
+        mtServer: z.string().optional(),
+        mtPassword: z.string().optional(),
+        mtLocation: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        await createMagicNumber({
+          magicNumber: input.magicNumber,
+          name: input.name,
+          password: input.password,
+          profitShare: input.profitShare.toString(),
+          mtAccount: input.mtAccount || null,
+          mtServer: input.mtServer || null,
+          mtPassword: input.mtPassword || null,
+          mtLocation: input.mtLocation || null,
+        });
+
+        return { success: true };
+      }),
+
+    // Update trader
+    updateTrader: tradingProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        password: z.string().optional(),
+        profitShare: z.number().min(0).max(1).optional(),
+        isActive: z.boolean().optional(),
+        mtAccount: z.string().optional(),
+        mtServer: z.string().optional(),
+        mtPassword: z.string().optional(),
+        mtLocation: z.string().optional(),
+        lifetimeProfit: z.number().optional(),
+        lifetimeProfitShare: z.number().optional(),
+        lifetimeIncome: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const { id, ...data } = input;
+        const updateData: any = {};
+
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.password !== undefined) updateData.password = data.password;
+        if (data.profitShare !== undefined) updateData.profitShare = data.profitShare.toString();
+        if (data.isActive !== undefined) updateData.isActive = data.isActive;
+        if (data.mtAccount !== undefined) updateData.mtAccount = data.mtAccount;
+        if (data.mtServer !== undefined) updateData.mtServer = data.mtServer;
+        if (data.mtPassword !== undefined) updateData.mtPassword = data.mtPassword;
+        if (data.mtLocation !== undefined) updateData.mtLocation = data.mtLocation;
+        if (data.lifetimeProfit !== undefined) updateData.lifetimeProfit = data.lifetimeProfit.toString();
+        if (data.lifetimeProfitShare !== undefined) updateData.lifetimeProfitShare = data.lifetimeProfitShare.toString();
+        if (data.lifetimeIncome !== undefined) updateData.lifetimeIncome = data.lifetimeIncome.toString();
+
+        await updateMagicNumber(id, updateData);
+
+        return { success: true };
+      }),
+
+    // Delete trader
+    deleteTrader: tradingProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        await deleteMagicNumber(input.id);
+
+        return { success: true };
+      }),
+
+    // Check MetaCopier account status
+    checkMetaCopierStatus: tradingProcedure
+      .input(z.object({ traderId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader || !trader.mtAccount) {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "Trader MT account not configured" 
+          });
+        }
+
+        const status = await metaCopierService.checkAccountExists(trader.mtAccount);
+
+        return {
+          exists: status.exists,
+          accountId: status.accountId,
+          mtAccount: trader.mtAccount,
+        };
+      }),
+
+    // Create MetaCopier account
+    createMetaCopierAccount: tradingProcedure
+      .input(z.object({ traderId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader || !trader.mtAccount || !trader.mtPassword || !trader.mtServer || !trader.mtLocation) {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "Trader MT account details incomplete" 
+          });
+        }
+
+        const result = await metaCopierService.createAccount({
+          accountNumber: trader.mtAccount,
+          password: trader.mtPassword,
+          server: trader.mtServer,
+          location: trader.mtLocation,
+        });
+
+        return result;
+      }),
   }),
 });
 

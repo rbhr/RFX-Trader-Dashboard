@@ -47,12 +47,15 @@ class MetaCopierService {
     }
   }
 
-  private async fetchWithAuth<T>(endpoint: string): Promise<T> {
-    const response = await axios.get(`${API_BASE}${endpoint}`, {
+  private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', data?: any): Promise<T> {
+    const response = await axios({
+      method,
+      url: `${API_BASE}${endpoint}`,
       headers: {
         'X-API-KEY': this.apiKey,
         'Content-Type': 'application/json',
       },
+      data,
     });
     return response.data;
   }
@@ -90,6 +93,61 @@ class MetaCopierService {
     return this.fetchWithAuth<AccountInfo>(
       `/accounts/${this.accountId}/information`
     );
+  }
+
+  /**
+   * Check if a MetaCopier account exists by account number
+   */
+  async checkAccountExists(accountNumber: string): Promise<{ exists: boolean; accountId?: string }> {
+    try {
+      // List all accounts and check if the account number exists
+      const accounts = await this.fetchWithAuth<any[]>('/accounts');
+      const account = accounts.find(acc => acc.login === accountNumber || acc.accountNumber === accountNumber);
+      
+      if (account) {
+        return { exists: true, accountId: account.id };
+      }
+      return { exists: false };
+    } catch (error) {
+      console.error('[MetaCopier] Error checking account:', error);
+      throw new Error('Failed to check MetaCopier account status');
+    }
+  }
+
+  /**
+   * Create a new MetaCopier account
+   */
+  async createAccount(params: {
+    accountNumber: string;
+    password: string;
+    server: string;
+    location: string;
+  }): Promise<{ success: boolean; accountId?: string; message?: string }> {
+    try {
+      const response = await this.fetchWithAuth<any>(
+        '/accounts',
+        'POST',
+        {
+          login: params.accountNumber,
+          password: params.password,
+          server: params.server,
+          platform: params.location, // MT4 or MT5
+          name: `Account ${params.accountNumber}`,
+        }
+      );
+      
+      return {
+        success: true,
+        accountId: response.id,
+        message: 'Account created successfully',
+      };
+    } catch (error: any) {
+      console.error('[MetaCopier] Error creating account:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to create MetaCopier account',
+      };
+    }
   }
 }
 

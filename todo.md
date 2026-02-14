@@ -63,3 +63,26 @@
 - [x] Add Manage Payments page
 - [x] Implement role-based routing and access control
 - [x] Add admin logout functionality
+
+## Manage Traders Feature
+- [x] Update magic_numbers schema with MT account fields (mtAccount, mtServer, mtPassword, mtLocation)
+- [x] Add profit tracking fields (lifetimeProfit, lifetimeProfitShare, lifetimeIncome)
+- [x] Add active/inactive status field
+- [x] Add MetaCopier API method to check if account exists
+- [x] Add MetaCopier API method to create new account
+- [x] Create tRPC procedures for listing all traders
+- [x] Create tRPC procedures for updating trader details
+- [x] Create tRPC procedures for deleting traders
+- [x] Create tRPC procedures for checking MetaCopier status
+- [x] Create tRPC procedures for creating MetaCopier account
+- [x] Build Manage Traders data table with all fields
+- [x] Implement inline editing for profit share
+- [x] Implement activate/deactivate toggle
+- [x] Add edit trader dialog
+- [x] Add delete confirmation dialog
+- [x] Add "Check MetaCopier Status" button
+- [x] Implement MetaCopier status check dialog
+- [x] Implement MetaCopier account creation dialog
+- [x] Calculate and display lifetime metrics
+- [x] Test all CRUD operations
+- [x] Test MetaCopier integration

@@ -31,6 +31,15 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   showAllData: boolean("showAllData").notNull().default(false),
   isActive: boolean("isActive").notNull().default(true),
   isAdmin: boolean("isAdmin").notNull().default(false),
+  // MT4/MT5 Account Information
+  mtAccount: varchar("mtAccount", { length: 50 }),
+  mtServer: varchar("mtServer", { length: 100 }),
+  mtPassword: varchar("mtPassword", { length: 255 }),
+  mtLocation: varchar("mtLocation", { length: 100 }),
+  // Profit Tracking
+  lifetimeProfit: decimal("lifetimeProfit", { precision: 15, scale: 2 }).default("0.00"),
+  lifetimeProfitShare: decimal("lifetimeProfitShare", { precision: 15, scale: 2 }).default("0.00"),
+  lifetimeIncome: decimal("lifetimeIncome", { precision: 15, scale: 2 }).default("0.00"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

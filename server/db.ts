@@ -161,3 +161,44 @@ export async function cleanupExpiredSessions() {
   const now = new Date();
   await db.delete(tradingSessions).where(eq(tradingSessions.expiresAt, now));
 }
+
+// Trader management functions
+export async function getAllMagicNumbers() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(magicNumbers)
+    .orderBy(magicNumbers.name);
+}
+
+export async function getMagicNumberById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(magicNumbers)
+    .where(eq(magicNumbers.id, id))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateMagicNumber(id: number, data: Partial<InsertMagicNumber>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(magicNumbers).set(data).where(eq(magicNumbers.id, id));
+}
+
+export async function deleteMagicNumber(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Delete associated sessions first
+  await db.delete(tradingSessions).where(eq(tradingSessions.magicNumberId, id));
+  // Then delete the magic number
+  await db.delete(magicNumbers).where(eq(magicNumbers.id, id));
+}

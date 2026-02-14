@@ -22,6 +22,13 @@
       "when": 1771028148377,
       "tag": "0002_exotic_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1771032749930,
+      "tag": "0003_lyrical_red_hulk",
+      "breakpoints": true
     }
   ]
 }
