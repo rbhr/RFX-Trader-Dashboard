@@ -47,7 +47,7 @@ class MetaCopierService {
     }
   }
 
-  private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', data?: any): Promise<T> {
+  private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET', data?: any): Promise<T> {
     const response = await axios({
       method,
       url: `${API_BASE}${endpoint}`,
@@ -375,15 +375,26 @@ class MetaCopierService {
    */
   async updateAccountName(accountId: string, name: string): Promise<void> {
     try {
+      // Get current account details first
+      const account = await this.fetchWithAuth<any>(
+        `/accounts/${accountId}`,
+        'GET'
+      );
+      
+      // Update with all required fields
       await this.fetchWithAuth(
         `/accounts/${accountId}`,
         'PUT',
-        { alias: name }
+        {
+          ...account,
+          alias: name,
+        }
       );
       console.log(`[MetaCopier] Updated account ${accountId} name to ${name}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[MetaCopier] Error updating account name:', error);
-      throw new Error('Failed to update account name');
+      const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+      throw new Error(`Failed to update account name: ${errorMsg}`);
     }
   }
 

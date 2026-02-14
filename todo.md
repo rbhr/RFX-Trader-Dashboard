@@ -153,3 +153,6 @@
 - [x] Update database with new magic number and set password to match
 - [x] Rename MC account to "RFX - <name> - <magic>"
 - [x] Add "RFX Trader" label to MC account
+
+## MC Account Name Update Fix
+- [x] Fix updateAccountName method failing in post-creation steps
