@@ -452,10 +452,23 @@ class MetaCopierService {
    */
   async addAccountLabel(accountId: string, label: string): Promise<void> {
     try {
+      // Get current account data
+      const account = await this.fetchWithAuth<any>(`/accounts/${accountId}`, 'GET');
+      
+      // Add the new label if it doesn't already exist
+      const currentLabels = account.labels || [];
+      if (!currentLabels.includes(label)) {
+        currentLabels.push(label);
+      }
+      
+      // Update account with new labels array using PUT
       await this.fetchWithAuth(
-        `/accounts/${accountId}/labels`,
-        'POST',
-        { name: label }
+        `/accounts/${accountId}`,
+        'PUT',
+        {
+          ...account,
+          labels: currentLabels,
+        }
       );
       console.log(`[MetaCopier] Added label "${label}" to account ${accountId}`);
     } catch (error) {

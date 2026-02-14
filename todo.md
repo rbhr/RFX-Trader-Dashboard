@@ -175,3 +175,6 @@
 - [x] Capture and display specific error messages from MetaCopier API (e.g., maintenance message)
 - [x] Research and implement skipCredentialCheck flag to bypass broker validation
 - [x] Auto-delete copier after retrieving magic number
+
+## Label Addition Fix
+- [x] Fix addAccountLabel method failing during MC account creation
