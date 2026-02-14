@@ -106,3 +106,6 @@
 ## Configuration Updates
 - [x] Update MetaCopier API key to new value
 - [x] Set all trader passwords to match their magic numbers
+
+## Critical Bugs
+- [x] New MetaCopier API key not working - can't check status anymore (Fixed: Updated to correct key)
