@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, name, magicNumber, mtAccount, mcAccountId FROM magic_numbers WHERE mtAccount = '276849';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, name, magicNumber, mtAccount, mcAccountId FROM magic_numbers WHERE mtAccount = '276849';",
+  "rows": [
+    {
+      "id": "150001",
+      "name": "SC1",
+      "magicNumber": "24094",
+      "mtAccount": "276849",
+      "mcAccountId": "0abde667-1558-48fa-a0cb-7dc9f2c25bcb"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmagicNumber\tmtAccount\tmcAccountId\n150001\tSC1\t24094\t276849\t0abde667-1558-48fa-a0cb-7dc9f2c25bcb\n",
+  "stderr": "",
+  "execution_time_ms": 1509
+}

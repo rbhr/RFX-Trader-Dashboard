@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { writeFileSync, appendFileSync } from 'fs';
 
 const API_BASE = 'https://api.metacopier.io/rest/api/v1';
 
@@ -189,8 +188,7 @@ class MetaCopierService {
       
       // Also write to file for debugging
       try {
-        const logEntry = `\n[${new Date().toISOString()}] MC Account Creation Error:\n${JSON.stringify(errorDetails, null, 2)}\n`;
-        appendFileSync('/home/ubuntu/mc-errors.log', logEntry);
+        console.error('[MC Account Creation Error]', errorDetails);
       } catch (logError) {
         console.error('Failed to write error log:', logError);
       }
@@ -490,7 +488,7 @@ class MetaCopierService {
         active: true
       };
       
-      appendFileSync('/home/ubuntu/risk-limit-debug.log', `[${new Date().toISOString()}] Adding risk limit to account ${accountId}\n`);
+
       console.log(`[MetaCopier] Adding risk limit to account ${accountId}:`, riskLimitData);
       
       const response = await this.fetchWithAuth(
@@ -499,10 +497,10 @@ class MetaCopierService {
         riskLimitData
       );
 
-      appendFileSync('/home/ubuntu/risk-limit-debug.log', `[${new Date().toISOString()}] Risk limit added successfully to ${accountId}\n`);
+
       console.log(`[MetaCopier] Risk limit added successfully:`, response);
     } catch (error: any) {
-      appendFileSync('/home/ubuntu/risk-limit-debug.log', `[${new Date().toISOString()}] Error adding risk limit to ${accountId}: ${error.message}\n`);
+
       console.error('[MetaCopier] Error adding risk limit:', {
         accountId,
         error: error.message,

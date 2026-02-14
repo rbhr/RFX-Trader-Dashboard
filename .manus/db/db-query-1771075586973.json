@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, name, magicNumber, mtAccount, mcAccountId FROM magic_numbers WHERE name = 'SC3';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, name, magicNumber, mtAccount, mcAccountId FROM magic_numbers WHERE name = 'SC3';",
+  "rows": [
+    {
+      "id": "150003",
+      "name": "SC3",
+      "magicNumber": "25071",
+      "mtAccount": "276854",
+      "mcAccountId": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmagicNumber\tmtAccount\tmcAccountId\n150003\tSC3\t25071\t276854\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1538
+}

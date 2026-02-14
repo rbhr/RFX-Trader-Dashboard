@@ -200,3 +200,9 @@
 - [x] Add mcAccountId field to traders table schema
 - [x] Update account creation to save MC account ID to database
 - [x] Update check MC status to use stored account ID instead of searching
+
+## Debug Post-Creation Failures
+- [ ] Fix createMetaCopierAccount to properly execute post-creation steps
+- [ ] Ensure mcAccountId is stored in database after account creation
+- [ ] Ensure risk limits are added during account creation
+- [ ] Test account creation end-to-end
