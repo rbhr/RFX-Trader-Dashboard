@@ -96,3 +96,6 @@
 - [x] Set London as default MetaCopier location
 - [x] Add location options: London, New York, Berlin, Singapore
 - [x] Update profit share display to show as percentage (e.g., "35.8%" instead of "0.358")
+
+## Bug Fixes
+- [x] Add MC Account Name field to trader management for MetaCopier account creation (uses "RFX - {trader name}" format)

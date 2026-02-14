@@ -122,6 +122,7 @@ class MetaCopierService {
     password: string;
     server: string;
     location: string;
+    name: string;
   }): Promise<{ success: boolean; accountId?: string; message?: string }> {
     try {
       const response = await this.fetchWithAuth<any>(
@@ -132,7 +133,7 @@ class MetaCopierService {
           password: params.password,
           server: params.server,
           platform: params.location, // MT4 or MT5
-          name: `Account ${params.accountNumber}`,
+          name: `RFX - ${params.name}`,
         }
       );
       
