@@ -1,0 +1,1 @@
+ALTER TABLE `magic_numbers` ADD `liveAccountNumber` varchar(50);

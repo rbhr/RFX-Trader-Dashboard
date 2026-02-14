@@ -482,22 +482,55 @@ class MetaCopierService {
    */
   private async addRiskLimit(accountId: string): Promise<void> {
     try {
-      await this.fetchWithAuth(
+      const riskLimitData = {
+        riskType: { id: 4 }, // Actual
+        absoluteRiskLimit: 300.0,
+        fulfillSeconds: 1,
+        closeAllOpenPositions: true,
+        active: true
+      };
+      
+      console.log(`[MetaCopier] Adding risk limit to account ${accountId}:`, riskLimitData);
+      
+      const response = await this.fetchWithAuth(
         `/accounts/${accountId}/riskLimits`,
         'POST',
-        {
-          riskType: { id: 4 }, // Actual
-          absoluteRiskLimit: 300.0,
-          fulfillSeconds: 1,
-          closeAllOpenPositions: true,
-          active: true
-        }
+        riskLimitData
       );
 
-      console.log(`[MetaCopier] Added risk limit to account ${accountId}`);
-    } catch (error) {
-      console.error('[MetaCopier] Error adding risk limit:', error);
+      console.log(`[MetaCopier] Risk limit added successfully:`, response);
+    } catch (error: any) {
+      console.error('[MetaCopier] Error adding risk limit:', {
+        accountId,
+        error: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
       // Don't throw - account is created, risk limit is optional
+    }
+  }
+
+  /**
+   * Get all accounts with a specific label
+   */
+  async getAccountsByLabel(label: string): Promise<any[]> {
+    try {
+      const accounts = await this.fetchWithAuth<any[]>('/accounts', 'GET');
+      
+      // Filter accounts that have the specified label
+      const filteredAccounts = accounts.filter((account: any) => {
+        return account.labels && account.labels.includes(label);
+      });
+      
+      return filteredAccounts.map((account: any) => ({
+        id: account.id,
+        alias: account.alias,
+        loginAccountNumber: account.loginAccountNumber,
+        status: account.status?.name,
+      }));
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching accounts by label:', error);
+      throw new Error('Failed to fetch accounts');
     }
   }
 }

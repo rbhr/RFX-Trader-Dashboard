@@ -46,6 +46,7 @@ interface Trader {
   mtPassword: string | null;
   mtVersion: string | null;
   mcLocation: string | null;
+  liveAccountNumber: string | null;
   lifetimeProfit: number;
   lifetimeProfitShare: number;
   lifetimeIncome: number;
@@ -72,6 +73,7 @@ export default function ManageTraders() {
     mtPassword: "",
     mtVersion: "MT5",
     mcLocation: "London",
+    liveAccountNumber: "",
     lifetimeProfit: 0,
     lifetimeProfitShare: 0,
     lifetimeIncome: 0,
@@ -82,6 +84,10 @@ export default function ManageTraders() {
   const { data: copiers, refetch: refetchCopiers } = trpc.admin.getCopiers.useQuery(
     { traderId: selectedTrader?.id || 0 },
     { enabled: copiersDialogOpen && !!selectedTrader }
+  );
+  const { data: rfxMasterAccounts } = trpc.admin.getRfxMasterAccounts.useQuery(
+    undefined,
+    { enabled: editDialogOpen }
   );
 
   const updateTrader = trpc.admin.updateTrader.useMutation({
@@ -155,6 +161,7 @@ export default function ManageTraders() {
       mtPassword: "",
       mtVersion: "MT5",
       mcLocation: "London",
+      liveAccountNumber: "",
       lifetimeProfit: 0,
       lifetimeProfitShare: 0,
       lifetimeIncome: 0,
@@ -173,6 +180,7 @@ export default function ManageTraders() {
       mtPassword: trader.mtPassword || "",
       mtVersion: trader.mtVersion || "MT5",
       mcLocation: trader.mcLocation || "London",
+      liveAccountNumber: trader.liveAccountNumber || "",
       lifetimeProfit: trader.lifetimeProfit,
       lifetimeProfitShare: trader.lifetimeProfitShare,
       lifetimeIncome: trader.lifetimeIncome,
@@ -281,6 +289,7 @@ export default function ManageTraders() {
       mtServer: formData.mtServer || undefined,
       mtVersion: formData.mtVersion || undefined,
       mcLocation: formData.mcLocation || undefined,
+      liveAccountNumber: formData.liveAccountNumber || undefined,
       lifetimeProfit: formData.lifetimeProfit,
       lifetimeProfitShare: formData.lifetimeProfitShare,
       lifetimeIncome: formData.lifetimeIncome,
@@ -703,6 +712,22 @@ export default function ManageTraders() {
                     <option value="New York">New York</option>
                     <option value="Berlin">Berlin</option>
                     <option value="Singapore">Singapore</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-liveAccountNumber">Live Account Number</Label>
+                  <select
+                    id="edit-liveAccountNumber"
+                    value={formData.liveAccountNumber}
+                    onChange={(e) => setFormData({ ...formData, liveAccountNumber: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Select Live Account</option>
+                    {rfxMasterAccounts?.map((account: any) => (
+                      <option key={account.id} value={account.loginAccountNumber}>
+                        {account.alias} ({account.loginAccountNumber})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

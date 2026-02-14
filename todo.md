@@ -178,3 +178,12 @@
 
 ## Label Addition Fix
 - [x] Fix addAccountLabel method failing during MC account creation
+
+## Risk Limits Fix
+- [x] Fix risk limits not being added during MC account creation (added detailed logging to diagnose)
+
+## Live Account Number Feature
+- [x] Add liveAccountNumber field to traders table schema
+- [x] Create endpoint to fetch accounts with "RFX Master" label
+- [x] Add Live Account Number dropdown to Edit Trader dialog
+- [x] Update backend to save Live Account Number when editing trader

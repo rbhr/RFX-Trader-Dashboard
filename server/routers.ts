@@ -277,6 +277,7 @@ export const appRouter = router({
         mtPassword: t.mtPassword,
         mtVersion: t.mtVersion,
         mcLocation: t.mcLocation,
+        liveAccountNumber: t.liveAccountNumber,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
         lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
@@ -331,6 +332,7 @@ export const appRouter = router({
         mtPassword: z.string().optional(),
         mtVersion: z.string().optional(),
         mcLocation: z.string().optional(),
+        liveAccountNumber: z.string().optional(),
         lifetimeProfit: z.number().optional(),
         lifetimeProfitShare: z.number().optional(),
         lifetimeIncome: z.number().optional(),
@@ -352,6 +354,7 @@ export const appRouter = router({
         if (data.mtPassword !== undefined) updateData.mtPassword = data.mtPassword;
         if (data.mtVersion !== undefined) updateData.mtVersion = data.mtVersion;
         if (data.mcLocation !== undefined) updateData.mcLocation = data.mcLocation;
+        if (data.liveAccountNumber !== undefined) updateData.liveAccountNumber = data.liveAccountNumber;
         if (data.lifetimeProfit !== undefined) updateData.lifetimeProfit = data.lifetimeProfit.toString();
         if (data.lifetimeProfitShare !== undefined) updateData.lifetimeProfitShare = data.lifetimeProfitShare.toString();
         if (data.lifetimeIncome !== undefined) updateData.lifetimeIncome = data.lifetimeIncome.toString();
@@ -566,6 +569,13 @@ export const appRouter = router({
         await metaCopierService.removeCopier(input.toAccountId, input.copierId);
 
         return { success: true };
+      }),
+
+    // Get all accounts with "RFX Master" label
+    getRfxMasterAccounts: tradingProcedure
+      .query(async () => {
+        const accounts = await metaCopierService.getAccountsByLabel('RFX Master');
+        return accounts;
       }),
   }),
 });
