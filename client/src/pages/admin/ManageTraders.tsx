@@ -63,7 +63,7 @@ export default function ManageTraders() {
   const [mcStatus, setMcStatus] = useState<{ exists: boolean; accountId?: string; mtAccount?: string } | null>(null);
 
   const [formData, setFormData] = useState({
-    magicNumber: "",
+    magicNumber: "99999",
     name: "",
     password: "",
     profitShare: 0.35,
@@ -72,6 +72,9 @@ export default function ManageTraders() {
     mtPassword: "",
     mtVersion: "MT5",
     mcLocation: "London",
+    lifetimeProfit: 0,
+    lifetimeProfitShare: 0,
+    lifetimeIncome: 0,
   });
 
   const utils = trpc.useUtils();
@@ -141,7 +144,7 @@ export default function ManageTraders() {
 
   const resetForm = () => {
     setFormData({
-      magicNumber: "",
+      magicNumber: "99999",
       name: "",
       password: "",
       profitShare: 0.35,
@@ -150,6 +153,9 @@ export default function ManageTraders() {
       mtPassword: "",
       mtVersion: "MT5",
       mcLocation: "London",
+      lifetimeProfit: 0,
+      lifetimeProfitShare: 0,
+      lifetimeIncome: 0,
     });
   };
 
@@ -165,6 +171,9 @@ export default function ManageTraders() {
       mtPassword: trader.mtPassword || "",
       mtVersion: trader.mtVersion || "MT5",
       mcLocation: trader.mcLocation || "London",
+      lifetimeProfit: trader.lifetimeProfit,
+      lifetimeProfitShare: trader.lifetimeProfitShare,
+      lifetimeIncome: trader.lifetimeIncome,
     });
     setEditDialogOpen(true);
   };
@@ -266,6 +275,9 @@ export default function ManageTraders() {
       mtServer: formData.mtServer || undefined,
       mtVersion: formData.mtVersion || undefined,
       mcLocation: formData.mcLocation || undefined,
+      lifetimeProfit: formData.lifetimeProfit,
+      lifetimeProfitShare: formData.lifetimeProfitShare,
+      lifetimeIncome: formData.lifetimeIncome,
     };
 
     if (formData.password) {
@@ -469,7 +481,8 @@ export default function ManageTraders() {
                     id="magicNumber"
                     value={formData.magicNumber}
                     onChange={(e) => setFormData({ ...formData, magicNumber: e.target.value })}
-                    placeholder="e.g., 100001"
+                    placeholder="99999"
+                    className="text-muted-foreground"
                   />
                 </div>
                 <div className="space-y-2">
@@ -616,15 +629,15 @@ export default function ManageTraders() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-profitShare">Profit Share (0-1)</Label>
+                  <Label htmlFor="edit-profitShare">Profit Share (%)</Label>
                   <Input
                     id="edit-profitShare"
                     type="number"
                     min="0"
-                    max="1"
-                    step="0.01"
-                    value={formData.profitShare}
-                    onChange={(e) => setFormData({ ...formData, profitShare: parseFloat(e.target.value) })}
+                    max="100"
+                    step="0.1"
+                    value={(formData.profitShare * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, profitShare: parseFloat(e.target.value) / 100 })}
                   />
                 </div>
               </div>
@@ -685,6 +698,41 @@ export default function ManageTraders() {
                     <option value="Berlin">Berlin</option>
                     <option value="Singapore">Singapore</option>
                   </select>
+                </div>
+              </div>
+              <div className="border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-3">Lifetime Metrics</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-lifetimeProfit">Lifetime Profit ($)</Label>
+                    <Input
+                      id="edit-lifetimeProfit"
+                      type="number"
+                      step="0.01"
+                      value={formData.lifetimeProfit}
+                      onChange={(e) => setFormData({ ...formData, lifetimeProfit: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-lifetimeProfitShare">Lifetime Share ($)</Label>
+                    <Input
+                      id="edit-lifetimeProfitShare"
+                      type="number"
+                      step="0.01"
+                      value={formData.lifetimeProfitShare}
+                      onChange={(e) => setFormData({ ...formData, lifetimeProfitShare: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-lifetimeIncome">Lifetime Income ($)</Label>
+                    <Input
+                      id="edit-lifetimeIncome"
+                      type="number"
+                      step="0.01"
+                      value={formData.lifetimeIncome}
+                      onChange={(e) => setFormData({ ...formData, lifetimeIncome: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

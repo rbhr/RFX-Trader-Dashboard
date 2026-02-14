@@ -134,3 +134,8 @@
 - [x] Build Copiers dialog showing all copiers with status
 - [x] Add D/M/A/X action buttons for each copier
 - [x] Test copier management actions
+
+## Add/Edit Trader Dialog Updates
+- [x] Set magic number default to 99999 in Add Trader form
+- [x] Format profit share as percentage in Edit Trader dialog
+- [x] Enable editing of Lifetime Profit, Lifetime Share, Lifetime Income in Edit Trader dialog
