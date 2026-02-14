@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { writeFileSync, appendFileSync } from 'fs';
 
 const API_BASE = 'https://api.metacopier.io/rest/api/v1';
 
@@ -48,16 +49,24 @@ class MetaCopierService {
   }
 
   private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET', data?: any): Promise<T> {
-    const response = await axios({
-      method,
-      url: `${API_BASE}${endpoint}`,
-      headers: {
-        'X-API-KEY': this.apiKey,
-        'Content-Type': 'application/json',
-      },
-      data,
-    });
-    return response.data;
+    try {
+      const response = await axios({
+        method,
+        url: `${API_BASE}${endpoint}`,
+        headers: {
+          'X-API-KEY': this.apiKey,
+          'Content-Type': 'application/json',
+        },
+        data,
+        timeout: 30000, // 30 second timeout
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        throw new Error(`MetaCopier API timeout after 30 seconds for ${method} ${endpoint}`);
+      }
+      throw error;
+    }
   }
 
   async getOpenPositions(magicNumber?: string, showAll = false): Promise<Position[]> {
@@ -167,10 +176,28 @@ class MetaCopierService {
         message: 'Account created successfully with features and risk limits',
       };
     } catch (error: any) {
-      console.error('[MetaCopier] Error creating account:', error);
+      const errorDetails = {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        accountNumber: params.accountNumber,
+        server: params.server,
+      };
+      console.error('[MetaCopier] Error creating account:', JSON.stringify(errorDetails, null, 2));
+      
+      // Also write to file for debugging
+      try {
+        const logEntry = `\n[${new Date().toISOString()}] MC Account Creation Error:\n${JSON.stringify(errorDetails, null, 2)}\n`;
+        appendFileSync('/home/ubuntu/mc-errors.log', logEntry);
+      } catch (logError) {
+        console.error('Failed to write error log:', logError);
+      }
+      
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to create MetaCopier account';
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to create MetaCopier account',
+        message: errorMsg,
       };
     }
   }

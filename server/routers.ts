@@ -403,11 +403,15 @@ export const appRouter = router({
     createMetaCopierAccount: tradingProcedure
       .input(z.object({ traderId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        console.log(`[createMetaCopierAccount] Called for traderId: ${input.traderId}`);
+        
         if (!ctx.tradingSession.magicNumber.isAdmin) {
+          console.log('[createMetaCopierAccount] Admin check failed');
           throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
         }
 
         const trader = await getMagicNumberById(input.traderId);
+        console.log(`[createMetaCopierAccount] Trader data:`, trader ? { id: trader.id, name: trader.name, mtAccount: trader.mtAccount, hasPassword: !!trader.mtPassword } : 'NOT FOUND');
         if (!trader || !trader.mtAccount || !trader.mtPassword || !trader.mtServer || !trader.mtVersion || !trader.mcLocation) {
           throw new TRPCError({ 
             code: "BAD_REQUEST", 
@@ -416,6 +420,7 @@ export const appRouter = router({
         }
 
         // Step 1: Create MC account
+        console.log(`[createMetaCopierAccount] Calling metaCopierService.createAccount...`);
         const result = await metaCopierService.createAccount({
           accountNumber: trader.mtAccount,
           password: trader.mtPassword,
@@ -424,8 +429,10 @@ export const appRouter = router({
           mtVersion: trader.mtVersion,
           name: trader.name,
         });
+        console.log(`[createMetaCopierAccount] MetaCopier API result:`, result);
 
         if (!result.success || !result.accountId) {
+          console.log(`[createMetaCopierAccount] Account creation failed:`, result.message);
           return result;
         }
 

@@ -157,3 +157,10 @@
 ## MC Account Name Update Fix
 - [x] Fix updateAccountName method failing in post-creation steps
 - [x] Try PATCH method and add detailed error logging for updateAccountName
+
+## MC Account Creation Error Logging
+- [x] Add detailed error logging to createAccount method to diagnose failures
+
+## MC Account Creation Timeout Issue
+- [x] Diagnose why account creation takes 60 seconds and times out
+- [x] Add proper timeout handling and error messages
