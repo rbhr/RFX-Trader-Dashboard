@@ -156,3 +156,4 @@
 
 ## MC Account Name Update Fix
 - [x] Fix updateAccountName method failing in post-creation steps
+- [x] Try PATCH method and add detailed error logging for updateAccountName

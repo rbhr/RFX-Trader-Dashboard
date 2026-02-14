@@ -375,13 +375,28 @@ class MetaCopierService {
    */
   async updateAccountName(accountId: string, name: string): Promise<void> {
     try {
-      // Get current account details first
+      console.log(`[MetaCopier] Attempting to update account ${accountId} name to "${name}"`);
+      
+      // Try PATCH first (partial update)
+      try {
+        await this.fetchWithAuth(
+          `/accounts/${accountId}`,
+          'PATCH',
+          { alias: name }
+        );
+        console.log(`[MetaCopier] Successfully updated account ${accountId} name via PATCH`);
+        return;
+      } catch (patchError: any) {
+        console.warn(`[MetaCopier] PATCH failed, trying PUT with full account data:`, patchError.response?.data || patchError.message);
+      }
+      
+      // Fallback to PUT with full account data
       const account = await this.fetchWithAuth<any>(
         `/accounts/${accountId}`,
         'GET'
       );
+      console.log(`[MetaCopier] Retrieved account data, current alias: "${account.alias}"`);
       
-      // Update with all required fields
       await this.fetchWithAuth(
         `/accounts/${accountId}`,
         'PUT',
@@ -390,9 +405,15 @@ class MetaCopierService {
           alias: name,
         }
       );
-      console.log(`[MetaCopier] Updated account ${accountId} name to ${name}`);
+      console.log(`[MetaCopier] Successfully updated account ${accountId} name via PUT`);
     } catch (error: any) {
-      console.error('[MetaCopier] Error updating account name:', error);
+      const errorDetails = {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      };
+      console.error('[MetaCopier] Error updating account name:', JSON.stringify(errorDetails, null, 2));
       const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
       throw new Error(`Failed to update account name: ${errorMsg}`);
     }
