@@ -164,3 +164,14 @@
 ## MC Account Creation Timeout Issue
 - [x] Diagnose why account creation takes 60 seconds and times out
 - [x] Add proper timeout handling and error messages
+
+## MetaCopier API Connectivity Test
+- [ ] Create test endpoint to verify MetaCopier API is reachable
+- [ ] Test if GET /accounts works (simpler than POST)
+
+## MC Account Creation UX Improvements
+- [x] Add "Please wait, this can take a couple of minutes" message during account creation
+- [x] Increase timeout to 3-5 minutes to match MetaCopier's expected duration
+- [x] Capture and display specific error messages from MetaCopier API (e.g., maintenance message)
+- [x] Research and implement skipCredentialCheck flag to bypass broker validation
+- [x] Auto-delete copier after retrieving magic number

@@ -130,6 +130,7 @@ export default function ManageTraders() {
 
   const createMcAccount = trpc.admin.createMetaCopierAccount.useMutation({
     onSuccess: (data) => {
+      toast.dismiss('mc-account-creation');
       if (data.success) {
         toast.success(data.message || "MetaCopier account created successfully");
         setMcStatusDialogOpen(false);
@@ -138,6 +139,7 @@ export default function ManageTraders() {
       }
     },
     onError: (error) => {
+      toast.dismiss('mc-account-creation');
       toast.error(error.message);
     },
   });
@@ -208,6 +210,10 @@ export default function ManageTraders() {
 
   const handleCreateMcAccount = () => {
     if (!selectedTrader) return;
+    toast.loading("Creating MetaCopier account... This can take a couple of minutes. Please don't close this page.", {
+      id: 'mc-account-creation',
+      duration: 300000, // 5 minutes
+    });
     createMcAccount.mutate({ traderId: selectedTrader.id });
   };
 

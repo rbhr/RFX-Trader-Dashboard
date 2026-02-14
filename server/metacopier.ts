@@ -58,7 +58,7 @@ class MetaCopierService {
           'Content-Type': 'application/json',
         },
         data,
-        timeout: 30000, // 30 second timeout
+        timeout: 300000, // 5 minute timeout for account creation
       });
       return response.data;
     } catch (error: any) {
@@ -159,6 +159,7 @@ class MetaCopierService {
           loginServer: params.server,
           type: { id: typeMap[params.mtVersion] || 1 },
           region: { id: regionMap[params.location] || 2 },
+          skipCredentialCheck: true, // Skip broker validation to speed up creation
         }
       );
       

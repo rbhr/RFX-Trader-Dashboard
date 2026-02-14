@@ -455,6 +455,7 @@ export const appRouter = router({
           }
 
           const realMagic = copierResult.fromAccountShortId;
+          const copierId = copierResult.copierId;
 
           // Step 3: Update database with new magic number and password
           await updateMagicNumber(trader.id, {
@@ -462,11 +463,22 @@ export const appRouter = router({
             password: realMagic,
           });
 
-          // Step 4: Rename MC account to "RFX - <name> - <magic>"
+          // Step 4: Delete the temporary copier (we only needed it to get the magic number)
+          if (copierId) {
+            try {
+              await metaCopierService.removeCopier(SLAVE_ACCOUNT_ID, copierId);
+              console.log(`[MC Account Creation] Deleted temporary copier ${copierId}`);
+            } catch (error) {
+              console.warn(`[MC Account Creation] Failed to delete copier ${copierId}:`, error);
+              // Don't fail the whole process if copier deletion fails
+            }
+          }
+
+          // Step 5: Rename MC account to "RFX - <name> - <magic>"
           const newAccountName = `RFX - ${trader.name} - ${realMagic}`;
           await metaCopierService.updateAccountName(mcAccountId, newAccountName);
 
-          // Step 5: Add "RFX Trader" label
+          // Step 6: Add "RFX Trader" label
           await metaCopierService.addAccountLabel(mcAccountId, 'RFX Trader');
 
           return {
