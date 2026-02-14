@@ -1,0 +1,1 @@
+ALTER TABLE `magic_numbers` ADD `isAdmin` boolean DEFAULT false NOT NULL;

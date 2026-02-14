@@ -7,6 +7,10 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import ManageTraders from "./pages/admin/ManageTraders";
+import ManageMetaCopier from "./pages/admin/ManageMetaCopier";
+import ManagePayments from "./pages/admin/ManagePayments";
 
 function Router() {
   return (
@@ -14,6 +18,10 @@ function Router() {
       <Route path="/" component={Login} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/history" component={History} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/traders" component={ManageTraders} />
+      <Route path="/admin/metacopier" component={ManageMetaCopier} />
+      <Route path="/admin/payments" component={ManagePayments} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

@@ -43,3 +43,23 @@
 
 ## Bugs to Fix
 - [x] Login not redirecting to dashboard after successful authentication (Fixed: Added cookie-parser middleware)
+
+## Optimized Polling System
+- [ ] Implement optimistic UI updates for instant feedback
+- [ ] Add efficient polling with smart refresh intervals
+- [ ] Implement background data prefetching
+- [ ] Add loading states with skeleton screens
+
+## UI Text Updates
+- [x] Change login page subtitle from "Track your trading performance with MetaCopier" to "Track your trading performance"
+
+## Admin User & Management Features
+- [x] Create admin user (username: admin, password: admin)
+- [x] Add role field to trading sessions
+- [x] Create admin sidebar navigation component
+- [x] Add Trader Dashboard page (admin view)
+- [x] Add Manage Traders page
+- [x] Add Manage MetaCopier page
+- [x] Add Manage Payments page
+- [x] Implement role-based routing and access control
+- [x] Add admin logout functionality

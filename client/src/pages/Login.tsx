@@ -20,7 +20,12 @@ export default function Login() {
   const loginMutation = trpc.trading.login.useMutation({
     onSuccess: (data) => {
       toast.success(`Welcome back, ${data.name}!`);
-      setLocation("/dashboard");
+      // Redirect admin users to admin dashboard
+      if (data.isAdmin) {
+        setLocation("/admin/dashboard");
+      } else {
+        setLocation("/dashboard");
+      }
     },
     onError: (error) => {
       toast.error(error.message);
@@ -74,7 +79,7 @@ export default function Login() {
           <div>
             <CardTitle className="text-2xl">RFX Trader Dashboard</CardTitle>
             <CardDescription className="mt-2">
-              Track your trading performance with MetaCopier
+              Track your trading performance
             </CardDescription>
           </div>
         </CardHeader>

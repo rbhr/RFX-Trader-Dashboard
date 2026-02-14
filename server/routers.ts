@@ -124,6 +124,7 @@ export const appRouter = router({
           success: true,
           magicNumber: magicNumberData.magicNumber,
           name: magicNumberData.name,
+          isAdmin: magicNumberData.isAdmin || false,
         };
       }),
 
@@ -148,6 +149,7 @@ export const appRouter = router({
         name: ctx.tradingSession.magicNumber.name,
         profitShare: parseFloat(ctx.tradingSession.magicNumber.profitShare),
         showAllData: ctx.tradingSession.magicNumber.showAllData,
+        isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
       };
     }),
 

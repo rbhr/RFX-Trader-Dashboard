@@ -30,6 +30,7 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   profitShare: decimal("profitShare", { precision: 5, scale: 4 }).notNull().default("0.3500"),
   showAllData: boolean("showAllData").notNull().default(false),
   isActive: boolean("isActive").notNull().default(true),
+  isAdmin: boolean("isAdmin").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
