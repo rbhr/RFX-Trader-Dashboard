@@ -400,6 +400,17 @@ export const appRouter = router({
           // Verify the account still exists in MetaCopier
           try {
             const accountDetails = await metaCopierService.getAccountById(trader.mcAccountId);
+            // Check if account is deleted (status.name === "Deleted")
+            if (accountDetails?.status?.name === 'Deleted') {
+              console.warn(`[checkMetaCopierStatus] Account ${trader.mcAccountId} is deleted in MetaCopier`);
+              // Clear the deleted account ID from database
+              await updateMagicNumber(trader.id, { mcAccountId: null });
+              return {
+                exists: false,
+                accountId: undefined,
+                mtAccount: trader.mtAccount,
+              };
+            }
             return {
               exists: true,
               accountId: trader.mcAccountId,
