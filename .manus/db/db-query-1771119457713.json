@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, name, mtAccount, mcAccountId FROM magic_numbers WHERE mtAccount = '260251539';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, name, mtAccount, mcAccountId FROM magic_numbers WHERE mtAccount = '260251539';",
+  "rows": [
+    {
+      "id": "120021",
+      "name": "Sameer",
+      "mtAccount": "260251539",
+      "mcAccountId": "4b6df070-389f-4232-8b2f-7ee8146f896a"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmtAccount\tmcAccountId\n120021\tSameer\t260251539\t4b6df070-389f-4232-8b2f-7ee8146f896a\n",
+  "stderr": "",
+  "execution_time_ms": 1571
+}

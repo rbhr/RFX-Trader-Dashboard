@@ -410,10 +410,16 @@ export const appRouter = router({
             console.warn(`[checkMetaCopierStatus] Stored account ID ${trader.mcAccountId} not found in MetaCopier`);
             // Clear the invalid mcAccountId from database
             await updateMagicNumber(trader.id, { mcAccountId: null });
+            // Return not found immediately - don't search by MT account
+            return {
+              exists: false,
+              accountId: undefined,
+              mtAccount: trader.mtAccount,
+            };
           }
         }
 
-        // Fallback: search by MT account number
+        // Fallback: search by MT account number (only if no mcAccountId was stored)
         const status = await metaCopierService.checkAccountExists(trader.mtAccount);
 
         return {
