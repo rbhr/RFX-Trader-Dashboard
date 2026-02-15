@@ -507,7 +507,7 @@ class MetaCopierService {
         response: error.response?.data,
         status: error.response?.status,
       });
-      throw new Error(`Failed to add risk limit: ${error.message}`);
+      // Don't throw - account is created, risk limit is optional
     }
   }
 
