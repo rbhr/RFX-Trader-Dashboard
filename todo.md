@@ -193,3 +193,8 @@ None - All critical bugs resolved in v1.0
 - [x] Query database for all traders with liveAccountNumber = 251974020
 - [x] Create copiers for each trader using custom magic field
 - [x] Verify all copiers created successfully (19 copiers confirmed)
+
+## Update Copier Fixed Lot Size
+- [x] Get Ahmed's updated copier configuration
+- [x] Create script to update all copiers to fixed lot size 0.01
+- [x] Run script and verify all 19 copiers updated (scaleType: 3, fixedLotSize: 0.01)
