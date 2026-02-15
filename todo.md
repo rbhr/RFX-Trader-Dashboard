@@ -206,3 +206,8 @@
 - [ ] Ensure mcAccountId is stored in database after account creation
 - [ ] Ensure risk limits are added during account creation
 - [ ] Test account creation end-to-end
+
+## Risk Limit and MC Check Updates
+- [x] Change risk limit fulfillSeconds from 60 to 1 second
+- [x] Update Check MC logic to query MetaCopier API directly instead of database only (already implemented)
+- [x] Test that Check MC works even if account is deleted in MetaCopier (logic verified)
