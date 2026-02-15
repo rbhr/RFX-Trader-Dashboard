@@ -211,3 +211,8 @@
 - [x] Change risk limit fulfillSeconds from 60 to 1 second
 - [x] Update Check MC logic to query MetaCopier API directly instead of database only (already implemented)
 - [x] Test that Check MC works even if account is deleted in MetaCopier (logic verified)
+
+## Check MC Bug Fix
+- [x] Fix checkMetaCopierStatus to return exists: false when account is deleted in MetaCopier
+- [x] Clear mcAccountId from database when account doesn't exist in MetaCopier
+- [ ] Test with Sameer's deleted account

@@ -408,6 +408,8 @@ export const appRouter = router({
           } catch (error: any) {
             // Account ID stored but account doesn't exist anymore
             console.warn(`[checkMetaCopierStatus] Stored account ID ${trader.mcAccountId} not found in MetaCopier`);
+            // Clear the invalid mcAccountId from database
+            await updateMagicNumber(trader.id, { mcAccountId: null });
           }
         }
 
