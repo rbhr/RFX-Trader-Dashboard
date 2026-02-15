@@ -198,3 +198,8 @@ None - All critical bugs resolved in v1.0
 - [x] Get Ahmed's updated copier configuration
 - [x] Create script to update all copiers to fixed lot size 0.01
 - [x] Run script and verify all 19 copiers updated (scaleType: 3, fixedLotSize: 0.01)
+
+## Bulk Copier Creation for All RFX Master Accounts
+- [x] Fetch all MC accounts with "RFX Master" label (found 7 accounts)
+- [x] Create script to generate copiers for all 19 traders on each RFX Master account
+- [x] Run script and verify all copiers created with fixed lot size 0.01 (114 new copiers created across 6 accounts)
