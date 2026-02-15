@@ -140,6 +140,8 @@ export default function ManageTraders() {
       if (data.success) {
         toast.success(data.message || "MetaCopier account created successfully");
         setMcStatusDialogOpen(false);
+        // Refresh trader list to show updated magic number
+        utils.admin.listTraders.invalidate();
       } else {
         toast.error(data.message || "Failed to create MetaCopier account");
       }

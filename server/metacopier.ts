@@ -233,10 +233,25 @@ class MetaCopierService {
         {
           type: { id: 37 },
           setting: {
-            maxLotSizeThreshold: 0,
+            maxLotSizeThreshold: 0.1,
             enabled: true,
             aggregatePerSymbol: false,
             maxOpenTimeSeconds: 0,
+            symbolsConfiguration: {}
+          }
+        }
+      );
+
+      // Max open positions (type 17)
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features`,
+        'POST',
+        {
+          type: { id: 17 },
+          setting: {
+            maxOpenPositions: 3,
+            maxPositionsInTimeWindow: 0,
+            timeWindowSeconds: 0,
             symbolsConfiguration: {}
           }
         }

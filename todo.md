@@ -176,3 +176,14 @@ None - All critical bugs resolved in v1.0
 - MetaCopier API returns deleted accounts with status.name = "Deleted" instead of throwing errors
 - Risk limits require both `riskLimit` (relative, set to 0.0) and `absoluteRiskLimit` ($300) fields
 - Minimum fulfillSeconds allowed by MetaCopier API may be higher than 1 second (needs verification)
+
+## Dev Server Authentication Fix
+- [ ] Create easy admin login for dev environment
+- [ ] Test admin page access on dev server
+- [ ] Document dev server login credentials
+
+## Feature Settings Update
+- [x] Update Trade Guardrails maxLotSizeThreshold to 0.1
+- [x] Add Max Open Positions feature (set to 3)
+- [x] Fix database update to save real magic number after MC account creation (was just UI refresh issue)
+- [x] Add automatic trader list refresh after MC account creation
