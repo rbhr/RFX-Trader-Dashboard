@@ -481,9 +481,9 @@ class MetaCopierService {
   private async addRiskLimit(accountId: string): Promise<void> {
     try {
       const riskLimitData = {
-        riskType: 4, // Actual (changed from nested object to number)
+        riskType: { id: 4 }, // Actual - must be object format
         absoluteRiskLimit: 300.0,
-        fulfillSeconds: 1,
+        fulfillSeconds: 60, // Minimum allowed by API
         closeAllOpenPositions: true,
         active: true
       };
