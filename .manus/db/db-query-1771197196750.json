@@ -1,0 +1,143 @@
+{
+  "query": "SELECT id, name, magicNumber, mcAccountId, liveAccountNumber FROM magic_numbers WHERE liveAccountNumber = '251974020' AND mcAccountId IS NOT NULL ORDER BY name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, name, magicNumber, mcAccountId, liveAccountNumber FROM magic_numbers WHERE liveAccountNumber = '251974020' AND mcAccountId IS NOT NULL ORDER BY name;",
+  "rows": [
+    {
+      "id": "180002",
+      "name": "Ahmed",
+      "magicNumber": "21008",
+      "mcAccountId": "e04699f5-8ddc-4902-9797-4c8482e8bf18",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120031",
+      "name": "Ali",
+      "magicNumber": "22700",
+      "mcAccountId": "7f14c0a0-cb68-4d24-b38a-c0b2deef3ecb",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120030",
+      "name": "Bisma",
+      "magicNumber": "20788",
+      "mcAccountId": "613c80d8-f4e4-4dc0-81fd-6e025dc28909",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120029",
+      "name": "Farhan (Ali Signals)",
+      "magicNumber": "22710",
+      "mcAccountId": "561fae79-024b-447f-aa64-e2de3e5d79cf",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120028",
+      "name": "Feroz",
+      "magicNumber": "22719",
+      "mcAccountId": "cddd15a4-e4c8-4ef6-beeb-367d553ba59b",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "210002",
+      "name": "Gulam",
+      "magicNumber": "22729",
+      "mcAccountId": "d37527e6-4659-4b18-a6f2-67d2aa723018",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120027",
+      "name": "Kashif",
+      "magicNumber": "22730",
+      "mcAccountId": "4c9a79f3-fa3b-4de4-be85-cc7027966a88",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120026",
+      "name": "Marvin",
+      "magicNumber": "22735",
+      "mcAccountId": "24d46fa4-65be-453a-9216-05f6d78fc5a0",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120025",
+      "name": "Melanie",
+      "magicNumber": "22736",
+      "mcAccountId": "4e59dd0d-7c98-41ba-86c4-c344ea8eec36",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120024",
+      "name": "Omair",
+      "magicNumber": "22742",
+      "mcAccountId": "6150a6d8-d8d9-4625-88fa-2486fa909232",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120023",
+      "name": "Saif",
+      "magicNumber": "22739",
+      "mcAccountId": "a60d610f-72be-44c1-a231-11cb4e86cfcd",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120022",
+      "name": "Samad",
+      "magicNumber": "22745",
+      "mcAccountId": "4838cf96-80be-4905-9219-9443bacba3bc",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120021",
+      "name": "Sameer",
+      "magicNumber": "22747",
+      "mcAccountId": "6be9c815-9b38-4f17-a673-07ef5b5a6ac0",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120020",
+      "name": "Sheeraz",
+      "magicNumber": "22751",
+      "mcAccountId": "90add4d6-0442-4cd5-a948-fa55152d3b94",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "240001",
+      "name": "Somar",
+      "magicNumber": "23706",
+      "mcAccountId": "6669ecb9-5688-48ee-8f60-7738a9ee3e7b",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120019",
+      "name": "Sonia",
+      "magicNumber": "22748",
+      "mcAccountId": "d6fb26d3-ae8c-4433-bdac-88945bbc8278",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120018",
+      "name": "Tarique",
+      "magicNumber": "22770",
+      "mcAccountId": "259c153d-f3db-4537-b05a-b2139b212e14",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120017",
+      "name": "Zarab",
+      "magicNumber": "22852",
+      "mcAccountId": "610b9a93-490b-4272-835c-c983af557cf1",
+      "liveAccountNumber": "251974020"
+    },
+    {
+      "id": "120001",
+      "name": "Zeeshan",
+      "magicNumber": "22973",
+      "mcAccountId": "dd21828f-209d-4c69-93d5-706f28a1ca13",
+      "liveAccountNumber": "251974020"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmagicNumber\tmcAccountId\tliveAccountNumber\n180002\tAhmed\t21008\te04699f5-8ddc-4902-9797-4c8482e8bf18\t251974020\n120031\tAli\t22700\t7f14c0a0-cb68-4d24-b38a-c0b2deef3ecb\t251974020\n120030\tBisma\t20788\t613c80d8-f4e4-4dc0-81fd-6e025dc28909\t251974020\n120029\tFarhan (Ali Signals)\t22710\t561fae79-024b-447f-aa64-e2de3e5d79cf\t251974020\n120028\tFeroz\t22719\tcddd15a4-e4c8-4ef6-beeb-367d553ba59b\t251974020\n210002\tGulam\t22729\td37527e6-4659-4b18-a6f2-67d2aa723018\t251974020\n120027\tKashif\t22730\t4c9a79f3-fa3b-4de4-be85-cc7027966a88\t251974020\n120026\tMarvin\t22735\t24d46fa4-65be-453a-9216-05f6d78fc5a0\t251974020\n120025\tMelanie\t22736\t4e59dd0d-7c98-41ba-86c4-c344ea8eec36\t251974020\n120024\tOmair\t22742\t6150a6d8-d8d9-4625-88fa-2486fa909232\t251974020\n120023\tSaif\t22739\ta60d610f-72be-44c1-a231-11cb4e86cfcd\t251974020\n120022\tSamad\t22745\t4838cf96-80be-4905-9219-9443bacba3bc\t251974020\n120021\tSameer\t22747\t6be9c815-9b38-4f17-a673-07ef5b5a6ac0\t251974020\n120020\tSheeraz\t22751\t90add4d6-0442-4cd5-a948-fa55152d3b94\t251974020\n240001\tSomar\t23706\t6669ecb9-5688-48ee-8f60-7738a9ee3e7b\t251974020\n120019\tSonia\t22748\td6fb26d3-ae8c-4433-bdac-88945bbc8278\t251974020\n120018\tTarique\t22770\t259c153d-f3db-4537-b05a-b2139b212e14\t251974020\n120017\tZarab\t22852\t610b9a93-490b-4272-835c-c983af557cf1\t251974020\n120001\tZeeshan\t22973\tdd21828f-209d-4c69-93d5-706f28a1ca13\t251974020\n",
+  "stderr": "",
+  "execution_time_ms": 1572
+}

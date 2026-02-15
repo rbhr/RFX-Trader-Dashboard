@@ -187,3 +187,9 @@ None - All critical bugs resolved in v1.0
 - [x] Add Max Open Positions feature (set to 3)
 - [x] Fix database update to save real magic number after MC account creation (was just UI refresh issue)
 - [x] Add automatic trader list refresh after MC account creation
+
+## Bulk Copier Creation for Live Account
+- [x] Examine Ahmed's copier format (e04699f5-8ddc-4902-9797-4c8482e8bf18) on MC account c3d6a0ef-3a3a-4f5c-9300-4b253164bc94
+- [x] Query database for all traders with liveAccountNumber = 251974020
+- [x] Create copiers for each trader using custom magic field
+- [x] Verify all copiers created successfully (19 copiers confirmed)
