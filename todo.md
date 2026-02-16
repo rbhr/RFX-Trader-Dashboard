@@ -211,3 +211,8 @@ None - All critical bugs resolved in v1.0
 - [x] Add edit template dialog with all copier settings
 - [x] Seed two initial templates (Fixed Lot 0.01, No Scaling 0.01)
 - [x] Test template creation, editing, and deletion
+
+## Update Data Collector Interval
+- [x] Fetch all MC accounts (48 total)
+- [x] Create script to update Data Collector interval from 60s to 30s
+- [x] Run script and verify all accounts updated (0 accounts have Data Collector feature enabled)
