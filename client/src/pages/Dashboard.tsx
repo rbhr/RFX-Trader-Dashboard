@@ -291,7 +291,7 @@ export default function Dashboard() {
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1">
-                      {copierInfo.scaleType === 3 ? (
+                      {copierInfo.scaleType === 3 || copierInfo.scaleType === 4 ? (
                         <>
                           Each of your trades is going into the Live Account as <span className="font-semibold">{copierInfo.fixedLotSize} lots</span>
                         </>

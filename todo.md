@@ -256,3 +256,8 @@ None - All critical bugs resolved in v1.0
 - [x] Display warning if copier is disabled (red text)
 - [x] Test with trader who has active copier (Omair - shows "0.01 lots" message)
 - [x] Verified isActive field returns correctly from API
+
+## Fix Copier Display Wording
+- [x] Check Zeeshan's copier configuration (magic 22973, scaleType 4)
+- [x] Fix display logic to show correct message for all scale types (added scaleType 4 to fixed lot display)
+- [x] Ensure fixed lot size displays correctly (now shows "0.01 lots" for both scaleType 3 and 4)
