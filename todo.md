@@ -233,3 +233,7 @@ None - All critical bugs resolved in v1.0
 - [x] Add manager field to magic_numbers table schema (varchar 100, default 'RFX')
 - [x] Push database schema changes (migration 0008_pale_next_avengers.sql)
 - [x] Update all existing traders to set manager = 'RFX' (default value applied automatically)
+
+## Add 7 HubbFX Traders
+- [x] Generate random magic numbers for all 7 traders (39717, 15601, 86788, 16318, 36885, 82586, 21067)
+- [x] Insert traders into database with manager='HubbFX' and MT5 account details (Amber, Shadost, Azra, Khan, Khalid, Meer, Maria)
