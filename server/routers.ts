@@ -395,6 +395,36 @@ export const appRouter = router({
       }
 
       const traders = await getAllMagicNumbers();
+      
+      // Fetch copier info for all traders with live accounts
+      const copierInfoMap = new Map();
+      for (const trader of traders) {
+        if (trader.liveAccountNumber) {
+          try {
+            const accountId = await metaCopierService.getAccountIdByLoginNumber(trader.liveAccountNumber);
+            const liveAccount = accountId ? { id: accountId } : null;
+            if (liveAccount) {
+              const copiers = await metaCopierService.getCopiersByAccount(liveAccount.id);
+              const traderCopier = copiers.find((c: any) => 
+                c.fromAccountShortId === parseInt(trader.magicNumber) || 
+                c.fromAccountShortId === trader.magicNumber ||
+                c.customMagicNumber === parseInt(trader.magicNumber) ||
+                c.customMagicNumber === trader.magicNumber
+              );
+              if (traderCopier) {
+                copierInfoMap.set(trader.magicNumber, {
+                  multiplier: traderCopier.multiplier,
+                  fixedLotSize: traderCopier.fixedLotSize,
+                  isActive: traderCopier.active
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to fetch copier for trader ${trader.magicNumber}:`, error);
+          }
+        }
+      }
+      
       return traders.map(t => ({
         id: t.id,
         magicNumber: t.magicNumber,
@@ -415,6 +445,7 @@ export const appRouter = router({
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
+        copierInfo: copierInfoMap.get(t.magicNumber) || null,
       }));
     }),
 

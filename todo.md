@@ -267,3 +267,8 @@ None - All critical bugs resolved in v1.0
 - [x] Show multiplier message when multiplier > 1
 - [x] Show fixed lot message when multiplier = 1
 - [x] Test with Zeeshan (multiplier 5x) - correctly shows "multiplied by 5x"
+
+## Add Copy Rate Column to Manage Traders
+- [x] Create backend API to fetch copier info for all traders at once (added to listTraders)
+- [x] Add Copy Rate column showing "nX" for multiplier, "n.nn" for fixed lots, "0" for disabled
+- [x] Make Copy Rate column sortable

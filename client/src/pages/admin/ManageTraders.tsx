@@ -48,6 +48,11 @@ interface Trader {
   mcLocation: string | null;
   liveAccountNumber: string | null;
   manager: string | null;
+  copierInfo: {
+    multiplier: number;
+    fixedLotSize: number;
+    isActive: boolean;
+  } | null;
   lifetimeProfit: number;
   lifetimeProfitShare: number;
   lifetimeIncome: number;
@@ -64,7 +69,7 @@ export default function ManageTraders() {
   const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null);
   const [mcStatus, setMcStatus] = useState<{ exists: boolean; accountId?: string; mtAccount?: string } | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>('all');
-  const [sortField, setSortField] = useState<keyof Trader | null>(null);
+  const [sortField, setSortField] = useState<keyof Trader | 'copyRate' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [formData, setFormData] = useState({
@@ -332,7 +337,7 @@ export default function ManageTraders() {
   };
 
   // Handle column sorting
-  const handleSort = (field: keyof Trader) => {
+  const handleSort = (field: keyof Trader | 'copyRate') => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -350,8 +355,17 @@ export default function ManageTraders() {
 
     if (sortField) {
       result = [...result].sort((a, b) => {
-        const aVal = a[sortField];
-        const bVal = b[sortField];
+        // Handle copyRate as a special computed field
+        let aVal: any;
+        let bVal: any;
+        
+        if (sortField === 'copyRate') {
+          aVal = a.copierInfo?.isActive ? (a.copierInfo.multiplier > 1 ? a.copierInfo.multiplier : a.copierInfo.fixedLotSize) : 0;
+          bVal = b.copierInfo?.isActive ? (b.copierInfo.multiplier > 1 ? b.copierInfo.multiplier : b.copierInfo.fixedLotSize) : 0;
+        } else {
+          aVal = a[sortField];
+          bVal = b[sortField];
+        }
         
         // Handle null values
         if (aVal === null && bVal === null) return 0;
@@ -442,6 +456,12 @@ export default function ManageTraders() {
                       {sortField === 'profitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
                     </div>
                   </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('copyRate')}>
+                    <div className="flex items-center gap-1">
+                      Copy Rate
+                      {sortField === 'copyRate' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtAccount')}>
                     <div className="flex items-center gap-1">
                       MT Account
@@ -529,6 +549,21 @@ export default function ManageTraders() {
                           />
                           <span className="text-sm text-muted-foreground">%</span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-sm font-semibold">
+                          {trader.copierInfo ? (
+                            trader.copierInfo.isActive ? (
+                              trader.copierInfo.multiplier > 1 
+                                ? `${trader.copierInfo.multiplier}x`
+                                : trader.copierInfo.fixedLotSize.toFixed(2)
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <span className="font-mono text-sm">{trader.mtAccount || "-"}</span>
