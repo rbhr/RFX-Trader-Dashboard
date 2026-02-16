@@ -242,3 +242,8 @@ None - All critical bugs resolved in v1.0
 - [x] Add Manager column to traders table display
 - [x] Add manager filter dropdown (All, RFX, HubbFX)
 - [x] Update backend to include manager field in listTraders response
+
+## Add Sortable Columns to Manage Traders Table
+- [x] Implement sorting state and logic for table columns
+- [x] Add sort indicators (arrows) to column headers (ArrowUp, ArrowDown, ArrowUpDown)
+- [x] Make columns sortable: Name, Magic, Manager, Profit Share, MT Account, MT Server, MT Version, MC Location, Lifetime Profit, Lifetime Share, Lifetime Income, Status

@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users } from "lucide-react";
+import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 interface Trader {
   id: number;
@@ -64,6 +64,8 @@ export default function ManageTraders() {
   const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null);
   const [mcStatus, setMcStatus] = useState<{ exists: boolean; accountId?: string; mtAccount?: string } | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>('all');
+  const [sortField, setSortField] = useState<keyof Trader | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [formData, setFormData] = useState({
     magicNumber: "99999",
@@ -329,11 +331,56 @@ export default function ManageTraders() {
     });
   };
 
-  // Filter traders by manager
-  const filteredTraders = traders?.filter(trader => {
-    if (managerFilter === 'all') return true;
-    return trader.manager === managerFilter;
-  }) || [];
+  // Handle column sorting
+  const handleSort = (field: keyof Trader) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Filter and sort traders
+  const filteredAndSortedTraders = (() => {
+    let result = traders?.filter(trader => {
+      if (managerFilter === 'all') return true;
+      return trader.manager === managerFilter;
+    }) || [];
+
+    if (sortField) {
+      result = [...result].sort((a, b) => {
+        const aVal = a[sortField];
+        const bVal = b[sortField];
+        
+        // Handle null values
+        if (aVal === null && bVal === null) return 0;
+        if (aVal === null) return 1;
+        if (bVal === null) return -1;
+        
+        // Compare values
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          return sortDirection === 'asc' 
+            ? aVal.localeCompare(bVal)
+            : bVal.localeCompare(aVal);
+        }
+        
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        
+        if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+          return sortDirection === 'asc' 
+            ? (aVal === bVal ? 0 : aVal ? 1 : -1)
+            : (aVal === bVal ? 0 : bVal ? 1 : -1);
+        }
+        
+        return 0;
+      });
+    }
+
+    return result;
+  })();
 
   return (
     <AdminLayout>
@@ -371,24 +418,84 @@ export default function ManageTraders() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Magic</TableHead>
-                  <TableHead>Manager</TableHead>
-                  <TableHead>Profit Share</TableHead>
-                  <TableHead>MT Account</TableHead>
-                  <TableHead>MT Server</TableHead>
-                  <TableHead>MT Version</TableHead>
-                  <TableHead>MC Location</TableHead>
-                  <TableHead className="text-right">Lifetime Profit</TableHead>
-                  <TableHead className="text-right">Lifetime Share</TableHead>
-                  <TableHead className="text-right">Lifetime Income</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('name')}>
+                    <div className="flex items-center gap-1">
+                      Name
+                      {sortField === 'name' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('magicNumber')}>
+                    <div className="flex items-center gap-1">
+                      Magic
+                      {sortField === 'magicNumber' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('manager')}>
+                    <div className="flex items-center gap-1">
+                      Manager
+                      {sortField === 'manager' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('profitShare')}>
+                    <div className="flex items-center gap-1">
+                      Profit Share
+                      {sortField === 'profitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtAccount')}>
+                    <div className="flex items-center gap-1">
+                      MT Account
+                      {sortField === 'mtAccount' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtServer')}>
+                    <div className="flex items-center gap-1">
+                      MT Server
+                      {sortField === 'mtServer' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtVersion')}>
+                    <div className="flex items-center gap-1">
+                      MT Version
+                      {sortField === 'mtVersion' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mcLocation')}>
+                    <div className="flex items-center gap-1">
+                      MC Location
+                      {sortField === 'mcLocation' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfit')}>
+                    <div className="flex items-center justify-end gap-1">
+                      Lifetime Profit
+                      {sortField === 'lifetimeProfit' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfitShare')}>
+                    <div className="flex items-center justify-end gap-1">
+                      Lifetime Share
+                      {sortField === 'lifetimeProfitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeIncome')}>
+                    <div className="flex items-center justify-end gap-1">
+                      Lifetime Income
+                      {sortField === 'lifetimeIncome' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('isActive')}>
+                    <div className="flex items-center gap-1">
+                      Status
+                      {sortField === 'isActive' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTraders && filteredTraders.length > 0 ? (
-                  filteredTraders.map((trader) => (
+                {filteredAndSortedTraders && filteredAndSortedTraders.length > 0 ? (
+                  filteredAndSortedTraders.map((trader) => (
                     <TableRow key={trader.id}>
                       <TableCell className="font-medium">{trader.name}</TableCell>
                       <TableCell>
