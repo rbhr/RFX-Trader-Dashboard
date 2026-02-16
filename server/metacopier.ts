@@ -80,6 +80,18 @@ class MetaCopierService {
     return positions.filter(p => p.magicNumber === magicNumber);
   }
 
+  async getOpenPositionsFromAccount(accountId: string, magicNumber?: string): Promise<Position[]> {
+    const positions = await this.fetchWithAuth<Position[]>(
+      `/accounts/${accountId}/positions`
+    );
+    
+    if (!magicNumber) {
+      return positions;
+    }
+    
+    return positions.filter(p => p.magicNumber === magicNumber);
+  }
+
   async getHistoricalPositions(
     start: string,
     stop: string,
@@ -91,6 +103,23 @@ class MetaCopierService {
     );
     
     if (showAll || !magicNumber) {
+      return positions;
+    }
+    
+    return positions.filter(p => p.magicNumber === magicNumber);
+  }
+
+  async getHistoricalPositionsFromAccount(
+    accountId: string,
+    start: string,
+    stop: string,
+    magicNumber?: string
+  ): Promise<Position[]> {
+    const positions = await this.fetchWithAuth<Position[]>(
+      `/accounts/${accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
+    );
+    
+    if (!magicNumber) {
       return positions;
     }
     
@@ -561,6 +590,20 @@ class MetaCopierService {
     } catch (error) {
       console.error('[MetaCopier] Error fetching accounts by label:', error);
       throw new Error('Failed to fetch accounts');
+    }
+  }
+
+  /**
+   * Get MetaCopier account ID by login account number
+   */
+  async getAccountIdByLoginNumber(loginAccountNumber: string): Promise<string | null> {
+    try {
+      const accounts = await this.fetchWithAuth<any[]>('/accounts', 'GET');
+      const account = accounts.find((acc: any) => acc.loginAccountNumber === loginAccountNumber);
+      return account?.id || null;
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching account by login number:', error);
+      return null;
     }
   }
 }

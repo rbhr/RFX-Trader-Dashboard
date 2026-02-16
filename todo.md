@@ -216,3 +216,10 @@ None - All critical bugs resolved in v1.0
 - [x] Fetch all MC accounts (48 total)
 - [x] Create script to update Data Collector interval from 60s to 30s
 - [x] Run script and verify all accounts updated (0 accounts have Data Collector feature enabled)
+
+## Trader Dashboard Live Account Integration
+- [x] Update backend to fetch positions from trader's live account (using liveAccountNumber field)
+- [x] Modify P&L calculations to filter by magic number on live account
+- [x] Update open trades display to show trades from live account
+- [x] Update trade history to show history from live account
+- [x] Test trader dashboard with live account data (tested with Saif: Month $8,270.72, All-time $10,275.82)

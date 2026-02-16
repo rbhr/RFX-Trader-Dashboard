@@ -166,7 +166,17 @@ export const appRouter = router({
 
     // Get open positions
     getOpenPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData } = ctx.tradingSession.magicNumber;
+      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      // If trader has a live account assigned, fetch from that account
+      if (liveAccountNumber && !showAllData) {
+        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+        if (liveAccountId) {
+          return await metaCopierService.getOpenPositionsFromAccount(liveAccountId, magicNumber);
+        }
+      }
+      
+      // Fallback to default account
       const positions = await metaCopierService.getOpenPositions(
         showAllData ? undefined : magicNumber,
         showAllData
@@ -176,7 +186,22 @@ export const appRouter = router({
 
     // Get today's closed positions
     getTodayPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData } = ctx.tradingSession.magicNumber;
+      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      // If trader has a live account assigned, fetch from that account
+      if (liveAccountNumber && !showAllData) {
+        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+        if (liveAccountId) {
+          return await metaCopierService.getHistoricalPositionsFromAccount(
+            liveAccountId,
+            getStartOfToday(),
+            getEndOfToday(),
+            magicNumber
+          );
+        }
+      }
+      
+      // Fallback to default account
       const positions = await metaCopierService.getHistoricalPositions(
         getStartOfToday(),
         getEndOfToday(),
@@ -188,7 +213,22 @@ export const appRouter = router({
 
     // Get week's positions
     getWeekPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData } = ctx.tradingSession.magicNumber;
+      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      // If trader has a live account assigned, fetch from that account
+      if (liveAccountNumber && !showAllData) {
+        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+        if (liveAccountId) {
+          return await metaCopierService.getHistoricalPositionsFromAccount(
+            liveAccountId,
+            getStartOfWeek(),
+            getEndOfToday(),
+            magicNumber
+          );
+        }
+      }
+      
+      // Fallback to default account
       const positions = await metaCopierService.getHistoricalPositions(
         getStartOfWeek(),
         getEndOfToday(),
@@ -200,7 +240,22 @@ export const appRouter = router({
 
     // Get month's positions
     getMonthPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData } = ctx.tradingSession.magicNumber;
+      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      // If trader has a live account assigned, fetch from that account
+      if (liveAccountNumber && !showAllData) {
+        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+        if (liveAccountId) {
+          return await metaCopierService.getHistoricalPositionsFromAccount(
+            liveAccountId,
+            getStartOfMonth(),
+            getEndOfToday(),
+            magicNumber
+          );
+        }
+      }
+      
+      // Fallback to default account
       const positions = await metaCopierService.getHistoricalPositions(
         getStartOfMonth(),
         getEndOfToday(),
@@ -212,7 +267,22 @@ export const appRouter = router({
 
     // Get all-time positions
     getAllTimePositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData } = ctx.tradingSession.magicNumber;
+      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      // If trader has a live account assigned, fetch from that account
+      if (liveAccountNumber && !showAllData) {
+        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+        if (liveAccountId) {
+          return await metaCopierService.getHistoricalPositionsFromAccount(
+            liveAccountId,
+            getAllTimeStart(),
+            getEndOfToday(),
+            magicNumber
+          );
+        }
+      }
+      
+      // Fallback to default account
       const positions = await metaCopierService.getHistoricalPositions(
         getAllTimeStart(),
         getEndOfToday(),
@@ -229,14 +299,30 @@ export const appRouter = router({
 
     // Calculate P&L summary
     getPnLSummary: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, profitShare } = ctx.tradingSession.magicNumber;
+      const { magicNumber, showAllData, profitShare, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      // If trader has a live account assigned, fetch from that account
+      let liveAccountId: string | null = null;
+      if (liveAccountNumber && !showAllData) {
+        liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+      }
       
       const [openPositions, todayPositions, weekPositions, monthPositions, allTimePositions] = await Promise.all([
-        metaCopierService.getOpenPositions(showAllData ? undefined : magicNumber, showAllData),
-        metaCopierService.getHistoricalPositions(getStartOfToday(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-        metaCopierService.getHistoricalPositions(getStartOfWeek(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-        metaCopierService.getHistoricalPositions(getStartOfMonth(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-        metaCopierService.getHistoricalPositions(getAllTimeStart(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
+        liveAccountId 
+          ? metaCopierService.getOpenPositionsFromAccount(liveAccountId, magicNumber)
+          : metaCopierService.getOpenPositions(showAllData ? undefined : magicNumber, showAllData),
+        liveAccountId
+          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getStartOfToday(), getEndOfToday(), magicNumber)
+          : metaCopierService.getHistoricalPositions(getStartOfToday(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
+        liveAccountId
+          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getStartOfWeek(), getEndOfToday(), magicNumber)
+          : metaCopierService.getHistoricalPositions(getStartOfWeek(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
+        liveAccountId
+          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getStartOfMonth(), getEndOfToday(), magicNumber)
+          : metaCopierService.getHistoricalPositions(getStartOfMonth(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
+        liveAccountId
+          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getAllTimeStart(), getEndOfToday(), magicNumber)
+          : metaCopierService.getHistoricalPositions(getAllTimeStart(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
       ]);
 
       const floatingPnL = calculatePnL(openPositions);
