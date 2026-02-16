@@ -291,17 +291,13 @@ export default function Dashboard() {
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1">
-                      {copierInfo.multiplier > 1 ? (
-                        <>
-                          Each of your trades are being multiplied by <span className="font-semibold">{copierInfo.multiplier}x</span> into the Live Account
-                        </>
-                      ) : copierInfo.fixedLotSize ? (
+                      {copierInfo.scaleType === 3 ? (
                         <>
                           Each of your trades is going into the Live Account as <span className="font-semibold">{copierInfo.fixedLotSize} lots</span>
                         </>
                       ) : (
                         <>
-                          Your trades are being copied to the Live Account
+                          Each of your trades are being multiplied by <span className="font-semibold">{copierInfo.multiplier}x</span> into the Live Account
                         </>
                       )}
                     </p>

@@ -413,6 +413,7 @@ export const appRouter = router({
               );
               if (traderCopier) {
                 copierInfoMap.set(trader.magicNumber, {
+                  scaleType: traderCopier.scaleType?.id || traderCopier.scaleType,
                   multiplier: traderCopier.multiplier,
                   fixedLotSize: traderCopier.fixedLotSize,
                   isActive: traderCopier.active

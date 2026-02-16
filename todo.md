@@ -272,3 +272,9 @@ None - All critical bugs resolved in v1.0
 - [x] Create backend API to fetch copier info for all traders at once (added to listTraders)
 - [x] Add Copy Rate column showing "nX" for multiplier, "n.nn" for fixed lots, "0" for disabled
 - [x] Make Copy Rate column sortable
+
+## Fix Copy Rate Display for Tarique and Sameer
+- [x] Check Tarique and Sameer's copier configurations (Tarique: 0.5x, Sameer: 1x, scaleType: 4)
+- [x] Fix display logic to check scaleType first (scaleType 3 = fixed lots, others = multiplier)
+- [x] Updated backend to include scaleType in copier info
+- [x] Fixed frontend display logic in ManageTraders and Dashboard

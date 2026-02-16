@@ -360,8 +360,8 @@ export default function ManageTraders() {
         let bVal: any;
         
         if (sortField === 'copyRate') {
-          aVal = a.copierInfo?.isActive ? (a.copierInfo.multiplier > 1 ? a.copierInfo.multiplier : a.copierInfo.fixedLotSize) : 0;
-          bVal = b.copierInfo?.isActive ? (b.copierInfo.multiplier > 1 ? b.copierInfo.multiplier : b.copierInfo.fixedLotSize) : 0;
+          aVal = a.copierInfo?.isActive ? (a.copierInfo.scaleType === 3 ? a.copierInfo.fixedLotSize : a.copierInfo.multiplier) : 0;
+          bVal = b.copierInfo?.isActive ? (b.copierInfo.scaleType === 3 ? b.copierInfo.fixedLotSize : b.copierInfo.multiplier) : 0;
         } else {
           aVal = a[sortField];
           bVal = b[sortField];
@@ -554,9 +554,9 @@ export default function ManageTraders() {
                         <span className="font-mono text-sm font-semibold">
                           {trader.copierInfo ? (
                             trader.copierInfo.isActive ? (
-                              trader.copierInfo.multiplier > 1 
-                                ? `${trader.copierInfo.multiplier}x`
-                                : trader.copierInfo.fixedLotSize.toFixed(2)
+                              trader.copierInfo.scaleType === 3
+                                ? trader.copierInfo.fixedLotSize.toFixed(2)
+                                : `${trader.copierInfo.multiplier}x`
                             ) : (
                               <span className="text-muted-foreground">0</span>
                             )
