@@ -228,3 +228,8 @@ None - All critical bugs resolved in v1.0
 - [x] Add meta description tag
 - [x] Add Open Graph tags for social media previews
 - [x] Add Twitter Card tags
+
+## Add Manager Field to Traders
+- [x] Add manager field to magic_numbers table schema (varchar 100, default 'RFX')
+- [x] Push database schema changes (migration 0008_pale_next_avengers.sql)
+- [x] Update all existing traders to set manager = 'RFX' (default value applied automatically)

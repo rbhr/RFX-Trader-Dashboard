@@ -40,6 +40,7 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   mcLocation: varchar("mcLocation", { length: 50 }).default("London"),
   mcAccountId: varchar("mcAccountId", { length: 100 }),
   liveAccountNumber: varchar("liveAccountNumber", { length: 50 }),
+  manager: varchar("manager", { length: 100 }).default("RFX"),
   // Profit Tracking
   lifetimeProfit: decimal("lifetimeProfit", { precision: 15, scale: 2 }).default("0.00"),
   lifetimeProfitShare: decimal("lifetimeProfitShare", { precision: 15, scale: 2 }).default("0.00"),

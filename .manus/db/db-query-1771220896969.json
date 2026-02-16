@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE magic_numbers SET manager = 'RFX' WHERE manager IS NULL OR manager = '';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute UPDATE magic_numbers SET manager = 'RFX' WHERE manager IS NULL OR manager = '';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1528
+}

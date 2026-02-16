@@ -1,0 +1,1 @@
+ALTER TABLE `magic_numbers` ADD `manager` varchar(100) DEFAULT 'RFX';
