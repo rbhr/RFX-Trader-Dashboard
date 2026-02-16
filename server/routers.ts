@@ -164,6 +164,44 @@ export const appRouter = router({
       };
     }),
 
+    // Get copier configuration for trader's live account
+    getCopierInfo: tradingProcedure.query(async ({ ctx }) => {
+      const { magicNumber, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      
+      if (!liveAccountNumber) {
+        return null; // No live account assigned
+      }
+      
+      // Get the live account ID
+      const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+      if (!liveAccountId) {
+        return null;
+      }
+      
+      // Get all copiers for this live account
+      const copiers = await metaCopierService.getCopiersByAccount(liveAccountId);
+      
+      // Find the copier that matches this trader's magic number
+      const traderCopier = copiers.find((copier: any) => 
+        copier.fromAccountShortId === parseInt(magicNumber) || 
+        copier.fromAccountShortId === magicNumber ||
+        copier.customMagicNumber === parseInt(magicNumber) ||
+        copier.customMagicNumber === magicNumber
+      );
+      
+      if (!traderCopier) {
+        return null;
+      }
+      
+      return {
+        scaleType: traderCopier.scaleType?.id || traderCopier.scaleType,
+        multiplier: traderCopier.multiplier,
+        fixedLotSize: traderCopier.fixedLotSize,
+        isActive: traderCopier.active,
+        liveAccountNumber
+      };
+    }),
+
     // Get open positions
     getOpenPositions: tradingProcedure.query(async ({ ctx }) => {
       const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;

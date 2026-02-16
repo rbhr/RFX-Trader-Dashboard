@@ -347,6 +347,21 @@ class MetaCopierService {
   }
 
   /**
+   * Get all copiers for a specific account
+   */
+  async getCopiersByAccount(accountId: string): Promise<any[]> {
+    try {
+      const copiers = await this.fetchWithAuth<any[]>(
+        `/accounts/${accountId}/copiers`
+      );
+      return copiers;
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching copiers for account:', error);
+      return [];
+    }
+  }
+
+  /**
    * Update copier status
    */
   async updateCopierStatus(toAccountId: string, copierId: string, status: 'ACTIVE' | 'DISABLED' | 'MANAGE'): Promise<void> {

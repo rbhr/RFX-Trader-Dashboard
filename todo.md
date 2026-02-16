@@ -247,3 +247,12 @@ None - All critical bugs resolved in v1.0
 - [x] Implement sorting state and logic for table columns
 - [x] Add sort indicators (arrows) to column headers (ArrowUp, ArrowDown, ArrowUpDown)
 - [x] Make columns sortable: Name, Magic, Manager, Profit Share, MT Account, MT Server, MT Version, MC Location, Lifetime Profit, Lifetime Share, Lifetime Income, Status
+
+## Display Copier Multiplier on Trader Dashboard
+- [x] Create backend API to fetch copier configuration for trader's live account
+- [x] Determine copier scale type (multiplier vs fixed lot size)
+- [x] Add display after "Open Positions" showing how trades are copied
+- [x] Add copier active status to backend response
+- [x] Display warning if copier is disabled (red text)
+- [x] Test with trader who has active copier (Omair - shows "0.01 lots" message)
+- [x] Verified isActive field returns correctly from API

@@ -129,6 +129,10 @@ export default function Dashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
+  const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(undefined, {
+    refetchInterval: 60000, // Refresh every 60 seconds
+  });
+
   // Redirect to login if not authenticated
   if (!sessionLoading && !session) {
     setLocation("/");
@@ -279,6 +283,31 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">
                 {positionsLoading ? "Loading..." : `${openPositions?.length ?? 0} active positions`}
               </p>
+              {copierInfo && (
+                <>
+                  {!copierInfo.isActive ? (
+                    <p className="text-sm font-semibold text-destructive mt-1">
+                      Your trades are not being copied into the Live Account
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {copierInfo.scaleType === 3 ? (
+                        <>
+                          Each of your trades is going into the Live Account as <span className="font-semibold">{copierInfo.fixedLotSize} lots</span>
+                        </>
+                      ) : copierInfo.scaleType === 1 ? (
+                        <>
+                          Each of your trades are being multiplied by <span className="font-semibold">{copierInfo.multiplier}x</span> into the Live Account
+                        </>
+                      ) : (
+                        <>
+                          Your trades are being copied to the Live Account
+                        </>
+                      )}
+                    </p>
+                  )}
+                </>
+              )}
             </div>
             <Button variant="outline" size="sm" onClick={() => setLocation("/history")}>
               <Activity className="h-4 w-4 mr-2" />
