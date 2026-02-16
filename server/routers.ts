@@ -15,7 +15,12 @@ import {
   getMagicNumberById,
   updateMagicNumber,
   deleteMagicNumber,
-  createMagicNumber
+  createMagicNumber,
+  getAllCopierTemplates,
+  getCopierTemplateById,
+  createCopierTemplate,
+  updateCopierTemplate,
+  deleteCopierTemplate
 } from "./db";
 import { 
   metaCopierService, 
@@ -615,6 +620,108 @@ export const appRouter = router({
       .query(async () => {
         const accounts = await metaCopierService.getAccountsByLabel('RFX Master');
         return accounts;
+      }),
+  }),
+
+  // Copier Templates
+  copierTemplates: router({
+    // Get all copier templates
+    list: tradingProcedure
+      .query(async () => {
+        return await getAllCopierTemplates();
+      }),
+
+    // Get a single copier template by ID
+    getById: tradingProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return await getCopierTemplateById(input.id);
+      }),
+
+    // Create a new copier template
+    create: tradingProcedure
+      .input(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        multiplier: z.string().default("1.0000"),
+        copyStopLoss: z.boolean().default(true),
+        copyTakeProfit: z.boolean().default(true),
+        skipPendingOrders: z.boolean().default(true),
+        scaleTypeId: z.number().default(3),
+        scaleTypeName: z.string().default("Fixed lot size"),
+        active: z.boolean().default(false),
+        monitorOnly: z.boolean().default(false),
+        maxSlippage: z.number().default(0),
+        forceMinTrade: z.boolean().default(true),
+        fixMasterBalanceAndEquity: z.string().default("0.00"),
+        fixSlaveBalanceAndEquity: z.string().default("0.00"),
+        fixedLotSize: z.string().default("0.01"),
+        martingaleStrategy: z.boolean().default(false),
+        openRetry: z.boolean().default(true),
+        openRetryTimeoutInMinutes: z.number().default(10),
+        reverse: z.boolean().default(false),
+        copyOpenPositions: z.boolean().default(false),
+        maxOpenPositions: z.number().default(0),
+        maxLotSize: z.string().default("0.00"),
+        maximumLot: z.string().default("0.00"),
+        hideComment: z.boolean().default(false),
+        forcePositionLotSize: z.boolean().default(false),
+        ignoreContractSize: z.boolean().default(false),
+        ignoreCurrency: z.boolean().default(false),
+        copyMagicNumber: z.boolean().default(true),
+        copyOriginalComment: z.boolean().default(false),
+      }))
+      .mutation(async ({ input }) => {
+        await createCopierTemplate(input);
+        return { success: true };
+      }),
+
+    // Update a copier template
+    update: tradingProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        multiplier: z.string().optional(),
+        copyStopLoss: z.boolean().optional(),
+        copyTakeProfit: z.boolean().optional(),
+        skipPendingOrders: z.boolean().optional(),
+        scaleTypeId: z.number().optional(),
+        scaleTypeName: z.string().optional(),
+        active: z.boolean().optional(),
+        monitorOnly: z.boolean().optional(),
+        maxSlippage: z.number().optional(),
+        forceMinTrade: z.boolean().optional(),
+        fixMasterBalanceAndEquity: z.string().optional(),
+        fixSlaveBalanceAndEquity: z.string().optional(),
+        fixedLotSize: z.string().optional(),
+        martingaleStrategy: z.boolean().optional(),
+        openRetry: z.boolean().optional(),
+        openRetryTimeoutInMinutes: z.number().optional(),
+        reverse: z.boolean().optional(),
+        copyOpenPositions: z.boolean().optional(),
+        maxOpenPositions: z.number().optional(),
+        maxLotSize: z.string().optional(),
+        maximumLot: z.string().optional(),
+        hideComment: z.boolean().optional(),
+        forcePositionLotSize: z.boolean().optional(),
+        ignoreContractSize: z.boolean().optional(),
+        ignoreCurrency: z.boolean().optional(),
+        copyMagicNumber: z.boolean().optional(),
+        copyOriginalComment: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateCopierTemplate(id, data);
+        return { success: true };
+      }),
+
+    // Delete a copier template
+    delete: tradingProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteCopierTemplate(input.id);
+        return { success: true };
       }),
   }),
 });

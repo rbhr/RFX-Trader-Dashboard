@@ -203,3 +203,11 @@ None - All critical bugs resolved in v1.0
 - [x] Fetch all MC accounts with "RFX Master" label (found 7 accounts)
 - [x] Create script to generate copiers for all 19 traders on each RFX Master account
 - [x] Run script and verify all copiers created with fixed lot size 0.01 (114 new copiers created across 6 accounts)
+
+## Copier Templates Feature
+- [x] Create copier_templates database table
+- [x] Add backend API for template CRUD operations (list, getById, create, update, delete)
+- [x] Build Copier Templates UI in Manage MetaCopier page
+- [x] Add edit template dialog with all copier settings
+- [x] Seed two initial templates (Fixed Lot 0.01, No Scaling 0.01)
+- [x] Test template creation, editing, and deletion

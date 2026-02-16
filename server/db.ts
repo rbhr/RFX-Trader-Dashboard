@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession } from "../drizzle/schema";
+import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -201,4 +201,50 @@ export async function deleteMagicNumber(id: number) {
   await db.delete(tradingSessions).where(eq(tradingSessions.magicNumberId, id));
   // Then delete the magic number
   await db.delete(magicNumbers).where(eq(magicNumbers.id, id));
+}
+
+// Copier template management functions
+export async function getAllCopierTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(copierTemplates)
+    .orderBy(copierTemplates.name);
+}
+
+export async function getCopierTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(copierTemplates)
+    .where(eq(copierTemplates.id, id))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createCopierTemplate(data: InsertCopierTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(copierTemplates).values(data);
+  return result;
+}
+
+export async function updateCopierTemplate(id: number, data: Partial<InsertCopierTemplate>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(copierTemplates).set(data).where(eq(copierTemplates.id, id));
+}
+
+export async function deleteCopierTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(copierTemplates).where(eq(copierTemplates.id, id));
 }

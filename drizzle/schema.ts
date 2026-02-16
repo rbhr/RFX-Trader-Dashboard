@@ -67,3 +67,46 @@ export const tradingSessions = mysqlTable("trading_sessions", {
 
 export type TradingSession = typeof tradingSessions.$inferSelect;
 export type InsertTradingSession = typeof tradingSessions.$inferInsert;
+
+/**
+ * Copier templates table
+ * Stores reusable copier configuration templates
+ */
+export const copierTemplates = mysqlTable("copier_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  // Copier Settings
+  multiplier: decimal("multiplier", { precision: 10, scale: 4 }).notNull().default("1.0000"),
+  copyStopLoss: boolean("copyStopLoss").notNull().default(true),
+  copyTakeProfit: boolean("copyTakeProfit").notNull().default(true),
+  skipPendingOrders: boolean("skipPendingOrders").notNull().default(true),
+  scaleTypeId: int("scaleTypeId").notNull().default(3), // 3 = Fixed lot size, 4 = No scaling
+  scaleTypeName: varchar("scaleTypeName", { length: 50 }).notNull().default("Fixed lot size"),
+  active: boolean("active").notNull().default(false),
+  monitorOnly: boolean("monitorOnly").notNull().default(false),
+  maxSlippage: int("maxSlippage").notNull().default(0),
+  forceMinTrade: boolean("forceMinTrade").notNull().default(true),
+  fixMasterBalanceAndEquity: decimal("fixMasterBalanceAndEquity", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  fixSlaveBalanceAndEquity: decimal("fixSlaveBalanceAndEquity", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  fixedLotSize: decimal("fixedLotSize", { precision: 10, scale: 2 }).notNull().default("0.01"),
+  martingaleStrategy: boolean("martingaleStrategy").notNull().default(false),
+  openRetry: boolean("openRetry").notNull().default(true),
+  openRetryTimeoutInMinutes: int("openRetryTimeoutInMinutes").notNull().default(10),
+  reverse: boolean("reverse").notNull().default(false),
+  copyOpenPositions: boolean("copyOpenPositions").notNull().default(false),
+  maxOpenPositions: int("maxOpenPositions").notNull().default(0),
+  maxLotSize: decimal("maxLotSize", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  maximumLot: decimal("maximumLot", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  hideComment: boolean("hideComment").notNull().default(false),
+  forcePositionLotSize: boolean("forcePositionLotSize").notNull().default(false),
+  ignoreContractSize: boolean("ignoreContractSize").notNull().default(false),
+  ignoreCurrency: boolean("ignoreCurrency").notNull().default(false),
+  copyMagicNumber: boolean("copyMagicNumber").notNull().default(true),
+  copyOriginalComment: boolean("copyOriginalComment").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CopierTemplate = typeof copierTemplates.$inferSelect;
+export type InsertCopierTemplate = typeof copierTemplates.$inferInsert;
