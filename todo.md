@@ -261,3 +261,9 @@ None - All critical bugs resolved in v1.0
 - [x] Check Zeeshan's copier configuration (magic 22973, scaleType 4)
 - [x] Fix display logic to show correct message for all scale types (added scaleType 4 to fixed lot display)
 - [x] Ensure fixed lot size displays correctly (now shows "0.01 lots" for both scaleType 3 and 4)
+
+## Fix Copier Multiplier Display
+- [x] Change logic to check multiplier value instead of scaleType
+- [x] Show multiplier message when multiplier > 1
+- [x] Show fixed lot message when multiplier = 1
+- [x] Test with Zeeshan (multiplier 5x) - correctly shows "multiplied by 5x"
