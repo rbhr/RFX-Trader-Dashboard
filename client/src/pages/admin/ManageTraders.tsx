@@ -47,6 +47,7 @@ interface Trader {
   mtVersion: string | null;
   mcLocation: string | null;
   liveAccountNumber: string | null;
+  manager: string | null;
   lifetimeProfit: number;
   lifetimeProfitShare: number;
   lifetimeIncome: number;
@@ -62,6 +63,7 @@ export default function ManageTraders() {
   const [copiersDialogOpen, setCopiersDialogOpen] = useState(false);
   const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null);
   const [mcStatus, setMcStatus] = useState<{ exists: boolean; accountId?: string; mtAccount?: string } | null>(null);
+  const [managerFilter, setManagerFilter] = useState<string>('all');
 
   const [formData, setFormData] = useState({
     magicNumber: "99999",
@@ -327,6 +329,12 @@ export default function ManageTraders() {
     });
   };
 
+  // Filter traders by manager
+  const filteredTraders = traders?.filter(trader => {
+    if (managerFilter === 'all') return true;
+    return trader.manager === managerFilter;
+  }) || [];
+
   return (
     <AdminLayout>
       <div className="p-8 space-y-6">
@@ -337,10 +345,21 @@ export default function ManageTraders() {
               Add, edit, and manage trader accounts
             </p>
           </div>
-          <Button onClick={() => setAddDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Trader
-          </Button>
+          <div className="flex gap-3">
+            <select
+              value={managerFilter}
+              onChange={(e) => setManagerFilter(e.target.value)}
+              className="px-3 py-2 border rounded-md bg-background"
+            >
+              <option value="all">All Managers</option>
+              <option value="RFX">RFX</option>
+              <option value="HubbFX">HubbFX</option>
+            </select>
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Trader
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -354,6 +373,7 @@ export default function ManageTraders() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Magic</TableHead>
+                  <TableHead>Manager</TableHead>
                   <TableHead>Profit Share</TableHead>
                   <TableHead>MT Account</TableHead>
                   <TableHead>MT Server</TableHead>
@@ -367,8 +387,8 @@ export default function ManageTraders() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {traders && traders.length > 0 ? (
-                  traders.map((trader) => (
+                {filteredTraders && filteredTraders.length > 0 ? (
+                  filteredTraders.map((trader) => (
                     <TableRow key={trader.id}>
                       <TableCell className="font-medium">{trader.name}</TableCell>
                       <TableCell>
@@ -378,6 +398,11 @@ export default function ManageTraders() {
                             Admin
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary">
+                          {trader.manager || 'RFX'}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">

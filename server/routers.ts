@@ -371,6 +371,7 @@ export const appRouter = router({
         mcLocation: t.mcLocation,
         mcAccountId: t.mcAccountId,
         liveAccountNumber: t.liveAccountNumber,
+        manager: t.manager,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
         lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,

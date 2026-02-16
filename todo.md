@@ -237,3 +237,8 @@ None - All critical bugs resolved in v1.0
 ## Add 7 HubbFX Traders
 - [x] Generate random magic numbers for all 7 traders (39717, 15601, 86788, 16318, 36885, 82586, 21067)
 - [x] Insert traders into database with manager='HubbFX' and MT5 account details (Amber, Shadost, Azra, Khan, Khalid, Meer, Maria)
+
+## Add Manager Column to Manage Traders
+- [x] Add Manager column to traders table display
+- [x] Add manager filter dropdown (All, RFX, HubbFX)
+- [x] Update backend to include manager field in listTraders response
