@@ -223,3 +223,8 @@ None - All critical bugs resolved in v1.0
 - [x] Update open trades display to show trades from live account
 - [x] Update trade history to show history from live account
 - [x] Test trader dashboard with live account data (tested with Saif: Month $8,270.72, All-time $10,275.82)
+
+## Update Meta Tags for Link Previews
+- [x] Add meta description tag
+- [x] Add Open Graph tags for social media previews
+- [x] Add Twitter Card tags
