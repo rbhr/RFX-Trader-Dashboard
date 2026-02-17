@@ -133,6 +133,10 @@ export default function Dashboard() {
     refetchInterval: 60000, // Refresh every 60 seconds
   });
 
+  const { data: maxOpenTrades } = trpc.trading.getMaxOpenTrades.useQuery(undefined, {
+    refetchInterval: 300000, // Refresh every 5 minutes (doesn't change often)
+  });
+
   // Redirect to login if not authenticated
   if (!sessionLoading && !session) {
     setLocation("/");
@@ -302,6 +306,9 @@ export default function Dashboard() {
                       )}
                     </p>
                   )}
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your maximum open trades: <span className="font-semibold">{maxOpenTrades ?? 'unavailable'}</span>
+                  </p>
                 </>
               )}
             </div>

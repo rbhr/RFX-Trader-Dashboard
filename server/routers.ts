@@ -202,6 +202,31 @@ export const appRouter = router({
       };
     }),
 
+    // Get max open trades from trader's MC account features
+    getMaxOpenTrades: tradingProcedure.query(async ({ ctx }) => {
+      const { mcAccountId } = ctx.tradingSession.magicNumber;
+      
+      if (!mcAccountId) {
+        return null; // No MC account
+      }
+      
+      try {
+        const account = await metaCopierService.getAccountById(mcAccountId);
+        
+        // Find the max open positions feature (type 17)
+        const maxOpenPosFeature = account.features?.find((f: any) => f.type?.id === 17);
+        
+        if (maxOpenPosFeature && maxOpenPosFeature.setting) {
+          return maxOpenPosFeature.setting.maxOpenPositions || null;
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('[Router] Error fetching max open trades:', error);
+        return null;
+      }
+    }),
+
     // Get open positions
     getOpenPositions: tradingProcedure.query(async ({ ctx }) => {
       const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;

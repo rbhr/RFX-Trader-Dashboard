@@ -278,3 +278,9 @@ None - All critical bugs resolved in v1.0
 - [x] Fix display logic to check scaleType first (scaleType 3 = fixed lots, others = multiplier)
 - [x] Updated backend to include scaleType in copier info
 - [x] Fixed frontend display logic in ManageTraders and Dashboard
+
+## Add Max Open Trades Display to Trader Dashboard
+- [x] Fetch trader's MetaCopier account features to get max open trades setting (type 17)
+- [x] Add backend API to return max open trades (getMaxOpenTrades procedure)
+- [x] Display "Your maximum open trades: {max}" on trader dashboard after copier info
+- [x] Show 'unavailable' when API returns null (due to MetaCopier API connection issues)
