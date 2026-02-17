@@ -284,3 +284,9 @@ None - All critical bugs resolved in v1.0
 - [x] Add backend API to return max open trades (getMaxOpenTrades procedure)
 - [x] Display "Your maximum open trades: {max}" on trader dashboard after copier info
 - [x] Show 'unavailable' when API returns null (due to MetaCopier API connection issues)
+
+## Fix Max Open Trades Backend Parsing
+- [x] Debug getMaxOpenTrades to see actual API response structure (getAccountById doesn't return features)
+- [x] Add getAccountFeatures method to fetch features from /accounts/{id}/features endpoint
+- [x] Update getMaxOpenTrades to use getAccountFeatures instead of getAccountById
+- [x] Test with Omair to verify display shows "3" (working correctly)

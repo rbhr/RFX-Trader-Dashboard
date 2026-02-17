@@ -211,10 +211,10 @@ export const appRouter = router({
       }
       
       try {
-        const account = await metaCopierService.getAccountById(mcAccountId);
+        const features = await metaCopierService.getAccountFeatures(mcAccountId);
         
         // Find the max open positions feature (type 17)
-        const maxOpenPosFeature = account.features?.find((f: any) => f.type?.id === 17);
+        const maxOpenPosFeature = features.find((f: any) => f.type?.id === 17);
         
         if (maxOpenPosFeature && maxOpenPosFeature.setting) {
           return maxOpenPosFeature.setting.maxOpenPositions || null;

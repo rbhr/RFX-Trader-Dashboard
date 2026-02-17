@@ -585,6 +585,19 @@ class MetaCopierService {
   }
 
   /**
+   * Get account features by account ID
+   */
+  async getAccountFeatures(accountId: string): Promise<any[]> {
+    try {
+      const features = await this.fetchWithAuth<any[]>(`/accounts/${accountId}/features`, 'GET');
+      return features || [];
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching account features:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get all accounts with a specific label
    */
   async getAccountsByLabel(label: string): Promise<any[]> {
