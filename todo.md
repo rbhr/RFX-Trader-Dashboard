@@ -320,3 +320,7 @@ None - All critical bugs resolved in v1.0
 - [x] Add blockchain explorer links (TronScan for TRC20, Etherscan for ERC20)
 - [x] Add external link icon next to copy icon for transaction hash
 - [x] Display timezone in all datetime fields
+
+## Bug Fix
+- [x] Fix missing "Show Transmission Proof" button in payment history
+- [x] Fix Settings dialog to fit tablet screens with scrollbars

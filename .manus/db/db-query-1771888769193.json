@@ -1,0 +1,18 @@
+{
+  "query": "SELECT id, magicNumber, name, password, usdtAddress, usdtNetwork FROM magic_numbers WHERE name LIKE '%Saif%' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, magicNumber, name, password, usdtAddress, usdtNetwork FROM magic_numbers WHERE name LIKE '%Saif%' LIMIT 1;",
+  "rows": [
+    {
+      "id": "120023",
+      "magicNumber": "22739",
+      "name": "Saif",
+      "password": "22739",
+      "usdtAddress": "NULL",
+      "usdtNetwork": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmagicNumber\tname\tpassword\tusdtAddress\tusdtNetwork\n120023\t22739\tSaif\t22739\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1535
+}
