@@ -161,6 +161,9 @@ export const appRouter = router({
         profitShare: parseFloat(ctx.tradingSession.magicNumber.profitShare),
         showAllData: ctx.tradingSession.magicNumber.showAllData,
         isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
+        lifetimeProfit: parseFloat(ctx.tradingSession.magicNumber.lifetimeProfit || '0'),
+        lifetimeProfitShare: parseFloat(ctx.tradingSession.magicNumber.lifetimeProfitShare || '0'),
+        lifetimeIncome: parseFloat(ctx.tradingSession.magicNumber.lifetimeIncome || '0'),
       };
     }),
 

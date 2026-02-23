@@ -290,3 +290,8 @@ None - All critical bugs resolved in v1.0
 - [x] Add getAccountFeatures method to fetch features from /accounts/{id}/features endpoint
 - [x] Update getMaxOpenTrades to use getAccountFeatures instead of getAccountById
 - [x] Test with Omair to verify display shows "3" (working correctly)
+
+## Add Settings Button to Trader Dashboard
+- [x] Add Settings button near refresh button on trader dashboard
+- [x] Implement settings dialog/page for trader preferences
+- [x] Create Payments section in settings

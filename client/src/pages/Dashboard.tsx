@@ -14,9 +14,18 @@ import {
   LogOut,
   Activity,
   Calendar,
-  Percent
+  Percent,
+  Settings
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function formatCurrency(value: number, showSign = false): string {
   const formatted = Math.abs(value).toLocaleString("en-US", {
@@ -118,6 +127,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { session, isLoading: sessionLoading, logout } = useTradingSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -199,6 +209,14 @@ export default function Dashboard() {
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
                 Refresh
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
               </Button>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
@@ -359,6 +377,63 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Settings</DialogTitle>
+            <DialogDescription>
+              Manage your account settings and preferences
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Tabs defaultValue="payments" className="w-full">
+            <TabsList className="grid w-full grid-cols-1">
+              <TabsTrigger value="payments">Payments</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="payments" className="space-y-4 mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Payment Information</CardTitle>
+                  <CardDescription>
+                    View your payment history and profit share details
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="text-sm font-medium">Profit Share Rate</span>
+                      <span className="text-sm">{((session?.profitShare ?? 0.35) * 100).toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="text-sm font-medium">Lifetime Profit</span>
+                      <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfit ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="text-sm font-medium">Lifetime Profit Share</span>
+                      <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfitShare ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm font-medium">Lifetime Income</span>
+                      <span className="text-sm font-semibold text-primary">{formatCurrency(session?.lifetimeIncome ?? 0)}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-4">
+                    <h4 className="text-sm font-medium mb-3">Payment History</h4>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No payment history available</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

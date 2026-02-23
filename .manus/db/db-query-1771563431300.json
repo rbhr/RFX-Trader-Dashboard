@@ -1,0 +1,234 @@
+{
+  "query": "\nSELECT \n  id,\n  magicNumber,\n  name,\n  manager,\n  mtAccount,\n  isActive\nFROM magic_numbers\nORDER BY name;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute \nSELECT \n  id,\n  magicNumber,\n  name,\n  manager,\n  mtAccount,\n  isActive\nFROM magic_numbers\nORDER BY name;\n",
+  "rows": [
+    {
+      "id": "30001",
+      "magicNumber": "admin",
+      "name": "Administrator",
+      "manager": "RFX",
+      "mtAccount": "NULL",
+      "isActive": "1"
+    },
+    {
+      "id": "180002",
+      "magicNumber": "21008",
+      "name": "Ahmed",
+      "manager": "RFX",
+      "mtAccount": "260251527",
+      "isActive": "1"
+    },
+    {
+      "id": "120031",
+      "magicNumber": "22700",
+      "name": "Ali",
+      "manager": "RFX",
+      "mtAccount": "260251528",
+      "isActive": "1"
+    },
+    {
+      "id": "270001",
+      "magicNumber": "28600",
+      "name": "Amber",
+      "manager": "HubbFX",
+      "mtAccount": "260227844",
+      "isActive": "1"
+    },
+    {
+      "id": "270003",
+      "magicNumber": "86788",
+      "name": "Azra",
+      "manager": "HubbFX",
+      "mtAccount": "260227852",
+      "isActive": "0"
+    },
+    {
+      "id": "120030",
+      "magicNumber": "20788",
+      "name": "Bisma",
+      "manager": "RFX",
+      "mtAccount": "260251529",
+      "isActive": "1"
+    },
+    {
+      "id": "120029",
+      "magicNumber": "22710",
+      "name": "Farhan (Ali Signals)",
+      "manager": "RFX",
+      "mtAccount": "260251531",
+      "isActive": "1"
+    },
+    {
+      "id": "120028",
+      "magicNumber": "22719",
+      "name": "Feroz",
+      "manager": "RFX",
+      "mtAccount": "260251532",
+      "isActive": "1"
+    },
+    {
+      "id": "210002",
+      "magicNumber": "22729",
+      "name": "Gulam",
+      "manager": "RFX",
+      "mtAccount": "260250914",
+      "isActive": "1"
+    },
+    {
+      "id": "120027",
+      "magicNumber": "22730",
+      "name": "Kashif",
+      "manager": "RFX",
+      "mtAccount": "260251533",
+      "isActive": "1"
+    },
+    {
+      "id": "270005",
+      "magicNumber": "36885",
+      "name": "Khalid",
+      "manager": "HubbFX",
+      "mtAccount": "260227868",
+      "isActive": "1"
+    },
+    {
+      "id": "270004",
+      "magicNumber": "16318",
+      "name": "Khan",
+      "manager": "HubbFX",
+      "mtAccount": "260227859",
+      "isActive": "1"
+    },
+    {
+      "id": "270007",
+      "magicNumber": "21067",
+      "name": "Maria",
+      "manager": "HubbFX",
+      "mtAccount": "260227899",
+      "isActive": "1"
+    },
+    {
+      "id": "120026",
+      "magicNumber": "22735",
+      "name": "Marvin",
+      "manager": "RFX",
+      "mtAccount": "260251534",
+      "isActive": "1"
+    },
+    {
+      "id": "270006",
+      "magicNumber": "82586",
+      "name": "Meer",
+      "manager": "HubbFX",
+      "mtAccount": "260227873",
+      "isActive": "1"
+    },
+    {
+      "id": "120025",
+      "magicNumber": "22736",
+      "name": "Melanie",
+      "manager": "RFX",
+      "mtAccount": "260251535",
+      "isActive": "1"
+    },
+    {
+      "id": "120024",
+      "magicNumber": "22742",
+      "name": "Omair",
+      "manager": "RFX",
+      "mtAccount": "260251536",
+      "isActive": "1"
+    },
+    {
+      "id": "15",
+      "magicNumber": "6868",
+      "name": "Richard",
+      "manager": "RFX",
+      "mtAccount": "NULL",
+      "isActive": "1"
+    },
+    {
+      "id": "120023",
+      "magicNumber": "22739",
+      "name": "Saif",
+      "manager": "RFX",
+      "mtAccount": "260251537",
+      "isActive": "1"
+    },
+    {
+      "id": "120022",
+      "magicNumber": "22745",
+      "name": "Samad",
+      "manager": "RFX",
+      "mtAccount": "260251538",
+      "isActive": "1"
+    },
+    {
+      "id": "120021",
+      "magicNumber": "22747",
+      "name": "Sameer",
+      "manager": "RFX",
+      "mtAccount": "260251539",
+      "isActive": "1"
+    },
+    {
+      "id": "270002",
+      "magicNumber": "15601",
+      "name": "Shadost",
+      "manager": "HubbFX",
+      "mtAccount": "260227848",
+      "isActive": "1"
+    },
+    {
+      "id": "120020",
+      "magicNumber": "22751",
+      "name": "Sheeraz",
+      "manager": "RFX",
+      "mtAccount": "260251540",
+      "isActive": "1"
+    },
+    {
+      "id": "240001",
+      "magicNumber": "23706",
+      "name": "Somar",
+      "manager": "RFX",
+      "mtAccount": "260262799",
+      "isActive": "1"
+    },
+    {
+      "id": "120019",
+      "magicNumber": "22748",
+      "name": "Sonia",
+      "manager": "RFX",
+      "mtAccount": "260251541",
+      "isActive": "1"
+    },
+    {
+      "id": "120018",
+      "magicNumber": "22770",
+      "name": "Tarique",
+      "manager": "RFX",
+      "mtAccount": "260251542",
+      "isActive": "1"
+    },
+    {
+      "id": "120017",
+      "magicNumber": "22852",
+      "name": "Zarab",
+      "manager": "RFX",
+      "mtAccount": "260251543",
+      "isActive": "1"
+    },
+    {
+      "id": "120001",
+      "magicNumber": "22973",
+      "name": "Zeeshan",
+      "manager": "RFX",
+      "mtAccount": "260251544",
+      "isActive": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmagicNumber\tname\tmanager\tmtAccount\tisActive\n30001\tadmin\tAdministrator\tRFX\tNULL\t1\n180002\t21008\tAhmed\tRFX\t260251527\t1\n120031\t22700\tAli\tRFX\t260251528\t1\n270001\t28600\tAmber\tHubbFX\t260227844\t1\n270003\t86788\tAzra\tHubbFX\t260227852\t0\n120030\t20788\tBisma\tRFX\t260251529\t1\n120029\t22710\tFarhan (Ali Signals)\tRFX\t260251531\t1\n120028\t22719\tFeroz\tRFX\t260251532\t1\n210002\t22729\tGulam\tRFX\t260250914\t1\n120027\t22730\tKashif\tRFX\t260251533\t1\n270005\t36885\tKhalid\tHubbFX\t260227868\t1\n270004\t16318\tKhan\tHubbFX\t260227859\t1\n270007\t21067\tMaria\tHubbFX\t260227899\t1\n120026\t22735\tMarvin\tRFX\t260251534\t1\n270006\t82586\tMeer\tHubbFX\t260227873\t1\n120025\t22736\tMelanie\tRFX\t260251535\t1\n120024\t22742\tOmair\tRFX\t260251536\t1\n15\t6868\tRichard\tRFX\tNULL\t1\n120023\t22739\tSaif\tRFX\t260251537\t1\n120022\t22745\tSamad\tRFX\t260251538\t1\n120021\t22747\tSameer\tRFX\t260251539\t1\n270002\t15601\tShadost\tHubbFX\t260227848\t1\n120020\t22751\tSheeraz\tRFX\t260251540\t1\n240001\t23706\tSomar\tRFX\t260262799\t1\n120019\t22748\tSonia\tRFX\t260251541\t1\n120018\t22770\tTarique\tRFX\t260251542\t1\n120017\t22852\tZarab\tRFX\t260251543\t1\n120001\t22973\tZeeshan\tRFX\t260251544\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1533
+}
