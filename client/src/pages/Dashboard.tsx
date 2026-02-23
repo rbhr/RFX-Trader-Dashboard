@@ -20,7 +20,8 @@ import {
   Check,
   FileText,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -643,11 +644,16 @@ export default function Dashboard() {
         <DialogContent className="max-w-md">
           {selectedPayment && (
             <div className="space-y-6">
-              {/* Header with USDT Icon */}
+              {/* Header with Network-Specific USDT Logo */}
               <div className="flex flex-col items-center pt-4">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <DollarSign className="h-8 w-8 text-primary" />
-                </div>
+                <img 
+                  src={session?.usdtNetwork === 'TRC20' ? '/usdt-trc20.png' : '/usdt-erc20.png'}
+                  alt={`USDT ${session?.usdtNetwork || 'Logo'}`}
+                  className="w-16 h-16 mb-2"
+                />
+                <p className="text-sm font-medium text-muted-foreground mb-4">
+                  {session?.usdtNetwork || 'USDT'}
+                </p>
                 <h2 className="text-2xl font-bold">Withdrawn {formatCurrency(selectedPayment.amount).replace('$', '')} USDT</h2>
               </div>
 
@@ -719,22 +725,37 @@ export default function Dashboard() {
                     <span className="text-sm text-right text-muted-foreground font-mono break-all max-w-[200px]">
                       {selectedPayment.transactionHash}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedPayment.transactionHash);
-                        setCopiedField('tx');
-                        setTimeout(() => setCopiedField(null), 2000);
-                      }}
-                    >
-                      {copiedField === 'tx' ? (
-                        <Check className="h-3 w-3" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedPayment.transactionHash);
+                          setCopiedField('tx');
+                          setTimeout(() => setCopiedField(null), 2000);
+                        }}
+                      >
+                        {copiedField === 'tx' ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          const explorerUrl = session?.usdtNetwork === 'TRC20'
+                            ? `https://tronscan.org/#/transaction/${selectedPayment.transactionHash}`
+                            : `https://etherscan.io/tx/${selectedPayment.transactionHash}`;
+                          window.open(explorerUrl, '_blank');
+                        }}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -746,7 +767,8 @@ export default function Dashboard() {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
+                      timeZoneName: 'short'
                     })}
                   </span>
                 </div>

@@ -312,3 +312,11 @@ None - All critical bugs resolved in v1.0
 - [x] Add "Show Transmission Proof" button to payment history
 - [x] Create transmission proof dialog with professional design
 - [x] Display payment details: amount, address, network, fee, transaction hash, submitted time
+
+## Transmission Proof UI Enhancements
+- [x] Upload TRC20 (red) and ERC20 (green) USDT logos to project
+- [x] Replace generic icon with network-specific logos in transmission proof header
+- [x] Add network name (TRC20/ERC20) centered below logo
+- [x] Add blockchain explorer links (TronScan for TRC20, Etherscan for ERC20)
+- [x] Add external link icon next to copy icon for transaction hash
+- [x] Display timezone in all datetime fields
