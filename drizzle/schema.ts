@@ -45,6 +45,9 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   lifetimeProfit: decimal("lifetimeProfit", { precision: 15, scale: 2 }).default("0.00"),
   lifetimeProfitShare: decimal("lifetimeProfitShare", { precision: 15, scale: 2 }).default("0.00"),
   lifetimeIncome: decimal("lifetimeIncome", { precision: 15, scale: 2 }).default("0.00"),
+  // USDT Payment Information
+  usdtAddress: varchar("usdtAddress", { length: 255 }),
+  usdtNetwork: mysqlEnum("usdtNetwork", ["TRC20", "ERC20"]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -111,3 +114,38 @@ export const copierTemplates = mysqlTable("copier_templates", {
 
 export type CopierTemplate = typeof copierTemplates.$inferSelect;
 export type InsertCopierTemplate = typeof copierTemplates.$inferInsert;
+
+/**
+ * Payments table
+ * Tracks all payments made to traders
+ */
+export const payments = mysqlTable("payments", {
+  id: int("id").autoincrement().primaryKey(),
+  magicNumberId: int("magicNumberId").notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  transactionHash: varchar("transactionHash", { length: 255 }).notNull(),
+  paymentDate: timestamp("paymentDate").notNull(),
+  notificationSent: boolean("notificationSent").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = typeof payments.$inferInsert;
+
+/**
+ * Notifications table
+ * Stores in-app notifications for traders
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  magicNumberId: int("magicNumberId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  type: mysqlEnum("type", ["payment", "info", "warning", "error"]).notNull().default("info"),
+  isRead: boolean("isRead").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useTradingSession } from "@/hooks/useTradingSession";
@@ -15,7 +15,9 @@ import {
   Activity,
   Calendar,
   Percent,
-  Settings
+  Settings,
+  Bell,
+  Check
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -26,6 +28,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 function formatCurrency(value: number, showSign = false): string {
   const formatted = Math.abs(value).toLocaleString("en-US", {
@@ -128,8 +144,18 @@ export default function Dashboard() {
   const { session, isLoading: sessionLoading, logout } = useTradingSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [usdtAddress, setUsdtAddress] = useState("");
+  const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("");
 
   const utils = trpc.useUtils();
+
+  const { data: paymentHistory, isLoading: paymentsLoading } = trpc.trading.getPayments.useQuery();
+  const { data: notifications, refetch: refetchNotifications } = trpc.trading.getNotifications.useQuery();
+  const updateUsdtMutation = trpc.trading.updateUsdtInfo.useMutation();
+  const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
+  const markAllReadMutation = trpc.trading.markAllNotificationsRead.useMutation();
+
+  const unreadCount = notifications?.filter(n => !n.isRead).length || 0;
 
   const { data: pnlSummary, isLoading: pnlLoading } = trpc.trading.getPnLSummary.useQuery(undefined, {
     refetchInterval: 60000, // Refresh every 60 seconds
@@ -172,6 +198,26 @@ export default function Dashboard() {
     await logout();
   };
 
+  const handleSaveUsdtInfo = async () => {
+    try {
+      await updateUsdtMutation.mutateAsync({
+        usdtAddress: usdtAddress || undefined,
+        usdtNetwork: usdtNetwork || undefined,
+      });
+      toast.success("USDT information updated");
+    } catch (error) {
+      toast.error("Failed to update USDT information");
+    }
+  };
+
+  // Initialize USDT fields when session loads
+  useEffect(() => {
+    if (session) {
+      setUsdtAddress(session.usdtAddress || "");
+      setUsdtNetwork(session.usdtNetwork || "");
+    }
+  }, [session]);
+
   if (sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -201,6 +247,74 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="relative">
+                    <Bell className="h-4 w-4" />
+                    {unreadCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                        {unreadCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold">Notifications</h4>
+                      {unreadCount > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            await markAllReadMutation.mutateAsync();
+                            refetchNotifications();
+                          }}
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Mark all read
+                        </Button>
+                      )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto space-y-2">
+                      {notifications && notifications.length > 0 ? (
+                        notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            className={`p-3 rounded-lg border cursor-pointer ${
+                              notif.isRead ? "bg-background" : "bg-primary/5 border-primary/20"
+                            }`}
+                            onClick={async () => {
+                              if (!notif.isRead) {
+                                await markNotificationReadMutation.mutateAsync({ notificationId: notif.id });
+                                refetchNotifications();
+                              }
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{notif.title}</div>
+                                <div className="text-xs text-muted-foreground mt-1">{notif.message}</div>
+                                <div className="text-xs text-muted-foreground mt-2">
+                                  {new Date(notif.createdAt).toLocaleString()}
+                                </div>
+                              </div>
+                              {!notif.isRead && (
+                                <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No notifications</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Button
                 variant="outline"
                 size="sm"
@@ -396,38 +510,109 @@ export default function Dashboard() {
             <TabsContent value="payments" className="space-y-4 mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Payment Information</CardTitle>
+                  <CardTitle className="text-lg">USDT Payment Details</CardTitle>
                   <CardDescription>
-                    View your payment history and profit share details
+                    Configure your USDT wallet for receiving payments
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm font-medium">Profit Share Rate</span>
-                      <span className="text-sm">{((session?.profitShare ?? 0.35) * 100).toFixed(2)}%</span>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="usdtAddress">USDT Address</Label>
+                      <Input
+                        id="usdtAddress"
+                        placeholder="Enter your USDT wallet address"
+                        value={usdtAddress}
+                        onChange={(e) => setUsdtAddress(e.target.value)}
+                      />
                     </div>
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm font-medium">Lifetime Profit</span>
-                      <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfit ?? 0)}</span>
+                    <div className="space-y-2">
+                      <Label htmlFor="usdtNetwork">Network</Label>
+                      <Select value={usdtNetwork} onValueChange={(value: "TRC20" | "ERC20") => setUsdtNetwork(value)}>
+                        <SelectTrigger id="usdtNetwork">
+                          <SelectValue placeholder="Select network" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TRC20">TRC20</SelectItem>
+                          <SelectItem value="ERC20">ERC20</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="flex justify-between items-center py-2 border-b">
-                      <span className="text-sm font-medium">Lifetime Profit Share</span>
-                      <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfitShare ?? 0)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-sm font-medium">Lifetime Income</span>
-                      <span className="text-sm font-semibold text-primary">{formatCurrency(session?.lifetimeIncome ?? 0)}</span>
-                    </div>
+                    <Button onClick={handleSaveUsdtInfo} disabled={updateUsdtMutation.isPending}>
+                      {updateUsdtMutation.isPending ? "Saving..." : "Save USDT Information"}
+                    </Button>
                   </div>
-                  
-                  <div className="pt-4">
-                    <h4 className="text-sm font-medium mb-3">Payment History</h4>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Payment Summary</CardTitle>
+                  <CardDescription>
+                    Your profit share and lifetime earnings
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm font-medium">Profit Share Rate</span>
+                    <span className="text-sm">{((session?.profitShare ?? 0.35) * 100).toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm font-medium">Lifetime Profit</span>
+                    <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfit ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm font-medium">Lifetime Profit Share</span>
+                    <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfitShare ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm font-medium">Lifetime Income</span>
+                    <span className="text-sm font-semibold text-primary">{formatCurrency(session?.lifetimeIncome ?? 0)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Payment History</CardTitle>
+                  <CardDescription>
+                    All payments received from RFX
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {paymentsLoading ? (
+                    <div className="text-center py-8">
+                      <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Loading payments...</p>
+                    </div>
+                  ) : paymentHistory && paymentHistory.length > 0 ? (
+                    <div className="space-y-3">
+                      {paymentHistory.map((payment) => (
+                        <div key={payment.id} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <div className="font-semibold text-primary">{formatCurrency(payment.amount)}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(payment.paymentDate).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            <div className="font-mono break-all">TX: {payment.transactionHash}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
                     <div className="text-center py-8 text-muted-foreground">
                       <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No payment history available</p>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

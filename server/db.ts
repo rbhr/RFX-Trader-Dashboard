@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate } from "../drizzle/schema";
+import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate, payments, InsertPayment, notifications, InsertNotification } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -247,4 +247,75 @@ export async function deleteCopierTemplate(id: number) {
   if (!db) throw new Error("Database not available");
 
   await db.delete(copierTemplates).where(eq(copierTemplates.id, id));
+}
+
+// Payment management functions
+export async function createPayment(data: InsertPayment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(payments).values(data);
+  return result;
+}
+
+export async function getPaymentsByMagicNumberId(magicNumberId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(payments)
+    .where(eq(payments.magicNumberId, magicNumberId))
+    .orderBy(desc(payments.paymentDate));
+}
+
+export async function getAllPayments() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(payments)
+    .orderBy(desc(payments.paymentDate));
+}
+
+export async function updatePaymentNotificationStatus(id: number, sent: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(payments).set({ notificationSent: sent }).where(eq(payments.id, id));
+}
+
+// Notification management functions
+export async function createNotification(data: InsertNotification) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(notifications).values(data);
+  return result;
+}
+
+export async function getNotificationsByMagicNumberId(magicNumberId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.magicNumberId, magicNumberId))
+    .orderBy(desc(notifications.createdAt));
+}
+
+export async function markNotificationAsRead(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+}
+
+export async function markAllNotificationsAsRead(magicNumberId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.magicNumberId, magicNumberId));
 }

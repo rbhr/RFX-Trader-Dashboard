@@ -64,6 +64,20 @@
       "when": 1771220880794,
       "tag": "0008_pale_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1771858378331,
+      "tag": "0009_burly_satana",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1771858702324,
+      "tag": "0010_black_zombie",
+      "breakpoints": true
     }
   ]
 }

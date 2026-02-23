@@ -20,7 +20,15 @@ import {
   getCopierTemplateById,
   createCopierTemplate,
   updateCopierTemplate,
-  deleteCopierTemplate
+  deleteCopierTemplate,
+  createPayment,
+  getPaymentsByMagicNumberId,
+  getAllPayments,
+  updatePaymentNotificationStatus,
+  createNotification,
+  getNotificationsByMagicNumberId,
+  markNotificationAsRead,
+  markAllNotificationsAsRead
 } from "./db";
 import { 
   metaCopierService, 
@@ -164,7 +172,70 @@ export const appRouter = router({
         lifetimeProfit: parseFloat(ctx.tradingSession.magicNumber.lifetimeProfit || '0'),
         lifetimeProfitShare: parseFloat(ctx.tradingSession.magicNumber.lifetimeProfitShare || '0'),
         lifetimeIncome: parseFloat(ctx.tradingSession.magicNumber.lifetimeIncome || '0'),
+        usdtAddress: ctx.tradingSession.magicNumber.usdtAddress || null,
+        usdtNetwork: ctx.tradingSession.magicNumber.usdtNetwork || null,
       };
+    }),
+
+    // Update USDT payment information
+    updateUsdtInfo: tradingProcedure
+      .input(z.object({
+        usdtAddress: z.string().optional(),
+        usdtNetwork: z.enum(['TRC20', 'ERC20']).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const magicNumberId = ctx.tradingSession.magicNumber.id;
+        
+        await updateMagicNumber(magicNumberId, {
+          usdtAddress: input.usdtAddress,
+          usdtNetwork: input.usdtNetwork,
+        });
+        
+        return { success: true };
+      }),
+
+    // Get payment history for current trader
+    getPayments: tradingProcedure.query(async ({ ctx }) => {
+      const magicNumberId = ctx.tradingSession.magicNumber.id;
+      const payments = await getPaymentsByMagicNumberId(magicNumberId);
+      
+      return payments.map(p => ({
+        id: p.id,
+        amount: parseFloat(p.amount),
+        transactionHash: p.transactionHash,
+        paymentDate: p.paymentDate,
+        createdAt: p.createdAt,
+      }));
+    }),
+
+    // Get notifications for current trader
+    getNotifications: tradingProcedure.query(async ({ ctx }) => {
+      const magicNumberId = ctx.tradingSession.magicNumber.id;
+      const notifs = await getNotificationsByMagicNumberId(magicNumberId);
+      
+      return notifs.map(n => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        isRead: n.isRead,
+        createdAt: n.createdAt,
+      }));
+    }),
+
+    // Mark notification as read
+    markNotificationRead: tradingProcedure
+      .input(z.object({ notificationId: z.number() }))
+      .mutation(async ({ input }) => {
+        await markNotificationAsRead(input.notificationId);
+        return { success: true };
+      }),
+
+    // Mark all notifications as read
+    markAllNotificationsRead: tradingProcedure.mutation(async ({ ctx }) => {
+      const magicNumberId = ctx.tradingSession.magicNumber.id;
+      await markAllNotificationsAsRead(magicNumberId);
+      return { success: true };
     }),
 
     // Get copier configuration for trader's live account
@@ -805,6 +876,82 @@ export const appRouter = router({
       .query(async () => {
         const accounts = await metaCopierService.getAccountsByLabel('RFX Master');
         return accounts;
+      }),
+
+    // Get all traders for payment dropdown
+    getAllTraders: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+
+      const traders = await getAllMagicNumbers();
+      return traders.map(t => ({
+        id: t.id,
+        name: t.name,
+        magicNumber: t.magicNumber,
+      }));
+    }),
+
+    // Get all payments with trader info
+    getAllPayments: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+
+      const payments = await getAllPayments();
+      const traders = await getAllMagicNumbers();
+      
+      return payments.map(p => {
+        const trader = traders.find(t => t.id === p.magicNumberId);
+        return {
+          id: p.id,
+          amount: parseFloat(p.amount),
+          transactionHash: p.transactionHash,
+          paymentDate: p.paymentDate,
+          notificationSent: p.notificationSent,
+          traderName: trader?.name || 'Unknown',
+          magicNumber: trader?.magicNumber || 'N/A',
+        };
+      });
+    }),
+
+    // Make a payment
+    makePayment: tradingProcedure
+      .input(z.object({
+        magicNumberId: z.number(),
+        amount: z.number(),
+        transactionHash: z.string(),
+        paymentDate: z.date(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        // Create payment record
+        await createPayment({
+          magicNumberId: input.magicNumberId,
+          amount: input.amount.toString(),
+          transactionHash: input.transactionHash,
+          paymentDate: input.paymentDate,
+          notificationSent: true,
+        });
+
+        // Get trader info for notification
+        const trader = await getMagicNumberById(input.magicNumberId);
+        if (trader) {
+          // Create in-app notification for trader
+          await createNotification({
+            magicNumberId: input.magicNumberId,
+            title: "Payment Received",
+            message: `You have received a payment of $${input.amount.toFixed(2)}. Transaction hash: ${input.transactionHash}`,
+            type: "payment",
+            isRead: false,
+          });
+          console.log(`[Payment] Notification sent to ${trader.name} for payment of $${input.amount}`);
+        }
+
+        return { success: true };
       }),
   }),
 
