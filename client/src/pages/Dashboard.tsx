@@ -17,7 +17,10 @@ import {
   Percent,
   Settings,
   Bell,
-  Check
+  Check,
+  FileText,
+  Copy,
+  CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -144,9 +147,11 @@ export default function Dashboard() {
   const { session, isLoading: sessionLoading, logout } = useTradingSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [usdtAddress, setUsdtAddress] = useState("");
+  const [usdtAddress, setUsdtAddress] = useState<string>("");
   const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("");
-
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [proofDialogOpen, setProofDialogOpen] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
   const { data: paymentHistory, isLoading: paymentsLoading } = trpc.trading.getPayments.useQuery();
@@ -585,7 +590,7 @@ export default function Dashboard() {
                       <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground">Loading payments...</p>
                     </div>
-                  ) : paymentHistory && paymentHistory.length > 0 ? (
+                   ) : paymentHistory && paymentHistory.length > 0 ? (
                     <div className="space-y-3">
                       {paymentHistory.map((payment) => (
                         <div key={payment.id} className="border rounded-lg p-4">
@@ -596,10 +601,23 @@ export default function Dashboard() {
                                 {new Date(payment.paymentDate).toLocaleDateString('en-US', {
                                   year: 'numeric',
                                   month: 'long',
-                                  day: 'numeric'
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
                                 })}
                               </div>
                             </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedPayment(payment);
+                                setProofDialogOpen(true);
+                              }}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              Show Transmission Proof
+                            </Button>
                           </div>
                           <div className="text-xs text-muted-foreground mt-2">
                             <div className="font-mono break-all">TX: {payment.transactionHash}</div>
@@ -617,6 +635,124 @@ export default function Dashboard() {
               </Card>
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transmission Proof Dialog */}
+      <Dialog open={proofDialogOpen} onOpenChange={setProofDialogOpen}>
+        <DialogContent className="max-w-md">
+          {selectedPayment && (
+            <div className="space-y-6">
+              {/* Header with USDT Icon */}
+              <div className="flex flex-col items-center pt-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <DollarSign className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-2xl font-bold">Withdrawn {formatCurrency(selectedPayment.amount).replace('$', '')} USDT</h2>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center justify-between py-4 border-y">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <span className="font-medium">Status</span>
+                </div>
+                <span className="text-muted-foreground">Completed</span>
+              </div>
+
+              {/* Details */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                  <span className="text-sm font-medium">Address name</span>
+                  <span className="text-sm text-right text-muted-foreground">{session?.name}</span>
+                </div>
+
+                <div className="flex justify-between items-start gap-4">
+                  <span className="text-sm font-medium">Address</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-right text-muted-foreground font-mono break-all max-w-[200px]">
+                      {session?.usdtAddress || 'Not provided'}
+                    </span>
+                    {session?.usdtAddress && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(session.usdtAddress!);
+                          setCopiedField('address');
+                          setTimeout(() => setCopiedField(null), 2000);
+                        }}
+                      >
+                        {copiedField === 'address' ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Network</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                    <span className="text-sm text-muted-foreground">
+                      {session?.usdtNetwork === 'TRC20' ? 'Tron (TRC20)' : 
+                       session?.usdtNetwork === 'ERC20' ? 'Ethereum (ERC20)' : 
+                       'Not specified'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Network fee</span>
+                  <span className="text-sm text-muted-foreground">
+                    {selectedPayment.networkFee ? `${parseFloat(selectedPayment.networkFee).toFixed(2)} USDT` : '0.00 USDT'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-start gap-4">
+                  <span className="text-sm font-medium">Transaction ID</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-right text-muted-foreground font-mono break-all max-w-[200px]">
+                      {selectedPayment.transactionHash}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedPayment.transactionHash);
+                        setCopiedField('tx');
+                        setTimeout(() => setCopiedField(null), 2000);
+                      }}
+                    >
+                      {copiedField === 'tx' ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Submitted time</span>
+                  <span className="text-sm text-muted-foreground">
+                    {new Date(selectedPayment.paymentDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

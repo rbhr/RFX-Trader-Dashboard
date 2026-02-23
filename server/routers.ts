@@ -920,6 +920,7 @@ export const appRouter = router({
       .input(z.object({
         magicNumberId: z.number(),
         amount: z.number(),
+        networkFee: z.number().optional(),
         transactionHash: z.string(),
         paymentDate: z.date(),
       }))
@@ -932,6 +933,7 @@ export const appRouter = router({
         await createPayment({
           magicNumberId: input.magicNumberId,
           amount: input.amount.toString(),
+          networkFee: (input.networkFee || 0).toString(),
           transactionHash: input.transactionHash,
           paymentDate: input.paymentDate,
           notificationSent: true,

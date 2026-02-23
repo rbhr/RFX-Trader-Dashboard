@@ -48,10 +48,11 @@ describe('Payment System Database Functions', () => {
     expect(updatedTrader?.usdtNetwork).toBe('TRC20');
   });
 
-  it('should create payment record', async () => {
+  it('should create payment record with network fee', async () => {
     await createPayment({
       magicNumberId: testTraderId,
       amount: '100.50',
+      networkFee: '1.50',
       transactionHash: '0xABCDEF123456',
       paymentDate: new Date(),
       notificationSent: true,
@@ -60,6 +61,7 @@ describe('Payment System Database Functions', () => {
     const payments = await getPaymentsByMagicNumberId(testTraderId);
     expect(payments.length).toBeGreaterThan(0);
     expect(parseFloat(payments[0].amount)).toBe(100.50);
+    expect(parseFloat(payments[0].networkFee || '0')).toBe(1.50);
     expect(payments[0].transactionHash).toBe('0xABCDEF123456');
   });
 

@@ -17,8 +17,9 @@ import { DollarSign, Send } from "lucide-react";
 
 export default function ManagePayments() {
   const [selectedTraderId, setSelectedTraderId] = useState<string>("");
-  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 16));
   const [amount, setAmount] = useState<string>("");
+  const [networkFee, setNetworkFee] = useState<string>("0");
   const [transactionHash, setTransactionHash] = useState<string>("");
 
   const { data: traders, isLoading: tradersLoading } = trpc.admin.getAllTraders.useQuery();
@@ -35,6 +36,7 @@ export default function ManagePayments() {
       await makePaymentMutation.mutateAsync({
         magicNumberId: parseInt(selectedTraderId),
         amount: parseFloat(amount),
+        networkFee: parseFloat(networkFee),
         transactionHash,
         paymentDate: new Date(paymentDate),
       });
@@ -44,8 +46,9 @@ export default function ManagePayments() {
       // Reset form
       setSelectedTraderId("");
       setAmount("");
+      setNetworkFee("0");
       setTransactionHash("");
-      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setPaymentDate(new Date().toISOString().slice(0, 16));
       
       // Refresh payment history
       refetchPayments();
@@ -105,19 +108,19 @@ export default function ManagePayments() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="paymentDate">Payment Date</Label>
+                  <Label htmlFor="paymentDate">Payment Date & Time</Label>
                   <Input
                     id="paymentDate"
-                    type="date"
+                    type="datetime-local"
                     value={paymentDate}
                     onChange={(e) => setPaymentDate(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Amount (USD)</Label>
+                  <Label htmlFor="amount">Amount (USDT)</Label>
                   <Input
                     id="amount"
                     type="number"
@@ -125,6 +128,18 @@ export default function ManagePayments() {
                     placeholder="0.00"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="networkFee">Network Fee (USDT)</Label>
+                  <Input
+                    id="networkFee"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={networkFee}
+                    onChange={(e) => setNetworkFee(e.target.value)}
                   />
                 </div>
 

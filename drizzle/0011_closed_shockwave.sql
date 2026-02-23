@@ -1,0 +1,1 @@
+ALTER TABLE `payments` ADD `networkFee` decimal(15,2) DEFAULT '0.00';

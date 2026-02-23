@@ -305,3 +305,10 @@ None - All critical bugs resolved in v1.0
 - [x] Display payment history in trader Settings > Payments section
 - [x] Add notification bell with badge to trader dashboard header
 - [x] Test complete payment flow from admin to trader notification
+
+## Payment System Enhancements
+- [x] Add Network Fee field to payments table
+- [x] Change payment date to datetime field in admin form
+- [x] Add "Show Transmission Proof" button to payment history
+- [x] Create transmission proof dialog with professional design
+- [x] Display payment details: amount, address, network, fee, transaction hash, submitted time

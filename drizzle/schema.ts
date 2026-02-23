@@ -125,6 +125,7 @@ export const payments = mysqlTable("payments", {
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
   transactionHash: varchar("transactionHash", { length: 255 }).notNull(),
   paymentDate: timestamp("paymentDate").notNull(),
+  networkFee: decimal("networkFee", { precision: 15, scale: 2 }).default("0.00"),
   notificationSent: boolean("notificationSent").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

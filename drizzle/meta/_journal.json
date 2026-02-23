@@ -78,6 +78,13 @@
       "when": 1771858702324,
       "tag": "0010_black_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1771885927431,
+      "tag": "0011_closed_shockwave",
+      "breakpoints": true
     }
   ]
 }
