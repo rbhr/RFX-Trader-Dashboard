@@ -327,4 +327,12 @@ None - All critical bugs resolved in v1.0
 
 ## Production Release v1.4
 - [x] Add app version and build hash display above logout button
-- [ ] Create production release checkpoint as v1.4
+- [x] Create production release checkpoint as v1.4
+
+## Version 1.4.1 Updates
+- [x] Remove version display from trader dashboard header
+- [x] Add version display to admin sidebar bottom (near logout)
+- [x] Add version display to trader page footer (centered, small text)
+- [x] Add padding below admin logout button
+- [x] Update version to 1.4.1
+- [ ] Create v1.4.1 checkpoint

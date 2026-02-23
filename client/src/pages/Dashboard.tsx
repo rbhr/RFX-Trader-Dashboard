@@ -338,15 +338,10 @@ export default function Dashboard() {
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
-              <div className="flex flex-col items-end gap-2">
-                <div className="text-xs text-muted-foreground">
-                  App version 1.4.0 · Build 4eb2e10
-                </div>
-                <Button variant="outline" size="sm" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </div>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
             </div>
           </div>
         </div>
@@ -782,6 +777,11 @@ export default function Dashboard() {
           )}
         </DialogContent>
       </Dialog>
+      
+      {/* Footer with version info */}
+      <div className="text-center py-4 text-xs text-muted-foreground">
+        App version 1.4.1 · Build d116719
+      </div>
     </div>
   );
 }

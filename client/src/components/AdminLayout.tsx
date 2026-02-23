@@ -95,8 +95,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         <Separator />
 
-        {/* Logout Button */}
-        <div className="p-3">
+        {/* Version Info and Logout Button */}
+        <div className="p-3 pb-4 space-y-3">
+          <div className="text-xs text-center text-muted-foreground">
+            App version 1.4.1 · Build d116719
+          </div>
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
