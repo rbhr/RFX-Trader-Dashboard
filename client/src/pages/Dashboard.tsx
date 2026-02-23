@@ -338,10 +338,15 @@ export default function Dashboard() {
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
+              <div className="flex flex-col items-end gap-2">
+                <div className="text-xs text-muted-foreground">
+                  App version 1.4.0 · Build 4eb2e10
+                </div>
+                <Button variant="outline" size="sm" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -324,3 +324,7 @@ None - All critical bugs resolved in v1.0
 ## Bug Fix
 - [x] Fix missing "Show Transmission Proof" button in payment history
 - [x] Fix Settings dialog to fit tablet screens with scrollbars
+
+## Production Release v1.4
+- [x] Add app version and build hash display above logout button
+- [ ] Create production release checkpoint as v1.4
