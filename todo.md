@@ -384,3 +384,9 @@ None - All critical bugs resolved in v1.0
 - [x] Add copy to clipboard button for USDT address
 - [x] Update USDT address field when trader selection changes
 - [x] Show network type (TRC20/ERC20) alongside address
+
+## Version 1.4.4 Release
+- [x] Update version number in package.json to 1.4.4
+- [x] Update version display in AdminLayout to 1.4.4
+- [x] Update version display in Dashboard to 1.4.4
+- [ ] Create production release checkpoint

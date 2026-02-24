@@ -780,7 +780,7 @@ export default function Dashboard() {
       
       {/* Footer with version info */}
       <div className="text-center py-4 text-xs text-muted-foreground">
-        App version 1.4.2 · Build 24a604c
+        App version 1.4.4 · Build 054fd65
       </div>
     </div>
   );
