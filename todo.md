@@ -357,4 +357,8 @@ None - All critical bugs resolved in v1.0
 
 ## Version 1.4.2 Release
 - [x] Update version number to 1.4.2
-- [ ] Create production checkpoint
+- [x] Create production checkpoint
+
+## Fix Version Display
+- [x] Update hardcoded version in Dashboard component to 1.4.2
+- [x] Update hardcoded version in AdminLayout component to 1.4.2
