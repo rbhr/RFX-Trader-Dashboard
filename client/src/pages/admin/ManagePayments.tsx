@@ -11,9 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { DollarSign, Send } from "lucide-react";
+import { DollarSign, Send, Copy, ExternalLink } from "lucide-react";
 
 export default function ManagePayments() {
   const [selectedTraderId, setSelectedTraderId] = useState<string>("");
@@ -21,6 +27,8 @@ export default function ManagePayments() {
   const [amount, setAmount] = useState<string>("");
   const [networkFee, setNetworkFee] = useState<string>("0");
   const [transactionHash, setTransactionHash] = useState<string>("");
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [proofDialogOpen, setProofDialogOpen] = useState(false);
 
   const { data: traders, isLoading: tradersLoading } = trpc.admin.getAllTraders.useQuery();
   const { data: paymentHistory, isLoading: paymentsLoading, refetch: refetchPayments } = trpc.admin.getAllPayments.useQuery();
@@ -180,7 +188,14 @@ export default function ManagePayments() {
               ) : paymentHistory && paymentHistory.length > 0 ? (
                 <div className="space-y-3">
                   {paymentHistory.map((payment) => (
-                    <div key={payment.id} className="border rounded-lg p-4">
+                    <div 
+                      key={payment.id} 
+                      className="border rounded-lg p-4 cursor-pointer hover:bg-accent/50 transition-colors"
+                      onClick={() => {
+                        setSelectedPayment(payment);
+                        setProofDialogOpen(true);
+                      }}
+                    >
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <div className="font-semibold">{payment.traderName} - {payment.magicNumber}</div>
@@ -215,6 +230,128 @@ export default function ManagePayments() {
           </Card>
         </div>
       </div>
+
+      {/* Transmission Proof Dialog */}
+      <Dialog open={proofDialogOpen} onOpenChange={setProofDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedPayment && (
+            <div className="space-y-6">
+              {/* Header with Logo */}
+              <div className="text-center space-y-2">
+                <div className="flex justify-center">
+                  <img 
+                    src={selectedPayment.network === 'TRC20' 
+                      ? '/icons8-tether-50.png' 
+                      : '/icons8-tether-502.png'
+                    } 
+                    alt="USDT Logo" 
+                    className="w-16 h-16"
+                  />
+                </div>
+                <h2 className="text-2xl font-bold">Withdrawn {selectedPayment.amount} USDT</h2>
+                <div className="text-sm font-medium text-muted-foreground">
+                  {selectedPayment.network || 'TRC20'}
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center justify-between py-4 border-y">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span className="font-medium">Status</span>
+                </div>
+                <span className="text-muted-foreground">Completed</span>
+              </div>
+
+              {/* Payment Details */}
+              <div className="space-y-4">
+                <div className="flex justify-between py-3 border-b">
+                  <span className="text-muted-foreground">Address name</span>
+                  <span className="font-medium">{selectedPayment.traderName}</span>
+                </div>
+
+                <div className="flex justify-between py-3 border-b">
+                  <span className="text-muted-foreground">Address</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm">{selectedPayment.usdtAddress || 'N/A'}</span>
+                    {selectedPayment.usdtAddress && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedPayment.usdtAddress);
+                          toast.success('Address copied');
+                        }}
+                        className="p-1 hover:bg-accent rounded"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-between py-3 border-b">
+                  <span className="text-muted-foreground">Network</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                    <span>{selectedPayment.network || 'TRC20'}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between py-3 border-b">
+                  <span className="text-muted-foreground">Network fee</span>
+                  <span>{selectedPayment.networkFee || 0} USDT</span>
+                </div>
+
+                <div className="flex justify-between py-3 border-b">
+                  <span className="text-muted-foreground">Transaction ID</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm">
+                      {selectedPayment.transactionHash.substring(0, 8)}...{selectedPayment.transactionHash.substring(selectedPayment.transactionHash.length - 6)}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedPayment.transactionHash);
+                        toast.success('Transaction hash copied');
+                      }}
+                      className="p-1 hover:bg-accent rounded"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <a
+                      href={selectedPayment.network === 'ERC20' 
+                        ? `https://etherscan.io/tx/${selectedPayment.transactionHash}`
+                        : `https://tronscan.org/#/transaction/${selectedPayment.transactionHash}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 hover:bg-accent rounded"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex justify-between py-3">
+                  <span className="text-muted-foreground">Submitted time</span>
+                  <span>
+                    {new Date(selectedPayment.paymentDate).toLocaleString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZoneName: 'short'
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

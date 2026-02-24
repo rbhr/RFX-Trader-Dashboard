@@ -335,4 +335,10 @@ None - All critical bugs resolved in v1.0
 - [x] Add version display to trader page footer (centered, small text)
 - [x] Add padding below admin logout button
 - [x] Update version to 1.4.1
-- [ ] Create v1.4.1 checkpoint
+- [x] Create v1.4.1 checkpoint
+
+## Payment System Improvements
+- [x] Sort payment history newest first in trader settings (already implemented)
+- [x] Set default payment time to current time in admin's timezone (already implemented)
+- [x] Make admin payment history entries clickable to show transmission proof
+- [x] Remove test payment for Saif
