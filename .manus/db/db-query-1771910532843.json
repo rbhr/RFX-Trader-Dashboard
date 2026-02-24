@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, magicNumber, name, telegramHandle FROM magic_numbers LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, magicNumber, name, telegramHandle FROM magic_numbers LIMIT 1;",
+  "rows": [
+    {
+      "id": "15",
+      "magicNumber": "6868",
+      "name": "Richard",
+      "telegramHandle": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmagicNumber\tname\ttelegramHandle\n15\t6868\tRichard\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1608
+}

@@ -48,6 +48,7 @@ interface Trader {
   mcLocation: string | null;
   liveAccountNumber: string | null;
   manager: string | null;
+  telegramHandle: string | null;
   copierInfo: {
     multiplier: number;
     fixedLotSize: number;
@@ -83,6 +84,7 @@ export default function ManageTraders() {
     mtVersion: "MT5",
     mcLocation: "London",
     liveAccountNumber: "",
+    telegramHandle: "",
     lifetimeProfit: 0,
     lifetimeProfitShare: 0,
     lifetimeIncome: 0,
@@ -173,6 +175,7 @@ export default function ManageTraders() {
       mtVersion: "MT5",
       mcLocation: "London",
       liveAccountNumber: "",
+      telegramHandle: "",
       lifetimeProfit: 0,
       lifetimeProfitShare: 0,
       lifetimeIncome: 0,
@@ -192,6 +195,7 @@ export default function ManageTraders() {
       mtVersion: trader.mtVersion || "MT5",
       mcLocation: trader.mcLocation || "London",
       liveAccountNumber: trader.liveAccountNumber || "",
+      telegramHandle: trader.telegramHandle || "",
       lifetimeProfit: trader.lifetimeProfit,
       lifetimeProfitShare: trader.lifetimeProfitShare,
       lifetimeIncome: trader.lifetimeIncome,
@@ -301,6 +305,7 @@ export default function ManageTraders() {
       mtVersion: formData.mtVersion || undefined,
       mcLocation: formData.mcLocation || undefined,
       liveAccountNumber: formData.liveAccountNumber || undefined,
+      telegramHandle: formData.telegramHandle || undefined,
       lifetimeProfit: formData.lifetimeProfit,
       lifetimeProfitShare: formData.lifetimeProfitShare,
       lifetimeIncome: formData.lifetimeIncome,
@@ -898,6 +903,15 @@ export default function ManageTraders() {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-telegramHandle">Telegram Handle</Label>
+                  <Input
+                    id="edit-telegramHandle"
+                    value={formData.telegramHandle}
+                    onChange={(e) => setFormData({ ...formData, telegramHandle: e.target.value })}
+                    placeholder="@username"
+                  />
                 </div>
               </div>
               <div className="border-t pt-4 mt-2">

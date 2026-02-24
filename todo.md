@@ -389,4 +389,40 @@ None - All critical bugs resolved in v1.0
 - [x] Update version number in package.json to 1.4.4
 - [x] Update version display in AdminLayout to 1.4.4
 - [x] Update version display in Dashboard to 1.4.4
-- [ ] Create production release checkpoint
+- [x] Create production release checkpoint
+
+
+## Version 1.5 Release (Planned)
+
+### Payment Confirmation Modal
+- [ ] Create confirmation dialog component for payment submission
+- [ ] Display payment summary before recording (trader name, amount, network, transaction hash)
+- [ ] Add "Confirm" and "Cancel" buttons
+- [ ] Show confirmation modal when admin clicks "Record Payment"
+- [ ] Only submit payment after explicit confirmation
+
+### USDT Address Validation
+- [ ] Implement TRC20 address validation (34 characters, starts with 'T')
+- [ ] Implement ERC20 address validation (42 characters, starts with '0x')
+- [ ] Add real-time validation feedback in trader settings USDT address field
+- [ ] Show error message for invalid address format
+- [ ] Prevent saving invalid USDT addresses
+- [ ] Add validation tests for both network types
+
+### Payment Export to CSV
+- [ ] Add "Export to CSV" button in admin payment history section
+- [ ] Generate CSV with columns: Date, Trader, Amount, Network, Network Fee, Transaction Hash
+- [ ] Format dates in readable format (YYYY-MM-DD HH:mm)
+- [ ] Include all payment records or allow date range filtering
+- [ ] Trigger browser download of generated CSV file
+- [ ] Add filename with current date (e.g., "payments_export_2026-02-24.csv")
+
+
+## Telegram Handle Field
+- [x] Add telegramHandle field to magic_numbers table schema
+- [x] Push database schema changes
+- [x] Update backend listTraders to include telegramHandle
+- [x] Update backend updateTrader to accept telegramHandle
+- [x] Add Telegram Handle input field to Edit Trader dialog
+- [x] Test editing and saving Telegram Handle
+- [ ] Create checkpoint

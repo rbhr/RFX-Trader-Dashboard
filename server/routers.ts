@@ -540,6 +540,7 @@ export const appRouter = router({
         mcAccountId: t.mcAccountId,
         liveAccountNumber: t.liveAccountNumber,
         manager: t.manager,
+        telegramHandle: t.telegramHandle,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
         lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
@@ -596,6 +597,7 @@ export const appRouter = router({
         mtVersion: z.string().optional(),
         mcLocation: z.string().optional(),
         liveAccountNumber: z.string().optional(),
+        telegramHandle: z.string().optional(),
         lifetimeProfit: z.number().optional(),
         lifetimeProfitShare: z.number().optional(),
         lifetimeIncome: z.number().optional(),
@@ -618,6 +620,7 @@ export const appRouter = router({
         if (data.mtVersion !== undefined) updateData.mtVersion = data.mtVersion;
         if (data.mcLocation !== undefined) updateData.mcLocation = data.mcLocation;
         if (data.liveAccountNumber !== undefined) updateData.liveAccountNumber = data.liveAccountNumber;
+        if (data.telegramHandle !== undefined) updateData.telegramHandle = data.telegramHandle;
         if (data.lifetimeProfit !== undefined) updateData.lifetimeProfit = data.lifetimeProfit.toString();
         if (data.lifetimeProfitShare !== undefined) updateData.lifetimeProfitShare = data.lifetimeProfitShare.toString();
         if (data.lifetimeIncome !== undefined) updateData.lifetimeIncome = data.lifetimeIncome.toString();

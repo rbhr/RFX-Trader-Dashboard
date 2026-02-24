@@ -1,0 +1,1 @@
+ALTER TABLE `magic_numbers` ADD `telegramHandle` varchar(100);
