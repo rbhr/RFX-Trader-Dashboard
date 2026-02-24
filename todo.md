@@ -362,3 +362,13 @@ None - All critical bugs resolved in v1.0
 ## Fix Version Display
 - [x] Update hardcoded version in Dashboard component to 1.4.2
 - [x] Update hardcoded version in AdminLayout component to 1.4.2
+
+## Update Lifetime Payout on Payment
+- [x] Add lifetime payout increment to makePayment procedure
+- [x] Update lifetimeIncome field when payment is made
+- [x] Test payment updates lifetime totals correctly
+
+## Future: Lifetime Profit Share Calculation
+- [ ] Implement automatic lifetime profit share calculation based on trading performance
+- [ ] Add profit share rate configuration per trader
+- [ ] Calculate and update lifetimeProfitShare field automatically

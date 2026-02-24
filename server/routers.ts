@@ -939,9 +939,16 @@ export const appRouter = router({
           notificationSent: true,
         });
 
-        // Get trader info for notification
+        // Get trader info for notification and update lifetime income
         const trader = await getMagicNumberById(input.magicNumberId);
         if (trader) {
+          // Update lifetime income
+          const currentLifetimeIncome = parseFloat(trader.lifetimeIncome || "0");
+          const newLifetimeIncome = currentLifetimeIncome + input.amount;
+          await updateMagicNumber(input.magicNumberId, {
+            lifetimeIncome: newLifetimeIncome.toFixed(2),
+          });
+          
           // Create in-app notification for trader
           await createNotification({
             magicNumberId: input.magicNumberId,
