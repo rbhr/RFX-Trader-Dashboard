@@ -889,6 +889,8 @@ export const appRouter = router({
         id: t.id,
         name: t.name,
         magicNumber: t.magicNumber,
+        usdtAddress: t.usdtAddress,
+        usdtNetwork: t.usdtNetwork,
       }));
     }),
 

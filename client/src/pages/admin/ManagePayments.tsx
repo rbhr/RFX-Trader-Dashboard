@@ -188,6 +188,37 @@ export default function ManagePayments() {
                 </div>
               </div>
 
+              {/* USDT Address Display */}
+              {selectedTraderId && (() => {
+                const selectedTrader = traders?.find(t => t.id === parseInt(selectedTraderId));
+                if (selectedTrader?.usdtAddress) {
+                  return (
+                    <div className="space-y-2 p-4 bg-muted/50 rounded-lg border">
+                      <Label>Trader's USDT Address ({selectedTrader.usdtNetwork || 'Not Set'})</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={selectedTrader.usdtAddress}
+                          readOnly
+                          className="font-mono text-sm bg-background"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedTrader.usdtAddress!);
+                            toast.success("USDT address copied to clipboard");
+                          }}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <Button 
                 onClick={handleMakePayment} 
                 disabled={makePaymentMutation.isPending || !selectedTraderId || !amount || !transactionHash}

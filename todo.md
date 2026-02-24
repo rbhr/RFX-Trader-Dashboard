@@ -372,3 +372,15 @@ None - All critical bugs resolved in v1.0
 - [ ] Implement automatic lifetime profit share calculation based on trading performance
 - [ ] Add profit share rate configuration per trader
 - [ ] Calculate and update lifetimeProfitShare field automatically
+
+## Admin Payment Form - USDT Address Display
+- [ ] Add read-only USDT address field to admin payment form
+- [ ] Add copy to clipboard button for USDT address
+- [ ] Update USDT address field when trader selection changes
+- [ ] Show network type (TRC20/ERC20) alongside address
+
+## Admin Payment Form - USDT Address Display
+- [x] Add read-only USDT address field above submit button
+- [x] Add copy to clipboard button for USDT address
+- [x] Update USDT address field when trader selection changes
+- [x] Show network type (TRC20/ERC20) alongside address
