@@ -1,0 +1,13 @@
+{
+  "query": "SELECT COUNT(*) as remaining_payments FROM payments p \nJOIN magic_numbers m ON p.magicNumberId = m.id \nWHERE m.name LIKE '%TEST%' OR m.magicNumber LIKE '%999%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT COUNT(*) as remaining_payments FROM payments p \nJOIN magic_numbers m ON p.magicNumberId = m.id \nWHERE m.name LIKE '%TEST%' OR m.magicNumber LIKE '%999%';",
+  "rows": [
+    {
+      "remaining_payments": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "remaining_payments\n0\n",
+  "stderr": "",
+  "execution_time_ms": 1563
+}

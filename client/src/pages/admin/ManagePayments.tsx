@@ -37,7 +37,15 @@ export default function ManagePayments() {
   // Update payment date to current time on mount
   useEffect(() => {
     const updateDateTime = () => {
-      setPaymentDate(new Date().toISOString().slice(0, 16));
+      const now = new Date();
+      // Get local datetime in YYYY-MM-DDTHH:mm format
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      setPaymentDate(localDateTime);
     };
     updateDateTime();
     // Update every minute to keep it current
@@ -67,7 +75,14 @@ export default function ManagePayments() {
       setAmount("");
       setNetworkFee("0");
       setTransactionHash("");
-      setPaymentDate(new Date().toISOString().slice(0, 16));
+      // Reset to current local time
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      setPaymentDate(`${year}-${month}-${day}T${hours}:${minutes}`);
       
       // Refresh payment history
       refetchPayments();

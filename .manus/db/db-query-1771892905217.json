@@ -1,0 +1,43 @@
+{
+  "query": "SELECT p.* FROM payments p \nJOIN magic_numbers m ON p.magicNumberId = m.id \nWHERE m.name LIKE '%TEST%' OR m.magicNumber LIKE '%999%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT p.* FROM payments p \nJOIN magic_numbers m ON p.magicNumberId = m.id \nWHERE m.name LIKE '%TEST%' OR m.magicNumber LIKE '%999%';",
+  "rows": [
+    {
+      "id": "1",
+      "magicNumberId": "300001",
+      "amount": "100.50",
+      "transactionHash": "0xABCDEF123456",
+      "paymentDate": "2026-02-23 15:03:05",
+      "notificationSent": "1",
+      "createdAt": "2026-02-23 15:03:05",
+      "updatedAt": "2026-02-23 15:03:05",
+      "networkFee": "0.00"
+    },
+    {
+      "id": "30001",
+      "magicNumberId": "300001",
+      "amount": "100.50",
+      "transactionHash": "0xABCDEF123456",
+      "paymentDate": "2026-02-23 22:35:36",
+      "notificationSent": "1",
+      "createdAt": "2026-02-23 22:35:35",
+      "updatedAt": "2026-02-23 22:35:35",
+      "networkFee": "1.50"
+    },
+    {
+      "id": "60002",
+      "magicNumberId": "300001",
+      "amount": "200.00",
+      "transactionHash": "Jdjeifmvoo293",
+      "paymentDate": "2026-02-22 23:56:00",
+      "notificationSent": "1",
+      "createdAt": "2026-02-23 23:57:14",
+      "updatedAt": "2026-02-23 23:57:14",
+      "networkFee": "2.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmagicNumberId\tamount\ttransactionHash\tpaymentDate\tnotificationSent\tcreatedAt\tupdatedAt\tnetworkFee\n1\t300001\t100.50\t0xABCDEF123456\t2026-02-23 15:03:05\t1\t2026-02-23 15:03:05\t2026-02-23 15:03:05\t0.00\n30001\t300001\t100.50\t0xABCDEF123456\t2026-02-23 22:35:36\t1\t2026-02-23 22:35:35\t2026-02-23 22:35:35\t1.50\n60002\t300001\t200.00\tJdjeifmvoo293\t2026-02-22 23:56:00\t1\t2026-02-23 23:57:14\t2026-02-23 23:57:14\t2.00\n",
+  "stderr": "",
+  "execution_time_ms": 1526
+}

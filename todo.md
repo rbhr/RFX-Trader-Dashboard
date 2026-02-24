@@ -346,3 +346,11 @@ None - All critical bugs resolved in v1.0
 ## Payment Fixes
 - [x] Remove all payments for test999 trader
 - [x] Fix admin payment datetime to properly default to current time
+
+## Fix TEST999 Payment Deletion
+- [x] Find correct trader record for TEST999
+- [x] Delete all associated payments (3 payments removed)
+
+## Fix Payment Datetime Timezone
+- [x] Update admin payment datetime to use local timezone instead of UTC
+- [x] Test datetime displays correctly in admin's local time
