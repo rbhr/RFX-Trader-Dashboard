@@ -354,3 +354,7 @@ None - All critical bugs resolved in v1.0
 ## Fix Payment Datetime Timezone
 - [x] Update admin payment datetime to use local timezone instead of UTC
 - [x] Test datetime displays correctly in admin's local time
+
+## Version 1.4.2 Release
+- [x] Update version number to 1.4.2
+- [ ] Create production checkpoint
