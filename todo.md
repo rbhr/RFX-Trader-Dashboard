@@ -342,3 +342,7 @@ None - All critical bugs resolved in v1.0
 - [x] Set default payment time to current time in admin's timezone (already implemented)
 - [x] Make admin payment history entries clickable to show transmission proof
 - [x] Remove test payment for Saif
+
+## Payment Fixes
+- [x] Remove all payments for test999 trader
+- [x] Fix admin payment datetime to properly default to current time

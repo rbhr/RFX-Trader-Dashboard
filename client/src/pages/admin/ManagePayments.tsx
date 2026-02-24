@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,17 @@ export default function ManagePayments() {
   const { data: traders, isLoading: tradersLoading } = trpc.admin.getAllTraders.useQuery();
   const { data: paymentHistory, isLoading: paymentsLoading, refetch: refetchPayments } = trpc.admin.getAllPayments.useQuery();
   const makePaymentMutation = trpc.admin.makePayment.useMutation();
+
+  // Update payment date to current time on mount
+  useEffect(() => {
+    const updateDateTime = () => {
+      setPaymentDate(new Date().toISOString().slice(0, 16));
+    };
+    updateDateTime();
+    // Update every minute to keep it current
+    const interval = setInterval(updateDateTime, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleMakePayment = async () => {
     if (!selectedTraderId || !amount || !transactionHash) {
