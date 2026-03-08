@@ -449,3 +449,14 @@ None - All critical bugs resolved in v1.0
 - [x] Test Telegram bot connection (6/6 tests passing)
 - [ ] Test Telegram notifications with real trader accounts
 - [ ] Add notification preference setting (Telegram, In-app, Both)
+
+### Assign Traders to Master Accounts (Manage MetaCopier)
+- [x] Read existing MetaCopier and trader data structures
+- [x] Add backend procedure to fetch MC accounts with label "RFX Master"
+- [x] Add backend procedure to assign traders to a master (set liveAccountNumber)
+- [x] Build UI section in Manage MetaCopier with master account list
+- [x] Multi-select grid for each master showing all traders
+- [x] Grey out / disable traders already assigned to a different master
+- [x] Save button sets liveAccountNumber for selected traders
+- [x] Tests passing (4/4)
+- [x] Checkpoint saved

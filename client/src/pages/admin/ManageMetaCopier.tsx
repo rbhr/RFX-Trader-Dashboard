@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Pencil, Trash2, Users, Check, X, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 
 export default function ManageMetaCopier() {
   const utils = trpc.useUtils();
@@ -18,6 +20,15 @@ export default function ManageMetaCopier() {
   const createTemplate = trpc.copierTemplates.create.useMutation();
   const updateTemplate = trpc.copierTemplates.update.useMutation();
   const deleteTemplate = trpc.copierTemplates.delete.useMutation();
+
+  // Master assignment data
+  const { data: masterAccounts = [], isLoading: mastersLoading } = trpc.admin.getRfxMasterAccounts.useQuery();
+  const { data: allTraders = [], isLoading: tradersLoading } = trpc.admin.getTradersForMasterAssignment.useQuery();
+  const assignTradersMutation = trpc.admin.assignTradersToMaster.useMutation();
+
+  // Per-master selected trader IDs: { [masterLoginAccountNumber]: Set<number> }
+  const [masterSelections, setMasterSelections] = useState<Record<string, Set<number>>>({});
+  const [savingMaster, setSavingMaster] = useState<string | null>(null);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -157,6 +168,44 @@ export default function ManageMetaCopier() {
     }
   };
 
+  // Toggle a trader's selection for a given master
+  const toggleTraderForMaster = (masterLoginAccountNumber: string, traderId: number) => {
+    setMasterSelections(prev => {
+      const current = new Set(prev[masterLoginAccountNumber] || []);
+      if (current.has(traderId)) {
+        current.delete(traderId);
+      } else {
+        current.add(traderId);
+      }
+      return { ...prev, [masterLoginAccountNumber]: current };
+    });
+  };
+
+  const handleAssignSave = async (masterLoginAccountNumber: string) => {
+    const selected = masterSelections[masterLoginAccountNumber];
+    if (!selected || selected.size === 0) {
+      toast.warning("No traders selected", { description: "Please select at least one trader to assign." });
+      return;
+    }
+    setSavingMaster(masterLoginAccountNumber);
+    try {
+      const result = await assignTradersMutation.mutateAsync({
+        masterLoginAccountNumber,
+        traderIds: Array.from(selected),
+      });
+      toast.success(`Assigned ${result.updated} trader${result.updated !== 1 ? 's' : ''}`, {
+        description: `Live account number set to ${masterLoginAccountNumber}`,
+      });
+      // Clear selections and refresh traders
+      setMasterSelections(prev => ({ ...prev, [masterLoginAccountNumber]: new Set() }));
+      utils.admin.getTradersForMasterAssignment.invalidate();
+    } catch (err: any) {
+      toast.error("Assignment failed", { description: err.message || "Could not assign traders" });
+    } finally {
+      setSavingMaster(null);
+    }
+  };
+
   const handleScaleTypeChange = (value: string) => {
     const scaleTypeId = parseInt(value);
     const scaleTypeName = scaleTypeId === 3 ? "Fixed lot size" : "No scaling";
@@ -244,6 +293,126 @@ export default function ManageMetaCopier() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Assign Traders to Master Accounts */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <CardTitle>Assign Traders to Master Accounts</CardTitle>
+                  <CardDescription className="mt-1">
+                    Select traders to assign to each RFX Master account. Traders already assigned to a different master are greyed out and cannot be selected.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {mastersLoading || tradersLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading master accounts...</div>
+              ) : masterAccounts.length === 0 ? (
+                <div className="flex items-center gap-2 py-8 text-muted-foreground justify-center">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>No accounts with the "RFX Master" label found in MetaCopier.</span>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {masterAccounts.map((master: any) => {
+                    const masterLogin = master.loginAccountNumber;
+                    const selectedSet = masterSelections[masterLogin] || new Set<number>();
+                    const isSaving = savingMaster === masterLogin;
+
+                    // Traders already assigned to THIS master
+                    const assignedToThisMaster = allTraders.filter(
+                      (t: any) => t.liveAccountNumber === masterLogin
+                    );
+
+                    return (
+                      <div key={master.id} className="border rounded-lg p-5 space-y-4">
+                        {/* Master header */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-base">{master.alias}</h3>
+                            <p className="text-sm text-muted-foreground font-mono">{masterLogin}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {assignedToThisMaster.length > 0 && (
+                              <Badge variant="secondary">
+                                {assignedToThisMaster.length} assigned
+                              </Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              disabled={isSaving || selectedSet.size === 0}
+                              onClick={() => handleAssignSave(masterLogin)}
+                            >
+                              {isSaving ? "Saving..." : `Save (${selectedSet.size} selected)`}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Currently assigned traders */}
+                        {assignedToThisMaster.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Currently assigned</p>
+                            <div className="flex flex-wrap gap-2">
+                              {assignedToThisMaster.map((t: any) => (
+                                <Badge key={t.id} variant="outline" className="text-xs">
+                                  {t.name} <span className="font-mono ml-1 opacity-60">{t.magicNumber}</span>
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Trader selection grid */}
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Select traders to assign</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                            {allTraders.map((trader: any) => {
+                              const isAssignedElsewhere =
+                                trader.liveAccountNumber !== null &&
+                                trader.liveAccountNumber !== masterLogin;
+                              const isSelected = selectedSet.has(trader.id);
+
+                              return (
+                                <button
+                                  key={trader.id}
+                                  type="button"
+                                  disabled={isAssignedElsewhere}
+                                  onClick={() => !isAssignedElsewhere && toggleTraderForMaster(masterLogin, trader.id)}
+                                  className={[
+                                    "flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-left transition-colors",
+                                    isAssignedElsewhere
+                                      ? "opacity-40 cursor-not-allowed bg-muted border-muted"
+                                      : isSelected
+                                      ? "bg-primary/10 border-primary text-primary font-medium cursor-pointer"
+                                      : "hover:bg-muted cursor-pointer",
+                                  ].join(" ")}
+                                >
+                                  <span className={[
+                                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                                    isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40",
+                                  ].join(" ")}>
+                                    {isSelected && <Check className="h-3 w-3" />}
+                                  </span>
+                                  <span className="flex-1 truncate">{trader.name}</span>
+                                  <span className="font-mono text-xs opacity-60 shrink-0">{trader.magicNumber}</span>
+                                  {isAssignedElsewhere && (
+                                    <span className="text-xs opacity-60 shrink-0">({trader.liveAccountNumber})</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

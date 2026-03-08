@@ -878,9 +878,48 @@ export const appRouter = router({
 
     // Get all accounts with "RFX Master" label
     getRfxMasterAccounts: tradingProcedure
-      .query(async () => {
+      .query(async ({ ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
         const accounts = await metaCopierService.getAccountsByLabel('RFX Master');
         return accounts;
+      }),
+
+    // Get all traders with their current liveAccountNumber for master assignment UI
+    getTradersForMasterAssignment: tradingProcedure
+      .query(async ({ ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        const traders = await getAllMagicNumbers();
+        return traders
+          .filter(t => !t.isAdmin)
+          .map(t => ({
+            id: t.id,
+            name: t.name,
+            magicNumber: t.magicNumber,
+            liveAccountNumber: t.liveAccountNumber || null,
+          }));
+      }),
+
+    // Assign traders to a master account (sets liveAccountNumber)
+    assignTradersToMaster: tradingProcedure
+      .input(z.object({
+        masterLoginAccountNumber: z.string(),
+        traderIds: z.array(z.number()),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        // Update each selected trader's liveAccountNumber
+        for (const traderId of input.traderIds) {
+          await updateMagicNumber(traderId, {
+            liveAccountNumber: input.masterLoginAccountNumber,
+          });
+        }
+        return { success: true, updated: input.traderIds.length };
       }),
 
     // Get all traders for payment dropdown
