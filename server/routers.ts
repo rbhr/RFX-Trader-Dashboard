@@ -922,6 +922,19 @@ export const appRouter = router({
         return { success: true, updated: input.traderIds.length };
       }),
 
+    // Unassign a trader from their current master account (clears liveAccountNumber)
+    unassignTraderFromMaster: tradingProcedure
+      .input(z.object({
+        traderId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        await updateMagicNumber(input.traderId, { liveAccountNumber: null });
+        return { success: true };
+      }),
+
     // Get all traders for payment dropdown
     getAllTraders: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {

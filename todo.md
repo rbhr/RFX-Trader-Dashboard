@@ -460,3 +460,11 @@ None - All critical bugs resolved in v1.0
 - [x] Save button sets liveAccountNumber for selected traders
 - [x] Tests passing (4/4)
 - [x] Checkpoint saved
+
+### Unassign Trader from Master Account
+- [x] Add unassignTraderFromMaster backend procedure (sets liveAccountNumber to null)
+- [x] Add ✕ button to Currently Assigned badges in Manage MetaCopier
+- [x] Show confirmation before unassigning
+- [x] Refresh assignment list after unassign
+- [x] Tests passing (3/3)
+- [x] Checkpoint saved

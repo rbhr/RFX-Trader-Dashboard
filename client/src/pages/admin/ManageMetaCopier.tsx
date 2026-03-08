@@ -25,6 +25,11 @@ export default function ManageMetaCopier() {
   const { data: masterAccounts = [], isLoading: mastersLoading } = trpc.admin.getRfxMasterAccounts.useQuery();
   const { data: allTraders = [], isLoading: tradersLoading } = trpc.admin.getTradersForMasterAssignment.useQuery();
   const assignTradersMutation = trpc.admin.assignTradersToMaster.useMutation();
+  const unassignTraderMutation = trpc.admin.unassignTraderFromMaster.useMutation();
+
+  // Confirm unassign state: { traderId, traderName }
+  const [confirmUnassign, setConfirmUnassign] = useState<{ traderId: number; traderName: string } | null>(null);
+  const [unassigningId, setUnassigningId] = useState<number | null>(null);
 
   // Per-master selected trader IDs: { [masterLoginAccountNumber]: Set<number> }
   const [masterSelections, setMasterSelections] = useState<Record<string, Set<number>>>({});
@@ -179,6 +184,27 @@ export default function ManageMetaCopier() {
       }
       return { ...prev, [masterLoginAccountNumber]: current };
     });
+  };
+
+  const handleUnassign = async (traderId: number, traderName: string) => {
+    setConfirmUnassign({ traderId, traderName });
+  };
+
+  const confirmUnassignAction = async () => {
+    if (!confirmUnassign) return;
+    setUnassigningId(confirmUnassign.traderId);
+    try {
+      await unassignTraderMutation.mutateAsync({ traderId: confirmUnassign.traderId });
+      toast.success(`${confirmUnassign.traderName} unassigned`, {
+        description: "Live account number has been cleared.",
+      });
+      utils.admin.getTradersForMasterAssignment.invalidate();
+    } catch (err: any) {
+      toast.error("Unassign failed", { description: err.message || "Could not unassign trader" });
+    } finally {
+      setUnassigningId(null);
+      setConfirmUnassign(null);
+    }
   };
 
   const handleAssignSave = async (masterLoginAccountNumber: string) => {
@@ -361,8 +387,22 @@ export default function ManageMetaCopier() {
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Currently assigned</p>
                             <div className="flex flex-wrap gap-2">
                               {assignedToThisMaster.map((t: any) => (
-                                <Badge key={t.id} variant="outline" className="text-xs">
-                                  {t.name} <span className="font-mono ml-1 opacity-60">{t.magicNumber}</span>
+                                <Badge
+                                  key={t.id}
+                                  variant="outline"
+                                  className="text-xs flex items-center gap-1 pr-1"
+                                >
+                                  {t.name}
+                                  <span className="font-mono ml-1 opacity-60">{t.magicNumber}</span>
+                                  <button
+                                    type="button"
+                                    title={`Unassign ${t.name}`}
+                                    disabled={unassigningId === t.id}
+                                    onClick={() => handleUnassign(t.id, t.name)}
+                                    className="ml-1 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5 transition-colors disabled:opacity-50"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
                                 </Badge>
                               ))}
                             </div>
@@ -597,6 +637,30 @@ export default function ManageMetaCopier() {
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unassign Trader Confirmation Dialog */}
+      <Dialog open={!!confirmUnassign} onOpenChange={(open) => !open && setConfirmUnassign(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Unassign Trader</DialogTitle>
+            <DialogDescription>
+              Remove <strong>{confirmUnassign?.traderName}</strong> from this master account? Their live account number will be cleared and they will no longer copy this master.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmUnassign(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmUnassignAction}
+              disabled={!!unassigningId}
+            >
+              {unassigningId ? "Removing..." : "Unassign"}
             </Button>
           </DialogFooter>
         </DialogContent>
