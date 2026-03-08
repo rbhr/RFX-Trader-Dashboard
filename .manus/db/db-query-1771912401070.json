@@ -1,0 +1,200 @@
+{
+  "query": "SELECT name, magicNumber, telegramHandle FROM magic_numbers ORDER BY name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT name, magicNumber, telegramHandle FROM magic_numbers ORDER BY name;",
+  "rows": [
+    {
+      "name": "Administrator",
+      "magicNumber": "admin",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Ahmed",
+      "magicNumber": "21008",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Ali",
+      "magicNumber": "22700",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Amber",
+      "magicNumber": "28600",
+      "telegramHandle": "@Amberfx111"
+    },
+    {
+      "name": "Azra",
+      "magicNumber": "29180",
+      "telegramHandle": "@Azrafx001"
+    },
+    {
+      "name": "Bisma",
+      "magicNumber": "20788",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Farhan",
+      "magicNumber": "22710",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Feroz",
+      "magicNumber": "22719",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Gulam",
+      "magicNumber": "22729",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Kashif",
+      "magicNumber": "22730",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Khalid",
+      "magicNumber": "25931",
+      "telegramHandle": "@Khalidhussain561"
+    },
+    {
+      "name": "Khan",
+      "magicNumber": "26337",
+      "telegramHandle": "@Khanjan2252"
+    },
+    {
+      "name": "Lifetime Test Trader",
+      "magicNumber": "LIFETIMETEST",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Maria",
+      "magicNumber": "26350",
+      "telegramHandle": "@Meerahmed987"
+    },
+    {
+      "name": "Marvin",
+      "magicNumber": "22735",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Meer",
+      "magicNumber": "26513",
+      "telegramHandle": "@Meerahmed987"
+    },
+    {
+      "name": "Melanie",
+      "magicNumber": "22736",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "No Telegram Trader",
+      "magicNumber": "tg0623321",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "No Telegram Trader",
+      "magicNumber": "telegram-test-456",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "No Telegram Trader",
+      "magicNumber": "tg0602187",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "No Telegram Trader",
+      "magicNumber": "tg0564099",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "No Telegram Trader",
+      "magicNumber": "tg0518088",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Omair",
+      "magicNumber": "22742",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Richard",
+      "magicNumber": "6868",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Saif",
+      "magicNumber": "22739",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Samad",
+      "magicNumber": "22745",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Sameer",
+      "magicNumber": "22747",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Shadost",
+      "magicNumber": "26784",
+      "telegramHandle": "@ShahDost3922"
+    },
+    {
+      "name": "Sheeraz",
+      "magicNumber": "22751",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Somar",
+      "magicNumber": "23706",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Sonia",
+      "magicNumber": "22748",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Tarique",
+      "magicNumber": "22770",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Telegram Test Trader",
+      "magicNumber": "telegram-test-123",
+      "telegramHandle": "@testtrader"
+    },
+    {
+      "name": "Telegram Test Trader",
+      "magicNumber": "tg10515520",
+      "telegramHandle": "@testtrader"
+    },
+    {
+      "name": "Telegram Test Trader",
+      "magicNumber": "tg10561603",
+      "telegramHandle": "@testtrader"
+    },
+    {
+      "name": "Test Trader",
+      "magicNumber": "TEST999",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Zarab",
+      "magicNumber": "22852",
+      "telegramHandle": "NULL"
+    },
+    {
+      "name": "Zeeshan",
+      "magicNumber": "22973",
+      "telegramHandle": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "name\tmagicNumber\ttelegramHandle\nAdministrator\tadmin\tNULL\nAhmed\t21008\tNULL\nAli\t22700\tNULL\nAmber\t28600\t@Amberfx111\nAzra\t29180\t@Azrafx001\nBisma\t20788\tNULL\nFarhan\t22710\tNULL\nFeroz\t22719\tNULL\nGulam\t22729\tNULL\nKashif\t22730\tNULL\nKhalid\t25931\t@Khalidhussain561\nKhan\t26337\t@Khanjan2252\nLifetime Test Trader\tLIFETIMETEST\tNULL\nMaria\t26350\t@Meerahmed987\nMarvin\t22735\tNULL\nMeer\t26513\t@Meerahmed987\nMelanie\t22736\tNULL\nNo Telegram Trader\ttg0623321\tNULL\nNo Telegram Trader\ttelegram-test-456\tNULL\nNo Telegram Trader\ttg0602187\tNULL\nNo Telegram Trader\ttg0564099\tNULL\nNo Telegram Trader\ttg0518088\tNULL\nOmair\t22742\tNULL\nRichard\t6868\tNULL\nSaif\t22739\tNULL\nSamad\t22745\tNULL\nSameer\t22747\tNULL\nShadost\t26784\t@ShahDost3922\nSheeraz\t22751\tNULL\nSomar\t23706\tNULL\nSonia\t22748\tNULL\nTarique\t22770\tNULL\nTelegram Test Trader\ttelegram-test-123\t@testtrader\nTelegram Test Trader\ttg10515520\t@testtrader\nTelegram Test Trader\ttg10561603\t@testtrader\nTest Trader\tTEST999\tNULL\nZarab\t22852\tNULL\nZeeshan\t22973\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1543
+}

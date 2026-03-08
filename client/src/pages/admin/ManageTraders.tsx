@@ -509,6 +509,12 @@ export default function ManageTraders() {
                       {sortField === 'lifetimeIncome' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
                     </div>
                   </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('telegramHandle')}>
+                    <div className="flex items-center gap-1">
+                      Telegram
+                      {sortField === 'telegramHandle' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                    </div>
+                  </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort('isActive')}>
                     <div className="flex items-center gap-1">
                       Status
@@ -586,6 +592,11 @@ export default function ManageTraders() {
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="text-success">${trader.lifetimeIncome.toFixed(2)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {trader.telegramHandle || <span className="italic opacity-50">Not set</span>}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

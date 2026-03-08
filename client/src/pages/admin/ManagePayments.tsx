@@ -19,7 +19,17 @@ import {
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { DollarSign, Send, Copy, ExternalLink } from "lucide-react";
+import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ManagePayments() {
   const [selectedTraderId, setSelectedTraderId] = useState<string>("");
@@ -29,6 +39,7 @@ export default function ManagePayments() {
   const [transactionHash, setTransactionHash] = useState<string>("");
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const { data: traders, isLoading: tradersLoading } = trpc.admin.getAllTraders.useQuery();
   const { data: paymentHistory, isLoading: paymentsLoading, refetch: refetchPayments } = trpc.admin.getAllPayments.useQuery();
@@ -53,12 +64,16 @@ export default function ManagePayments() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleMakePayment = async () => {
+  const handleMakePayment = () => {
     if (!selectedTraderId || !amount || !transactionHash) {
       toast.error("Please fill in all required fields");
       return;
     }
+    setConfirmDialogOpen(true);
+  };
 
+  const handleConfirmPayment = async () => {
+    setConfirmDialogOpen(false);
     try {
       await makePaymentMutation.mutateAsync({
         magicNumberId: parseInt(selectedTraderId),
@@ -89,6 +104,33 @@ export default function ManagePayments() {
     } catch (error) {
       toast.error("Failed to record payment");
     }
+  };
+
+  const handleExportCSV = () => {
+    if (!paymentHistory || paymentHistory.length === 0) {
+      toast.error("No payment history to export");
+      return;
+    }
+    const headers = ["Date", "Trader", "Magic Number", "Amount (USDT)", "Network", "Network Fee (USDT)", "Transaction Hash"];
+    const rows = paymentHistory.map((p) => [
+      new Date(p.paymentDate).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }),
+      p.traderName,
+      p.magicNumber,
+      p.amount.toFixed(2),
+      p.network || 'TRC20',
+      (p.networkFee || 0).toFixed(2),
+      p.transactionHash,
+    ]);
+    const csvContent = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `payments_export_${today}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Payment history exported");
   };
 
   const formatCurrency = (value: number) => {
@@ -231,11 +273,17 @@ export default function ManagePayments() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Payment History</CardTitle>
-              <CardDescription>
-                Record of all payments made to traders
-              </CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between">
+              <div>
+                <CardTitle>Payment History</CardTitle>
+                <CardDescription>
+                  Record of all payments made to traders
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!paymentHistory || paymentHistory.length === 0}>
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
             </CardHeader>
             <CardContent>
               {paymentsLoading ? (
@@ -287,6 +335,58 @@ export default function ManagePayments() {
           </Card>
         </div>
       </div>
+
+      {/* Payment Confirmation Dialog */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              Confirm Payment
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>Please review the payment details before confirming:</p>
+                <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                  {(() => {
+                    const trader = traders?.find(t => t.id === parseInt(selectedTraderId));
+                    return (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Trader</span>
+                          <span className="font-medium text-foreground">{trader?.name || '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Amount</span>
+                          <span className="font-semibold text-foreground">{parseFloat(amount || '0').toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Network</span>
+                          <span className="font-medium text-foreground">{trader?.usdtNetwork || 'TRC20'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Network Fee</span>
+                          <span className="font-medium text-foreground">{parseFloat(networkFee || '0').toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">TX Hash</span>
+                          <span className="font-mono text-xs text-foreground break-all max-w-[200px] text-right">{transactionHash}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmPayment} disabled={makePaymentMutation.isPending}>
+              {makePaymentMutation.isPending ? "Recording..." : "Confirm Payment"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Transmission Proof Dialog */}
       <Dialog open={proofDialogOpen} onOpenChange={setProofDialogOpen}>

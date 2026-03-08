@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, name, magicNumber, mcAccountId FROM magic_numbers WHERE magicNumber = '66724';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute SELECT id, name, magicNumber, mcAccountId FROM magic_numbers WHERE magicNumber = '66724';",
+  "rows": [
+    {
+      "id": "420001",
+      "name": "Zeeshan v3",
+      "magicNumber": "66724",
+      "mcAccountId": "5bfafd2a-d7f5-4469-a390-284a10e12468"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmagicNumber\tmcAccountId\n420001\tZeeshan v3\t66724\t5bfafd2a-d7f5-4469-a390-284a10e12468\n",
+  "stderr": "",
+  "execution_time_ms": 1601
+}

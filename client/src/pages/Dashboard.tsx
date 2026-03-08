@@ -149,7 +149,20 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [usdtAddress, setUsdtAddress] = useState<string>("");
-  const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("");
+  const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("")
+  const [usdtAddressError, setUsdtAddressError] = useState<string | null>(null);
+
+  const validateUsdtAddress = (address: string, network: string): string | null => {
+    if (!address) return null;
+    if (network === "TRC20") {
+      if (address.length !== 34 || !address.startsWith("T"))
+        return "TRC20 address must be 34 characters and start with 'T'";
+    } else if (network === "ERC20") {
+      if (address.length !== 42 || !address.startsWith("0x"))
+        return "ERC20 address must be 42 characters and start with '0x'";
+    }
+    return null;
+  };
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -205,6 +218,12 @@ export default function Dashboard() {
   };
 
   const handleSaveUsdtInfo = async () => {
+    const validationError = validateUsdtAddress(usdtAddress, usdtNetwork);
+    if (validationError) {
+      setUsdtAddressError(validationError);
+      return;
+    }
+    setUsdtAddressError(null);
     try {
       await updateUsdtMutation.mutateAsync({
         usdtAddress: usdtAddress || undefined,
@@ -509,9 +528,43 @@ export default function Dashboard() {
           </DialogHeader>
           
           <Tabs defaultValue="payments" className="w-full">
-            <TabsList className="grid w-full grid-cols-1">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="account">Account</TabsTrigger>
               <TabsTrigger value="payments">Payments</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="account" className="space-y-4 mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Account Information</CardTitle>
+                  <CardDescription>
+                    Your trading account details
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm font-medium">Name</span>
+                    <span className="text-sm">{session?.name || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm font-medium">Magic Number</span>
+                    <span className="text-sm font-mono">{session?.magicNumber || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <div>
+                      <span className="text-sm font-medium">Telegram Handle</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Used to receive payment notifications via Telegram</p>
+                    </div>
+                    <span className="text-sm">
+                      {session?.telegramHandle 
+                        ? <span className="font-mono">{session.telegramHandle}</span>
+                        : <span className="italic text-muted-foreground">Not set — contact your manager</span>
+                      }
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
             
             <TabsContent value="payments" className="space-y-4 mt-4">
               <Card>
@@ -529,12 +582,22 @@ export default function Dashboard() {
                         id="usdtAddress"
                         placeholder="Enter your USDT wallet address"
                         value={usdtAddress}
-                        onChange={(e) => setUsdtAddress(e.target.value)}
+                        onChange={(e) => {
+                          setUsdtAddress(e.target.value);
+                          setUsdtAddressError(validateUsdtAddress(e.target.value, usdtNetwork));
+                        }}
+                        className={usdtAddressError ? "border-red-500 focus-visible:ring-red-500" : ""}
                       />
+                      {usdtAddressError && (
+                        <p className="text-xs text-red-500">{usdtAddressError}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="usdtNetwork">Network</Label>
-                      <Select value={usdtNetwork} onValueChange={(value: "TRC20" | "ERC20") => setUsdtNetwork(value)}>
+                      <Select value={usdtNetwork} onValueChange={(value: "TRC20" | "ERC20") => {
+                          setUsdtNetwork(value);
+                          setUsdtAddressError(validateUsdtAddress(usdtAddress, value));
+                        }}>
                         <SelectTrigger id="usdtNetwork">
                           <SelectValue placeholder="Select network" />
                         </SelectTrigger>
@@ -544,7 +607,7 @@ export default function Dashboard() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button onClick={handleSaveUsdtInfo} disabled={updateUsdtMutation.isPending}>
+                    <Button onClick={handleSaveUsdtInfo} disabled={updateUsdtMutation.isPending || !!usdtAddressError}>
                       {updateUsdtMutation.isPending ? "Saving..." : "Save USDT Information"}
                     </Button>
                   </div>

@@ -395,27 +395,27 @@ None - All critical bugs resolved in v1.0
 ## Version 1.5 Release (Planned)
 
 ### Payment Confirmation Modal
-- [ ] Create confirmation dialog component for payment submission
-- [ ] Display payment summary before recording (trader name, amount, network, transaction hash)
-- [ ] Add "Confirm" and "Cancel" buttons
-- [ ] Show confirmation modal when admin clicks "Record Payment"
-- [ ] Only submit payment after explicit confirmation
+- [x] Create confirmation dialog component for payment submission
+- [x] Display payment summary before recording (trader name, amount, network, transaction hash)
+- [x] Add "Confirm" and "Cancel" buttons
+- [x] Show confirmation modal when admin clicks "Record Payment"
+- [x] Only submit payment after explicit confirmation
 
 ### USDT Address Validation
-- [ ] Implement TRC20 address validation (34 characters, starts with 'T')
-- [ ] Implement ERC20 address validation (42 characters, starts with '0x')
-- [ ] Add real-time validation feedback in trader settings USDT address field
-- [ ] Show error message for invalid address format
-- [ ] Prevent saving invalid USDT addresses
+- [x] Implement TRC20 address validation (34 characters, starts with 'T')
+- [x] Implement ERC20 address validation (42 characters, starts with '0x')
+- [x] Add real-time validation feedback in trader settings USDT address field
+- [x] Show error message for invalid address format
+- [x] Prevent saving invalid USDT addresses
 - [ ] Add validation tests for both network types
 
 ### Payment Export to CSV
-- [ ] Add "Export to CSV" button in admin payment history section
-- [ ] Generate CSV with columns: Date, Trader, Amount, Network, Network Fee, Transaction Hash
-- [ ] Format dates in readable format (YYYY-MM-DD HH:mm)
-- [ ] Include all payment records or allow date range filtering
-- [ ] Trigger browser download of generated CSV file
-- [ ] Add filename with current date (e.g., "payments_export_2026-02-24.csv")
+- [x] Add "Export to CSV" button in admin payment history section
+- [x] Generate CSV with columns: Date, Trader, Amount, Network, Network Fee, Transaction Hash
+- [x] Format dates in readable format (YYYY-MM-DD HH:mm)
+- [x] Include all payment records or allow date range filtering
+- [x] Trigger browser download of generated CSV file
+- [x] Add filename with current date (e.g., "payments_export_2026-02-24.csv")
 
 
 ## Telegram Handle Field
@@ -425,4 +425,27 @@ None - All critical bugs resolved in v1.0
 - [x] Update backend updateTrader to accept telegramHandle
 - [x] Add Telegram Handle input field to Edit Trader dialog
 - [x] Test editing and saving Telegram Handle
-- [ ] Create checkpoint
+- [x] Create checkpoint
+
+### Telegram Handle Display in Traders Table
+- [x] Add "Telegram" column to Manage Traders table
+- [x] Display telegram handle in table (show handle or "Not set")
+- [x] Make Telegram column sortable
+- [ ] Add filter option to show only traders with/without Telegram handles
+
+### Telegram Handle in Trader Settings
+- [x] Add Telegram Handle field to trader Settings dialog
+- [x] Display as read-only field in Settings > Account Information section
+- [x] Show "Not set" message if trader has no Telegram handle
+- [x] Add informational text explaining Telegram is used for notifications
+
+### Telegram Bot Integration
+- [x] Research and select Telegram Bot API library for Node.js (node-telegram-bot-api)
+- [x] Create Telegram bot (@RFXTraderBot) and obtain bot token
+- [x] Add bot token to environment variables via webdev_request_secrets
+- [x] Implement sendTelegramMessage function in backend (server/telegram.ts)
+- [x] Update payment notification system to send via Telegram
+- [x] Add fallback to in-app notification if Telegram send fails
+- [x] Test Telegram bot connection (6/6 tests passing)
+- [ ] Test Telegram notifications with real trader accounts
+- [ ] Add notification preference setting (Telegram, In-app, Both)

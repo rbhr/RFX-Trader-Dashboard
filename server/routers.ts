@@ -40,6 +40,7 @@ import {
   getAllTimeStart
 } from "./metacopier";
 import { nanoid } from "nanoid";
+import { sendTelegramMessage, buildPaymentMessage } from "./telegram";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
 
@@ -174,6 +175,7 @@ export const appRouter = router({
         lifetimeIncome: parseFloat(ctx.tradingSession.magicNumber.lifetimeIncome || '0'),
         usdtAddress: ctx.tradingSession.magicNumber.usdtAddress || null,
         usdtNetwork: ctx.tradingSession.magicNumber.usdtNetwork || null,
+        telegramHandle: ctx.tradingSession.magicNumber.telegramHandle || null,
       };
     }),
 
@@ -916,6 +918,9 @@ export const appRouter = router({
           notificationSent: p.notificationSent,
           traderName: trader?.name || 'Unknown',
           magicNumber: trader?.magicNumber || 'N/A',
+          network: trader?.usdtNetwork || 'TRC20',
+          networkFee: parseFloat(p.networkFee || '0'),
+          usdtAddress: trader?.usdtAddress || null,
         };
       });
     }),
@@ -962,7 +967,25 @@ export const appRouter = router({
             type: "payment",
             isRead: false,
           });
-          console.log(`[Payment] Notification sent to ${trader.name} for payment of $${input.amount}`);
+          console.log(`[Payment] In-app notification sent to ${trader.name} for payment of $${input.amount}`);
+
+          // Send Telegram notification if trader has a handle
+          if (trader.telegramHandle) {
+            const telegramMsg = buildPaymentMessage({
+              traderName: trader.name,
+              amount: input.amount,
+              network: trader.usdtNetwork || 'TRC20',
+              networkFee: input.networkFee || 0,
+              transactionHash: input.transactionHash,
+              paymentDate: input.paymentDate,
+            });
+            const sent = await sendTelegramMessage(trader.telegramHandle, telegramMsg);
+            if (sent) {
+              console.log(`[Payment] Telegram notification sent to ${trader.telegramHandle}`);
+            } else {
+              console.warn(`[Payment] Telegram notification failed for ${trader.telegramHandle} — in-app notification still delivered`);
+            }
+          }
         }
 
         return { success: true };
