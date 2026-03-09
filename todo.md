@@ -502,3 +502,28 @@ None - All critical bugs resolved in v1.0
 - [x] Add Risk Limit Breaches link to admin sidebar nav
 - [x] Tests passing (4/4)
 - [x] Checkpoint saved
+
+### Breach Count Badge on Admin Sidebar
+- [ ] Query count of active unresolved risk limit breaches in AdminLayout
+- [ ] Show red count badge on "Risk Limit Breaches" nav item when count > 0
+- [ ] Auto-refresh badge count every 30 seconds
+- [ ] Hide badge when all breaches are resolved
+
+### Bulk Resolve Risk Limit Breaches
+- [ ] Add "Resolve All" button on Risk Limit Breaches page (visible only when active breaches exist)
+- [ ] Show confirmation dialog before bulk resolving (count of breaches to be resolved)
+- [ ] Call resolveRiskLimitBreach for each active breach in sequence
+- [ ] Refresh breach list after bulk resolve completes
+
+### Risk Limit History per Trader
+- [ ] Add riskLimitHistory table to schema (traderId, oldLimit, newLimit, changedAt, changedBy)
+- [ ] Record each risk limit change in history when updateTraderRiskLimit is called
+- [ ] Show history log in Edit Trader dialog (small table: Date, Old Limit, New Limit, Changed By)
+- [ ] Push schema migration and add DB helpers
+
+### Sticky Name and Magic Columns in Manage Traders
+- [x] Freeze Name column as sticky left (position: sticky, left: 0)
+- [x] Freeze Magic column as sticky left (position: sticky, left: 160px)
+- [x] Add bg-background to sticky cells to prevent content bleed-through
+- [x] Applied to both TableHead (z-20) and TableCell (z-10) rows
+- [x] Table wrapper set to overflow-x-auto for horizontal scroll

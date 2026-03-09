@@ -511,17 +511,17 @@ export default function ManageTraders() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="border rounded-lg">
+          <div className="border rounded-lg overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('name')}>
+                  <TableHead className="cursor-pointer select-none sticky left-0 z-20 bg-background" onClick={() => handleSort('name')}>
                     <div className="flex items-center gap-1">
                       Name
                       {sortField === 'name' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('magicNumber')}>
+                  <TableHead className="cursor-pointer select-none sticky left-[160px] z-20 bg-background" onClick={() => handleSort('magicNumber')}>
                     <div className="flex items-center gap-1">
                       Magic
                       {sortField === 'magicNumber' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
@@ -607,8 +607,8 @@ export default function ManageTraders() {
                 {filteredAndSortedTraders && filteredAndSortedTraders.length > 0 ? (
                   filteredAndSortedTraders.map((trader) => (
                     <TableRow key={trader.id}>
-                      <TableCell className="font-medium">{trader.name}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-medium sticky left-0 z-10 bg-background">{trader.name}</TableCell>
+                      <TableCell className="sticky left-[160px] z-10 bg-background">
                         <span className="font-mono text-sm">{trader.magicNumber}</span>
                         {trader.isAdmin && (
                           <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
