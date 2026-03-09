@@ -58,6 +58,44 @@ export async function sendTelegramMessage(
 }
 
 /**
+ * Build a risk limit breach notification message for a trader.
+ */
+export function buildRiskLimitBreachMessage(params: {
+  traderName: string;
+  equity: number;
+  riskLimit: number;
+}): string {
+  const { traderName, equity, riskLimit } = params;
+  return (
+    `🚨 <b>Risk Limit Breached</b>\n\n` +
+    `Hi ${traderName},\n\n` +
+    `Your incubator account equity has dropped to <b>$${equity.toFixed(2)}</b>, ` +
+    `which is below your risk limit of <b>$${riskLimit.toFixed(2)}</b>.\n\n` +
+    `<b>All trades have been closed.</b>\n\n` +
+    `Please message an admin to re-enable trading on your account.`
+  );
+}
+
+/**
+ * Build a risk limit breach alert message for the admin.
+ */
+export function buildAdminRiskLimitAlertMessage(params: {
+  traderName: string;
+  magicNumber: string;
+  equity: number;
+  riskLimit: number;
+}): string {
+  const { traderName, magicNumber, equity, riskLimit } = params;
+  return (
+    `⚠️ <b>Risk Limit Breach Alert</b>\n\n` +
+    `Trader <b>${traderName}</b> (Magic: ${magicNumber}) has breached their risk limit.\n\n` +
+    `• Equity at breach: <b>$${equity.toFixed(2)}</b>\n` +
+    `• Risk limit: <b>$${riskLimit.toFixed(2)}</b>\n\n` +
+    `All trades have been closed. The trader has been notified and must contact an admin to re-enable trading.`
+  );
+}
+
+/**
  * Build a payment notification message for a trader.
  */
 export function buildPaymentMessage(params: {

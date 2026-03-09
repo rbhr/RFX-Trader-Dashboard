@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useTradingSession } from "@/hooks/useTradingSession";
@@ -195,6 +195,42 @@ export default function Dashboard() {
   const { data: riskLimit } = trpc.trading.getRiskLimit.useQuery(undefined, {
     refetchInterval: 300000, // Refresh every 5 minutes
   });
+
+  const { data: accountEquity } = trpc.trading.getAccountEquity.useQuery(undefined, {
+    refetchInterval: 60000, // Check equity every 60 seconds
+  });
+
+  const reportBreachMutation = trpc.trading.reportRiskLimitBreach.useMutation();
+
+  // Breach detection: fire once when equity drops below risk limit
+  const breachReportedRef = useRef(false);
+  useEffect(() => {
+    if (
+      accountEquity != null &&
+      riskLimit != null &&
+      accountEquity < riskLimit &&
+      !breachReportedRef.current
+    ) {
+      breachReportedRef.current = true;
+      reportBreachMutation.mutate(
+        { equity: accountEquity, riskLimit },
+        {
+          onSuccess: (result) => {
+            if (!('alreadyReported' in result)) {
+              toast.error(
+                `⚠️ Risk limit breached! Equity $${accountEquity.toFixed(2)} is below your $${riskLimit.toFixed(2)} limit. All trades have been closed. Please contact an admin.`,
+                { duration: 10000 }
+              );
+            }
+          },
+        }
+      );
+    }
+    // Reset ref when equity recovers above limit
+    if (accountEquity != null && riskLimit != null && accountEquity >= riskLimit) {
+      breachReportedRef.current = false;
+    }
+  }, [accountEquity, riskLimit]);
 
   // Redirect to login if not authenticated
   if (!sessionLoading && !session) {

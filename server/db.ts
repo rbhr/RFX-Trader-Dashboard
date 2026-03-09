@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate, payments, InsertPayment, notifications, InsertNotification } from "../drizzle/schema";
+import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate, payments, InsertPayment, notifications, InsertNotification, riskLimitBreaches, InsertRiskLimitBreach } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -318,4 +318,47 @@ export async function markAllNotificationsAsRead(magicNumberId: number) {
   if (!db) throw new Error("Database not available");
 
   await db.update(notifications).set({ isRead: true }).where(eq(notifications.magicNumberId, magicNumberId));
+}
+
+// Risk Limit Breach management functions
+export async function createRiskLimitBreach(data: InsertRiskLimitBreach) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(riskLimitBreaches).values(data);
+  return result;
+}
+
+export async function getActiveBreachByMagicNumberId(magicNumberId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(riskLimitBreaches)
+    .where(eq(riskLimitBreaches.magicNumberId, magicNumberId))
+    .orderBy(desc(riskLimitBreaches.createdAt))
+    .limit(1);
+
+  // Return only if unresolved (no resolvedAt)
+  const breach = result[0];
+  if (breach && !breach.resolvedAt) return breach;
+  return undefined;
+}
+
+export async function getAllRiskLimitBreaches() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(riskLimitBreaches)
+    .orderBy(desc(riskLimitBreaches.createdAt));
+}
+
+export async function resolveRiskLimitBreach(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(riskLimitBreaches).set({ resolvedAt: new Date() }).where(eq(riskLimitBreaches.id, id));
 }

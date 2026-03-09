@@ -28,7 +28,11 @@ import {
   createNotification,
   getNotificationsByMagicNumberId,
   markNotificationAsRead,
-  markAllNotificationsAsRead
+  markAllNotificationsAsRead,
+  createRiskLimitBreach,
+  getActiveBreachByMagicNumberId,
+  getAllRiskLimitBreaches,
+  resolveRiskLimitBreach
 } from "./db";
 import { 
   metaCopierService, 
@@ -40,7 +44,8 @@ import {
   getAllTimeStart
 } from "./metacopier";
 import { nanoid } from "nanoid";
-import { sendTelegramMessage, buildPaymentMessage } from "./telegram";
+import { sendTelegramMessage, buildPaymentMessage, buildRiskLimitBreachMessage, buildAdminRiskLimitAlertMessage } from "./telegram";
+import { notifyOwner } from "./_core/notification";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
 
@@ -324,6 +329,81 @@ export const appRouter = router({
         return null;
       }
     }),
+
+    // Get current account equity for breach detection
+    getAccountEquity: tradingProcedure.query(async ({ ctx }) => {
+      const { mcAccountId, liveAccountNumber } = ctx.tradingSession.magicNumber;
+
+      // Prefer the live (master) account if assigned
+      const targetAccountId = liveAccountNumber
+        ? await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber)
+        : mcAccountId;
+
+      if (!targetAccountId) return null;
+
+      try {
+        const info = await metaCopierService.getAccountInfoById(targetAccountId);
+        return info.equity ?? null;
+      } catch {
+        return null;
+      }
+    }),
+
+    // Report a risk limit breach (called by the trader's dashboard when equity drops below limit)
+    reportRiskLimitBreach: tradingProcedure
+      .input(z.object({
+        equity: z.number(),
+        riskLimit: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const trader = ctx.tradingSession.magicNumber;
+
+        // Avoid duplicate breach records — only create one if no active breach exists
+        const existing = await getActiveBreachByMagicNumberId(trader.id);
+        if (existing) {
+          return { alreadyReported: true };
+        }
+
+        // Record the breach
+        await createRiskLimitBreach({
+          magicNumberId: trader.id,
+          equityAtBreach: String(input.equity),
+          riskLimitAtBreach: String(input.riskLimit),
+          traderNotified: false,
+          adminNotified: false,
+        });
+
+        // In-app notification for the trader
+        await createNotification({
+          magicNumberId: trader.id,
+          title: "Risk Limit Breached — Trading Disabled",
+          message: `Your incubator account equity dropped to $${input.equity.toFixed(2)}, below your risk limit of $${input.riskLimit.toFixed(2)}. All trades have been closed. Please contact an admin to re-enable trading.`,
+          type: "error",
+        });
+
+        // Telegram notification for the trader
+        let traderTelegramSent = false;
+        if (trader.telegramHandle) {
+          const msg = buildRiskLimitBreachMessage({
+            traderName: trader.name,
+            equity: input.equity,
+            riskLimit: input.riskLimit,
+          });
+          traderTelegramSent = await sendTelegramMessage(trader.telegramHandle, msg);
+        }
+
+        // Owner in-app notification
+        try {
+          await notifyOwner({
+            title: `Risk Limit Breach: ${trader.name}`,
+            content: `Trader ${trader.name} (Magic: ${trader.magicNumber}) breached their risk limit. Equity: $${input.equity.toFixed(2)}, Limit: $${input.riskLimit.toFixed(2)}.`,
+          });
+        } catch {
+          // Non-fatal
+        }
+
+        return { reported: true, traderTelegramSent };
+      }),
 
     // Get open positions
     getOpenPositions: tradingProcedure.query(async ({ ctx }) => {
@@ -954,6 +1034,95 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
         }
         await updateMagicNumber(input.traderId, { liveAccountNumber: null });
+        return { success: true };
+      }),
+
+    // Get risk limit for a specific trader (admin use)
+    getTraderRiskLimit: tradingProcedure
+      .input(z.object({ mcAccountId: z.string() }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        const limits = await metaCopierService.getAccountRiskLimits(input.mcAccountId);
+        const activeLimit = limits.find((l: any) => l.active && l.absoluteRiskLimit != null);
+        return activeLimit
+          ? { id: activeLimit.id, absoluteRiskLimit: activeLimit.absoluteRiskLimit as number }
+          : null;
+      }),
+
+    // Update risk limit for a specific trader (admin use)
+    updateTraderRiskLimit: tradingProcedure
+      .input(z.object({
+        mcAccountId: z.string(),
+        absoluteRiskLimit: z.number().positive(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        // Fetch existing limits to find the limit ID to update
+        const limits = await metaCopierService.getAccountRiskLimits(input.mcAccountId);
+        const activeLimit = limits.find((l: any) => l.active);
+
+        if (activeLimit?.id) {
+          // Update existing limit via PUT
+          await metaCopierService.updateAccountRiskLimit(
+            input.mcAccountId,
+            activeLimit.id,
+            input.absoluteRiskLimit
+          );
+        } else {
+          // No existing limit — create one
+          await metaCopierService.createAccountRiskLimit(
+            input.mcAccountId,
+            input.absoluteRiskLimit
+          );
+        }
+        return { success: true };
+      }),
+
+    // Get all risk limit breach records (admin)
+    getRiskLimitBreaches: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      const breaches = await getAllRiskLimitBreaches();
+      const traders = await getAllMagicNumbers();
+      return breaches.map(b => {
+        const trader = traders.find(t => t.id === b.magicNumberId);
+        return {
+          id: b.id,
+          magicNumberId: b.magicNumberId,
+          traderName: trader?.name || 'Unknown',
+          magicNumber: trader?.magicNumber || 'N/A',
+          equityAtBreach: parseFloat(b.equityAtBreach),
+          riskLimitAtBreach: parseFloat(b.riskLimitAtBreach),
+          traderNotified: b.traderNotified,
+          adminNotified: b.adminNotified,
+          resolvedAt: b.resolvedAt,
+          createdAt: b.createdAt,
+        };
+      });
+    }),
+
+    // Resolve (clear) a risk limit breach and re-enable trading (admin)
+    resolveRiskLimitBreach: tradingProcedure
+      .input(z.object({ breachId: z.number(), magicNumberId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        await resolveRiskLimitBreach(input.breachId);
+        // Re-enable trading by setting isActive = true on the magic number
+        await updateMagicNumber(input.magicNumberId, { isActive: true });
+        // In-app notification to the trader that trading has been re-enabled
+        await createNotification({
+          magicNumberId: input.magicNumberId,
+          title: "Trading Re-enabled",
+          message: "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
+          type: "info",
+        });
         return { success: true };
       }),
 

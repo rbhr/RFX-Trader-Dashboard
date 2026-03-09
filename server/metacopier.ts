@@ -132,6 +132,12 @@ class MetaCopierService {
     );
   }
 
+  async getAccountInfoById(accountId: string): Promise<AccountInfo> {
+    return this.fetchWithAuth<AccountInfo>(
+      `/accounts/${accountId}/information`
+    );
+  }
+
   /**
    * Check if a MetaCopier account exists by account number
    */
@@ -631,6 +637,55 @@ class MetaCopierService {
     } catch (error) {
       console.error('[MetaCopier] Error fetching account risk limits:', error);
       return [];
+    }
+  }
+
+  /**
+   * Update an existing risk limit on an account
+   */
+  async updateAccountRiskLimit(accountId: string, limitId: string, absoluteRiskLimit: number): Promise<void> {
+    try {
+      const existing = (await this.fetchWithAuth<any[]>(`/accounts/${accountId}/riskLimits`, 'GET')) || [];
+      const current = existing.find((l: any) => l.id === limitId) || {};
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/riskLimits/${limitId}`,
+        'PUT',
+        {
+          ...current,
+          absoluteRiskLimit,
+          riskType: current.riskType || { id: 4 },
+          riskLimit: current.riskLimit ?? 0.0,
+          fulfillSeconds: current.fulfillSeconds ?? 1,
+          closeAllOpenPositions: current.closeAllOpenPositions ?? true,
+          active: true,
+        }
+      );
+    } catch (error: any) {
+      console.error('[MetaCopier] Error updating risk limit:', error);
+      throw new Error('Failed to update risk limit');
+    }
+  }
+
+  /**
+   * Create a new risk limit on an account
+   */
+  async createAccountRiskLimit(accountId: string, absoluteRiskLimit: number): Promise<void> {
+    try {
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/riskLimits`,
+        'POST',
+        {
+          riskType: { id: 4 },
+          riskLimit: 0.0,
+          absoluteRiskLimit,
+          fulfillSeconds: 1,
+          closeAllOpenPositions: true,
+          active: true,
+        }
+      );
+    } catch (error: any) {
+      console.error('[MetaCopier] Error creating risk limit:', error);
+      throw new Error('Failed to create risk limit');
     }
   }
 

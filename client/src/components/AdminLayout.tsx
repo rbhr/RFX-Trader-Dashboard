@@ -11,6 +11,7 @@ import {
   CreditCard,
   LogOut,
   TrendingUp,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,6 +48,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       title: "Manage Payments",
       href: "/admin/payments",
       icon: CreditCard,
+    },
+    {
+      title: "Risk Limit Breaches",
+      href: "/admin/risk-breaches",
+      icon: ShieldAlert,
     },
   ];
 

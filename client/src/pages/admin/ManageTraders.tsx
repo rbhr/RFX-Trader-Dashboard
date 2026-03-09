@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ interface Trader {
   mtPassword: string | null;
   mtVersion: string | null;
   mcLocation: string | null;
+  mcAccountId: string | null;
   liveAccountNumber: string | null;
   manager: string | null;
   telegramHandle: string | null;
@@ -61,6 +62,61 @@ interface Trader {
   updatedAt: Date;
 }
 
+// Small component to display risk limit in table cell (lazy fetch)
+function TraderRiskLimitCell({ mcAccountId }: { mcAccountId: string | null }) {
+  const { data, isLoading } = trpc.admin.getTraderRiskLimit.useQuery(
+    { mcAccountId: mcAccountId! },
+    { enabled: !!mcAccountId, staleTime: 5 * 60 * 1000 }
+  );
+  if (!mcAccountId) return <span className="italic opacity-50 text-sm">No MC</span>;
+  if (isLoading) return <span className="text-sm text-muted-foreground">...</span>;
+  if (!data) return <span className="italic opacity-50 text-sm">Not set</span>;
+  return <span className="text-sm font-medium text-destructive">${data.absoluteRiskLimit.toFixed(2)}</span>;
+}
+
+// Risk limit input field that pre-fills with current value from API
+function RiskLimitField({
+  mcAccountId,
+  value,
+  onChange,
+  loading,
+  setLoading,
+}: {
+  mcAccountId: string;
+  value: number | "";
+  onChange: (v: number | "") => void;
+  loading: boolean;
+  setLoading: (v: boolean) => void;
+}) {
+  const { data, isLoading } = trpc.admin.getTraderRiskLimit.useQuery(
+    { mcAccountId },
+    { staleTime: 5 * 60 * 1000 }
+  );
+
+  useEffect(() => {
+    if (data?.absoluteRiskLimit !== undefined && value === "") {
+      onChange(data.absoluteRiskLimit);
+    }
+  }, [data]);
+
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+      <Input
+        id="edit-riskLimit"
+        type="number"
+        min="0"
+        step="1"
+        className="pl-7"
+        value={isLoading ? "" : value}
+        placeholder={isLoading ? "Loading..." : "e.g. 300"}
+        disabled={isLoading}
+        onChange={(e) => onChange(e.target.value === "" ? "" : parseFloat(e.target.value))}
+      />
+    </div>
+  );
+}
+
 export default function ManageTraders() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -72,6 +128,9 @@ export default function ManageTraders() {
   const [managerFilter, setManagerFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<keyof Trader | 'copyRate' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const [riskLimitValue, setRiskLimitValue] = useState<number | "">("");
+  const [riskLimitLoading, setRiskLimitLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     magicNumber: "99999",
@@ -100,6 +159,15 @@ export default function ManageTraders() {
     undefined,
     { enabled: editDialogOpen }
   );
+
+  const updateRiskLimit = trpc.admin.updateTraderRiskLimit.useMutation({
+    onSuccess: () => {
+      toast.success("Risk limit updated successfully");
+    },
+    onError: (error) => {
+      toast.error(`Risk limit update failed: ${error.message}`);
+    },
+  });
 
   const updateTrader = trpc.admin.updateTrader.useMutation({
     onSuccess: () => {
@@ -184,6 +252,8 @@ export default function ManageTraders() {
 
   const handleEdit = (trader: Trader) => {
     setSelectedTrader(trader);
+    setRiskLimitValue("");
+    setRiskLimitLoading(false);
     setFormData({
       magicNumber: trader.magicNumber,
       name: trader.name,
@@ -320,6 +390,14 @@ export default function ManageTraders() {
     }
 
     updateTrader.mutate(updates);
+
+    // If risk limit was changed and trader has an MC account, update it too
+    if (riskLimitValue !== "" && selectedTrader?.mcAccountId) {
+      updateRiskLimit.mutate({
+        mcAccountId: selectedTrader.mcAccountId,
+        absoluteRiskLimit: Number(riskLimitValue),
+      });
+    }
   };
 
   const handleSubmitAdd = () => {
@@ -509,7 +587,8 @@ export default function ManageTraders() {
                       {sortField === 'lifetimeIncome' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('telegramHandle')}>
+                   <TableHead>Risk Limit</TableHead>
+                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort('telegramHandle')}>
                     <div className="flex items-center gap-1">
                       Telegram
                       {sortField === 'telegramHandle' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
@@ -592,6 +671,9 @@ export default function ManageTraders() {
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="text-success">${trader.lifetimeIncome.toFixed(2)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <TraderRiskLimitCell mcAccountId={trader.mcAccountId} />
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground">
@@ -924,6 +1006,19 @@ export default function ManageTraders() {
                     placeholder="@username"
                   />
                 </div>
+                {selectedTrader?.mcAccountId && (
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-riskLimit">Risk Limit ($)</Label>
+                    <RiskLimitField
+                      mcAccountId={selectedTrader.mcAccountId}
+                      value={riskLimitValue}
+                      onChange={setRiskLimitValue}
+                      loading={riskLimitLoading}
+                      setLoading={setRiskLimitLoading}
+                    />
+                    <p className="text-xs text-muted-foreground">Absolute equity risk limit. If equity drops below this value, all trades are closed.</p>
+                  </div>
+                )}
               </div>
               <div className="border-t pt-4 mt-2">
                 <h3 className="font-semibold mb-3">Lifetime Metrics</h3>

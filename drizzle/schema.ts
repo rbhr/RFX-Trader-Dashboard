@@ -151,3 +151,21 @@ export const notifications = mysqlTable("notifications", {
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * Risk Limit Breaches table
+ * Tracks when a trader's equity drops below their risk limit
+ */
+export const riskLimitBreaches = mysqlTable("risk_limit_breaches", {
+  id: int("id").autoincrement().primaryKey(),
+  magicNumberId: int("magicNumberId").notNull(),
+  equityAtBreach: decimal("equityAtBreach", { precision: 15, scale: 2 }).notNull(),
+  riskLimitAtBreach: decimal("riskLimitAtBreach", { precision: 15, scale: 2 }).notNull(),
+  traderNotified: boolean("traderNotified").notNull().default(false),
+  adminNotified: boolean("adminNotified").notNull().default(false),
+  resolvedAt: timestamp("resolvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type RiskLimitBreach = typeof riskLimitBreaches.$inferSelect;
+export type InsertRiskLimitBreach = typeof riskLimitBreaches.$inferInsert;

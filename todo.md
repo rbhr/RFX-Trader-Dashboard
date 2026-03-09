@@ -478,3 +478,27 @@ None - All critical bugs resolved in v1.0
 - [x] Risk limit value shown in red for emphasis
 - [x] Tests passing (4/4)
 - [x] Checkpoint saved
+
+### Risk Limit Column in Manage Traders Table
+- [x] Add TraderRiskLimitCell component (lazy per-row fetch from MetaCopier API)
+- [x] Add Risk Limit column to Manage Traders table showing $amount or loading indicator
+- [x] Column visible in admin Manage Traders view
+
+### Edit Risk Limit from Admin Manage Traders
+- [x] Add updateAccountRiskLimit and createAccountRiskLimit methods to MetaCopierService
+- [x] Add getTraderRiskLimit and updateTraderRiskLimit tRPC admin procedures
+- [x] Add RiskLimitField component to Edit Trader dialog (numeric input, $ prefix)
+- [x] Save updates the MetaCopier risk limit via API
+
+### Risk Limit Breach Notifications (In-app + Telegram)
+- [x] Add riskLimitBreaches table to schema and push migration
+- [x] Add createRiskLimitBreach, getActiveBreachByMagicNumberId, resolveRiskLimitBreach, getAllRiskLimitBreaches DB helpers
+- [x] Add getAccountEquity tRPC procedure (polls MetaCopier every 60s from trader dashboard)
+- [x] Add reportRiskLimitBreach tRPC procedure (deduplicates, sends in-app + Telegram to trader and admin)
+- [x] Add resolveRiskLimitBreach and getRiskLimitBreaches admin procedures
+- [x] Breach detection useEffect in trader Dashboard fires once when equity < riskLimit
+- [x] Show toast error to trader when breach detected
+- [x] Create RiskLimitBreaches admin page with active/resolved breach tables and Re-enable Trading dialog
+- [x] Add Risk Limit Breaches link to admin sidebar nav
+- [x] Tests passing (4/4)
+- [x] Checkpoint saved
