@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -31,8 +31,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users, ArrowUpDown, ArrowUp, ArrowDown, Columns3 } from "lucide-react";
 
 interface Trader {
   id: number;
@@ -131,6 +140,27 @@ export default function ManageTraders() {
 
   const [riskLimitValue, setRiskLimitValue] = useState<number | "">("");
   const [riskLimitLoading, setRiskLimitLoading] = useState(false);
+
+  // Column visibility state — all visible by default
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    manager: true,
+    profitShare: true,
+    copyRate: true,
+    mtAccount: true,
+    mtServer: true,
+    mtVersion: true,
+    mcLocation: true,
+    lifetimeProfit: true,
+    lifetimeShare: true,
+    lifetimeIncome: true,
+    riskLimit: true,
+    telegram: true,
+    status: true,
+  });
+
+  const toggleColumn = (col: string) => {
+    setVisibleColumns((prev) => ({ ...prev, [col]: !prev[col] }));
+  };
 
   const [formData, setFormData] = useState({
     magicNumber: "99999",
@@ -499,6 +529,42 @@ export default function ManageTraders() {
               <option value="RFX">RFX</option>
               <option value="HubbFX">HubbFX</option>
             </select>
+            {/* Column visibility toggle */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Columns3 className="h-4 w-4 mr-2" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {([
+                  ['manager', 'Manager'],
+                  ['profitShare', 'Profit Share'],
+                  ['copyRate', 'Copy Rate'],
+                  ['mtAccount', 'MT Account'],
+                  ['mtServer', 'MT Server'],
+                  ['mtVersion', 'MT Version'],
+                  ['mcLocation', 'MC Location'],
+                  ['lifetimeProfit', 'Lifetime Profit'],
+                  ['lifetimeShare', 'Lifetime Share'],
+                  ['lifetimeIncome', 'Lifetime Income'],
+                  ['riskLimit', 'Risk Limit'],
+                  ['telegram', 'Telegram'],
+                  ['status', 'Status'],
+                ] as [string, string][]).map(([key, label]) => (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={visibleColumns[key]}
+                    onCheckedChange={() => toggleColumn(key)}
+                  >
+                    {label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={() => setAddDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Add Trader
@@ -511,96 +577,120 @@ export default function ManageTraders() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="border rounded-lg overflow-x-auto">
+          <div className="border rounded-lg overflow-x-auto max-h-[calc(100vh-220px)]">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-30">
                 <TableRow>
-                  <TableHead className="cursor-pointer select-none sticky left-0 z-20 bg-background" onClick={() => handleSort('name')}>
+                  <TableHead className="cursor-pointer select-none sticky left-0 z-40 bg-background" onClick={() => handleSort('name')}>
                     <div className="flex items-center gap-1">
                       Name
                       {sortField === 'name' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none sticky left-[160px] z-20 bg-background" onClick={() => handleSort('magicNumber')}>
+                  <TableHead className="cursor-pointer select-none sticky left-[160px] z-40 bg-background" onClick={() => handleSort('magicNumber')}>
                     <div className="flex items-center gap-1">
                       Magic
                       {sortField === 'magicNumber' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('manager')}>
-                    <div className="flex items-center gap-1">
-                      Manager
-                      {sortField === 'manager' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('profitShare')}>
-                    <div className="flex items-center gap-1">
-                      Profit Share
-                      {sortField === 'profitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('copyRate')}>
-                    <div className="flex items-center gap-1">
-                      Copy Rate
-                      {sortField === 'copyRate' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtAccount')}>
-                    <div className="flex items-center gap-1">
-                      MT Account
-                      {sortField === 'mtAccount' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtServer')}>
-                    <div className="flex items-center gap-1">
-                      MT Server
-                      {sortField === 'mtServer' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtVersion')}>
-                    <div className="flex items-center gap-1">
-                      MT Version
-                      {sortField === 'mtVersion' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mcLocation')}>
-                    <div className="flex items-center gap-1">
-                      MC Location
-                      {sortField === 'mcLocation' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfit')}>
-                    <div className="flex items-center justify-end gap-1">
-                      Lifetime Profit
-                      {sortField === 'lifetimeProfit' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfitShare')}>
-                    <div className="flex items-center justify-end gap-1">
-                      Lifetime Share
-                      {sortField === 'lifetimeProfitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeIncome')}>
-                    <div className="flex items-center justify-end gap-1">
-                      Lifetime Income
-                      {sortField === 'lifetimeIncome' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                   <TableHead>Risk Limit</TableHead>
-                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort('telegramHandle')}>
-                    <div className="flex items-center gap-1">
-                      Telegram
-                      {sortField === 'telegramHandle' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('isActive')}>
-                    <div className="flex items-center gap-1">
-                      Status
-                      {sortField === 'isActive' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {visibleColumns.manager && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('manager')}>
+                      <div className="flex items-center gap-1">
+                        Manager
+                        {sortField === 'manager' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.profitShare && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('profitShare')}>
+                      <div className="flex items-center gap-1">
+                        Profit Share
+                        {sortField === 'profitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.copyRate && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('copyRate')}>
+                      <div className="flex items-center gap-1">
+                        Copy Rate
+                        {sortField === 'copyRate' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.mtAccount && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtAccount')}>
+                      <div className="flex items-center gap-1">
+                        MT Account
+                        {sortField === 'mtAccount' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.mtServer && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtServer')}>
+                      <div className="flex items-center gap-1">
+                        MT Server
+                        {sortField === 'mtServer' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.mtVersion && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtVersion')}>
+                      <div className="flex items-center gap-1">
+                        MT Version
+                        {sortField === 'mtVersion' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.mcLocation && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mcLocation')}>
+                      <div className="flex items-center gap-1">
+                        MC Location
+                        {sortField === 'mcLocation' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.lifetimeProfit && (
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfit')}>
+                      <div className="flex items-center justify-end gap-1">
+                        Lifetime Profit
+                        {sortField === 'lifetimeProfit' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.lifetimeShare && (
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfitShare')}>
+                      <div className="flex items-center justify-end gap-1">
+                        Lifetime Share
+                        {sortField === 'lifetimeProfitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.lifetimeIncome && (
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeIncome')}>
+                      <div className="flex items-center justify-end gap-1">
+                        Lifetime Income
+                        {sortField === 'lifetimeIncome' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.riskLimit && <TableHead>Risk Limit</TableHead>}
+                  {visibleColumns.telegram && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('telegramHandle')}>
+                      <div className="flex items-center gap-1">
+                        Telegram
+                        {sortField === 'telegramHandle' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.status && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('isActive')}>
+                      <div className="flex items-center gap-1">
+                        Status
+                        {sortField === 'isActive' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      </div>
+                    </TableHead>
+                  )}
+                  <TableHead className="text-right sticky right-0 z-40 bg-background">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -616,83 +706,109 @@ export default function ManageTraders() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary">
-                          {trader.manager || 'RFX'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            value={(trader.profitShare * 100).toFixed(1)}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) / 100;
-                              if (!isNaN(newValue) && newValue >= 0 && newValue <= 1) {
-                                handleUpdateProfitShare(trader, newValue);
-                              }
-                            }}
-                            className="w-16 h-8 text-sm"
-                          />
-                          <span className="text-sm text-muted-foreground">%</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-sm font-semibold">
-                          {trader.copierInfo ? (
-                            trader.copierInfo.isActive ? (
-                              trader.copierInfo.scaleType === 3
-                                ? trader.copierInfo.fixedLotSize.toFixed(2)
-                                : `${trader.copierInfo.multiplier}x`
-                            ) : (
-                              <span className="text-muted-foreground">0</span>
-                            )
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-sm">{trader.mtAccount || "-"}</span>
-                      </TableCell>
-                      <TableCell className="text-sm">{trader.mtServer || "-"}</TableCell>
-                      <TableCell className="text-sm">{trader.mtVersion || "-"}</TableCell>
-                      <TableCell className="text-sm">{trader.mcLocation || "-"}</TableCell>
-                      <TableCell className="text-right">
-                        <span className={trader.lifetimeProfit >= 0 ? "text-success" : "text-destructive"}>
-                          ${trader.lifetimeProfit.toFixed(2)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="text-success">${trader.lifetimeProfitShare.toFixed(2)}</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="text-success">${trader.lifetimeIncome.toFixed(2)}</span>
-                      </TableCell>
-                      <TableCell>
-                        <TraderRiskLimitCell mcAccountId={trader.mcAccountId} />
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground">
-                          {trader.telegramHandle || <span className="italic opacity-50">Not set</span>}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={trader.isActive}
-                            onCheckedChange={() => handleToggleActive(trader)}
-                            disabled={trader.isAdmin}
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {trader.isActive ? "Active" : "Inactive"}
+                      {visibleColumns.manager && (
+                        <TableCell>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary">
+                            {trader.manager || 'RFX'}
                           </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
+                        </TableCell>
+                      )}
+                      {visibleColumns.profitShare && (
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={(trader.profitShare * 100).toFixed(1)}
+                              onChange={(e) => {
+                                const newValue = parseFloat(e.target.value) / 100;
+                                if (!isNaN(newValue) && newValue >= 0 && newValue <= 1) {
+                                  handleUpdateProfitShare(trader, newValue);
+                                }
+                              }}
+                              className="w-16 h-8 text-sm"
+                            />
+                            <span className="text-sm text-muted-foreground">%</span>
+                          </div>
+                        </TableCell>
+                      )}
+                      {visibleColumns.copyRate && (
+                        <TableCell>
+                          <span className="font-mono text-sm font-semibold">
+                            {trader.copierInfo ? (
+                              trader.copierInfo.isActive ? (
+                                trader.copierInfo.scaleType === 3
+                                  ? trader.copierInfo.fixedLotSize.toFixed(2)
+                                  : `${trader.copierInfo.multiplier}x`
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.mtAccount && (
+                        <TableCell>
+                          <span className="font-mono text-sm">{trader.mtAccount || "-"}</span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.mtServer && (
+                        <TableCell className="text-sm">{trader.mtServer || "-"}</TableCell>
+                      )}
+                      {visibleColumns.mtVersion && (
+                        <TableCell className="text-sm">{trader.mtVersion || "-"}</TableCell>
+                      )}
+                      {visibleColumns.mcLocation && (
+                        <TableCell className="text-sm">{trader.mcLocation || "-"}</TableCell>
+                      )}
+                      {visibleColumns.lifetimeProfit && (
+                        <TableCell className="text-right">
+                          <span className={trader.lifetimeProfit >= 0 ? "text-success" : "text-destructive"}>
+                            ${trader.lifetimeProfit.toFixed(2)}
+                          </span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.lifetimeShare && (
+                        <TableCell className="text-right">
+                          <span className="text-success">${trader.lifetimeProfitShare.toFixed(2)}</span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.lifetimeIncome && (
+                        <TableCell className="text-right">
+                          <span className="text-success">${trader.lifetimeIncome.toFixed(2)}</span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.riskLimit && (
+                        <TableCell>
+                          <TraderRiskLimitCell mcAccountId={trader.mcAccountId} />
+                        </TableCell>
+                      )}
+                      {visibleColumns.telegram && (
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {trader.telegramHandle || <span className="italic opacity-50">Not set</span>}
+                          </span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.status && (
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={trader.isActive}
+                              onCheckedChange={() => handleToggleActive(trader)}
+                              disabled={trader.isAdmin}
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              {trader.isActive ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </TableCell>
+                      )}
+                      <TableCell className="text-right sticky right-0 z-10 bg-background">
                         <div className="flex items-center justify-end gap-2">
                           <Button
                             variant="outline"

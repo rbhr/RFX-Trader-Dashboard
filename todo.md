@@ -527,3 +527,10 @@ None - All critical bugs resolved in v1.0
 - [x] Add bg-background to sticky cells to prevent content bleed-through
 - [x] Applied to both TableHead (z-20) and TableCell (z-10) rows
 - [x] Table wrapper set to overflow-x-auto for horizontal scroll
+
+### Manage Traders Table UX Improvements
+- [x] Freeze Actions column on the right (sticky right-0 z-10 bg-background)
+- [x] Sticky header row (TableHeader sticky top-0 z-30, sticky cells z-40)
+- [x] Table container max-height for vertical scrolling (calc(100vh-220px))
+- [x] Column visibility toggle dropdown (Columns button with DropdownMenuCheckboxItem)
+- [x] 13 optional columns: Manager, Profit Share, Copy Rate, MT Account, MT Server, MT Version, MC Location, Lifetime Profit, Lifetime Share, Lifetime Income, Risk Limit, Telegram, Status
