@@ -468,3 +468,13 @@ None - All critical bugs resolved in v1.0
 - [x] Refresh assignment list after unassign
 - [x] Tests passing (3/3)
 - [x] Checkpoint saved
+
+### Risk Limit Warning in Open Positions Section
+- [x] Locate Open Positions section in trader Dashboard
+- [x] Check how absolute risk limit value is available in trader session/MC data
+- [x] Add getAccountRiskLimits method to MetaCopierService (live API fetch, not hardcoded)
+- [x] Add getRiskLimit tRPC procedure to trading router
+- [x] Add warning line: "If the equity in your incubator account drops below ${riskLimit}, all trades will be closed..."
+- [x] Risk limit value shown in red for emphasis
+- [x] Tests passing (4/4)
+- [x] Checkpoint saved

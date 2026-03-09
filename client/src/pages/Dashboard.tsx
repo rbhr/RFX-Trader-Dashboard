@@ -192,6 +192,10 @@ export default function Dashboard() {
     refetchInterval: 300000, // Refresh every 5 minutes (doesn't change often)
   });
 
+  const { data: riskLimit } = trpc.trading.getRiskLimit.useQuery(undefined, {
+    refetchInterval: 300000, // Refresh every 5 minutes
+  });
+
   // Redirect to login if not authenticated
   if (!sessionLoading && !session) {
     setLocation("/");
@@ -466,6 +470,13 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground mt-1">
                     Your maximum open trades: <span className="font-semibold">{maxOpenTrades ?? 'unavailable'}</span>
                   </p>
+                  {riskLimit != null && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      If the equity in your incubator account drops below{' '}
+                      <span className="font-semibold text-destructive">${riskLimit.toLocaleString()}</span>,
+                      all trades will be closed. You will need to message an admin to re-enable trading.
+                    </p>
+                  )}
                 </>
               )}
             </div>

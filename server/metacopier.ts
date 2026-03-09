@@ -622,6 +622,19 @@ class MetaCopierService {
   }
 
   /**
+   * Get risk limits for an account
+   */
+  async getAccountRiskLimits(accountId: string): Promise<any[]> {
+    try {
+      const limits = await this.fetchWithAuth<any[]>(`/accounts/${accountId}/riskLimits`, 'GET');
+      return limits || [];
+    } catch (error) {
+      console.error('[MetaCopier] Error fetching account risk limits:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get MetaCopier account ID by login account number
    */
   async getAccountIdByLoginNumber(loginAccountNumber: string): Promise<string | null> {

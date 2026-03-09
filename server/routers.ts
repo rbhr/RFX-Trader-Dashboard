@@ -303,6 +303,28 @@ export const appRouter = router({
       }
     }),
 
+    // Get account risk limit (absolute equity threshold before all trades close)
+    getRiskLimit: tradingProcedure.query(async ({ ctx }) => {
+      const { mcAccountId } = ctx.tradingSession.magicNumber;
+
+      if (!mcAccountId) {
+        return null;
+      }
+
+      try {
+        const limits = await metaCopierService.getAccountRiskLimits(mcAccountId);
+        // Find the first active absolute risk limit
+        const activeLimit = limits.find((l: any) => l.active && l.absoluteRiskLimit != null);
+        if (activeLimit) {
+          return activeLimit.absoluteRiskLimit as number;
+        }
+        return null;
+      } catch (error) {
+        console.error('[Router] Error fetching risk limit:', error);
+        return null;
+      }
+    }),
+
     // Get open positions
     getOpenPositions: tradingProcedure.query(async ({ ctx }) => {
       const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
