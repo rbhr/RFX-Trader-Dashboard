@@ -16,7 +16,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ShieldAlert, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
-import DashboardLayout from "@/components/DashboardLayout";
+import AdminLayout from "@/components/AdminLayout";
 
 type Breach = {
   id: number;
@@ -60,7 +60,7 @@ export default function RiskLimitBreaches() {
   };
 
   return (
-    <DashboardLayout>
+    <AdminLayout>
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <ShieldAlert className="h-7 w-7 text-destructive" />
@@ -230,6 +230,6 @@ export default function RiskLimitBreaches() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DashboardLayout>
+    </AdminLayout>
   );
 }
