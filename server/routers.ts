@@ -390,17 +390,14 @@ export const appRouter = router({
 
     // Get current account equity for breach detection
     getAccountEquity: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      const { mcAccountId } = ctx.tradingSession.magicNumber;
 
-      // Prefer the live (master) account if assigned
-      const targetAccountId = liveAccountNumber
-        ? await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber)
-        : mcAccountId;
-
-      if (!targetAccountId) return null;
+      // Always use the trader's own MC account for equity (breach detection must compare
+      // the trader's incubator account equity against their risk limit, not the master account)
+      if (!mcAccountId) return null;
 
       try {
-        const info = await metaCopierService.getAccountInfoById(targetAccountId);
+        const info = await metaCopierService.getAccountInfoById(mcAccountId);
         return info.equity ?? null;
       } catch {
         return null;

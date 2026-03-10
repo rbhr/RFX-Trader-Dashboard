@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startTelegramPolling } from "../telegram";
+import { startBreachMonitor } from "../breachMonitor";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -67,6 +68,9 @@ async function startServer() {
 
   // Start Telegram bot polling to capture /start chat IDs
   startTelegramPolling();
+
+  // Start server-side risk limit breach monitor (runs every 5 minutes)
+  startBreachMonitor();
 }
 
 startServer().catch(console.error);
