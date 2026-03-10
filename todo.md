@@ -556,3 +556,9 @@ None - All critical bugs resolved in v1.0
 - [x] Change bold/red text in Open Positions to bold green
 - [x] Add "Your maximum lot size per trade: {maxLotSizeThreshold}" below max open trades line
 - [x] Source maxLotSizeThreshold from account features Trade Guardrails setting (type 37)
+
+### Open Positions Bold Green Values + Lot Size Fix
+- [x] Debug getMaxLotSize returning null despite type 37 feature existing — root cause was server not restarted after procedure was added (404 NOT_FOUND); fixed by restarting server
+- [x] Make multiplier value bold green in "multiplied by Xx" line
+- [x] Make max open trades value bold green
+- [x] Make max lot size value bold green (or "unavailable" in muted when null)

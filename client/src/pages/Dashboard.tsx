@@ -498,20 +498,20 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground mt-1">
                       {copierInfo.scaleType === 3 ? (
                         <>
-                          Each of your trades is going into the Live Account as <span className="font-semibold">{copierInfo.fixedLotSize} lots</span>
+                          Each of your trades is going into the Live Account as <span className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</span>
                         </>
                       ) : (
                         <>
-                          Each of your trades are being multiplied by <span className="font-semibold">{copierInfo.multiplier}x</span> into the Live Account
+                          Each of your trades are being multiplied by <span className="font-bold text-green-600">{copierInfo.multiplier}x</span> into the Live Account
                         </>
                       )}
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground mt-1">
-                    Your maximum open trades: <span className="font-semibold">{maxOpenTrades ?? 'unavailable'}</span>
+                    Your maximum open trades: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Your maximum lot size per trade: <span className="font-semibold">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
+                    Your maximum lot size per trade: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
                   </p>
                   {riskLimit != null && (
                     <p className="text-sm text-muted-foreground mt-1">
