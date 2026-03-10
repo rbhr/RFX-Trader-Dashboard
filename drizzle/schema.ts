@@ -42,6 +42,7 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   liveAccountNumber: varchar("liveAccountNumber", { length: 50 }),
   manager: varchar("manager", { length: 100 }).default("RFX"),
   telegramHandle: varchar("telegramHandle", { length: 100 }),
+  telegramChatId: varchar("telegramChatId", { length: 30 }),
   // Profit Tracking
   lifetimeProfit: decimal("lifetimeProfit", { precision: 15, scale: 2 }).default("0.00"),
   lifetimeProfitShare: decimal("lifetimeProfitShare", { precision: 15, scale: 2 }).default("0.00"),

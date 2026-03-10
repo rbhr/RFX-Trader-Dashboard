@@ -183,6 +183,7 @@ export const appRouter = router({
         usdtAddress: ctx.tradingSession.magicNumber.usdtAddress || null,
         usdtNetwork: ctx.tradingSession.magicNumber.usdtNetwork || null,
         telegramHandle: ctx.tradingSession.magicNumber.telegramHandle || null,
+        telegramConnected: !!ctx.tradingSession.magicNumber.telegramChatId,
       };
     }),
 
@@ -219,13 +220,16 @@ export const appRouter = router({
     // Send a test "Hello World" Telegram message to the trader's handle
     testTelegramMessage: tradingProcedure
       .mutation(async ({ ctx }) => {
-        const { telegramHandle, name } = ctx.tradingSession.magicNumber;
+        const { telegramHandle, telegramChatId, name } = ctx.tradingSession.magicNumber;
         if (!telegramHandle) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'No Telegram handle set. Save your handle first.' });
         }
-        const sent = await sendTelegramMessage(telegramHandle, `Hello World! 👋 This is a test message from RFX Trader Dashboard, ${name}. Your Telegram notifications are working correctly.`);
+        if (!telegramChatId) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Telegram not connected yet. Open Telegram, search for @RFXTraderBot and send /start, then try again.' });
+        }
+        const sent = await sendTelegramMessage(telegramHandle, `Hello World! 👋 This is a test message from RFX Trader Dashboard, ${name}. Your Telegram notifications are working correctly.`, telegramChatId);
         if (!sent) {
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to send Telegram message. Check that your handle is correct and you have started a chat with the bot.' });
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to send Telegram message. Please try again.' });
         }
         return { success: true };
       }),
@@ -437,13 +441,13 @@ export const appRouter = router({
 
         // Telegram notification for the trader
         let traderTelegramSent = false;
-        if (trader.telegramHandle) {
+        if (trader.telegramHandle && trader.telegramChatId) {
           const msg = buildRiskLimitBreachMessage({
             traderName: trader.name,
             equity: input.equity,
             riskLimit: input.riskLimit,
           });
-          traderTelegramSent = await sendTelegramMessage(trader.telegramHandle, msg);
+          traderTelegramSent = await sendTelegramMessage(trader.telegramHandle, msg, trader.telegramChatId);
         }
 
         // Owner in-app notification
@@ -1300,8 +1304,8 @@ export const appRouter = router({
           });
           console.log(`[Payment] In-app notification sent to ${trader.name} for payment of $${input.amount}`);
 
-          // Send Telegram notification if trader has a handle
-          if (trader.telegramHandle) {
+          // Send Telegram notification if trader has a handle and chat ID
+          if (trader.telegramHandle && trader.telegramChatId) {
             const telegramMsg = buildPaymentMessage({
               traderName: trader.name,
               amount: input.amount,
@@ -1310,7 +1314,7 @@ export const appRouter = router({
               transactionHash: input.transactionHash,
               paymentDate: input.paymentDate,
             });
-            const sent = await sendTelegramMessage(trader.telegramHandle, telegramMsg);
+            const sent = await sendTelegramMessage(trader.telegramHandle, telegramMsg, trader.telegramChatId);
             if (sent) {
               console.log(`[Payment] Telegram notification sent to ${trader.telegramHandle}`);
             } else {

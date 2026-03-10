@@ -1,4 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
+import { getMagicNumberByTelegramHandle, updateMagicNumber } from "./db";
 
 let bot: TelegramBot | null = null;
 
@@ -12,30 +13,65 @@ function getBot(): TelegramBot | null {
 }
 
 /**
- * Resolve a Telegram handle to a numeric chat ID.
- * This uses the getChat API which works when the user has previously
- * started a conversation with the bot.
+ * Start polling for incoming Telegram messages.
+ * When a user sends /start, we look up their handle in the DB and store their chat ID.
+ * This must be called once at server startup.
  */
-async function resolveChatId(handle: string): Promise<number | null> {
-  const b = getBot();
-  if (!b) return null;
-  try {
-    // Normalise: ensure it starts with @
-    const username = handle.startsWith("@") ? handle : `@${handle}`;
-    const chat = await b.getChat(username);
-    return chat.id;
-  } catch {
-    return null;
+export function startTelegramPolling(): void {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.warn("[Telegram] No bot token — polling disabled");
+    return;
   }
+
+  // Use a separate polling bot instance to avoid conflicts
+  const pollingBot = new TelegramBot(token, { polling: true });
+
+  pollingBot.on("message", async (msg) => {
+    const chatId = msg.chat.id;
+    const username = msg.from?.username;
+    const text = msg.text?.trim();
+
+    if (text === "/start" && username) {
+      try {
+        const trader = await getMagicNumberByTelegramHandle(username);
+        if (trader) {
+          await updateMagicNumber(trader.id, { telegramChatId: String(chatId) });
+          await pollingBot.sendMessage(
+            chatId,
+            `✅ <b>Connected!</b>\n\nHi ${trader.name}, your Telegram is now linked to RFX Trader Dashboard. You will receive payment and important notifications here.`,
+            { parse_mode: "HTML" }
+          );
+          console.log(`[Telegram] Linked chat ID ${chatId} to trader ${trader.name} (@${username})`);
+        } else {
+          await pollingBot.sendMessage(
+            chatId,
+            `👋 Hi @${username}! To link your Telegram to RFX Trader Dashboard, please save your Telegram handle in your dashboard settings first, then send /start again.`
+          );
+          console.log(`[Telegram] /start from unknown handle @${username} (chat ID: ${chatId})`);
+        }
+      } catch (err) {
+        console.error("[Telegram] Error handling /start:", err);
+      }
+    }
+  });
+
+  pollingBot.on("polling_error", (err) => {
+    console.error("[Telegram] Polling error:", err.message);
+  });
+
+  console.log("[Telegram] Bot polling started — listening for /start messages");
 }
 
 /**
- * Send a plain-text message to a Telegram user by their handle.
+ * Send a plain-text message to a Telegram user by their stored chat ID.
+ * Falls back to username resolution if no chat ID is stored yet.
  * Returns true on success, false on any failure.
  */
 export async function sendTelegramMessage(
   telegramHandle: string,
-  message: string
+  message: string,
+  chatId?: string | null
 ): Promise<boolean> {
   const b = getBot();
   if (!b) {
@@ -44,15 +80,16 @@ export async function sendTelegramMessage(
   }
 
   try {
-    const chatId = await resolveChatId(telegramHandle);
-    if (!chatId) {
-      console.warn(`[Telegram] Could not resolve chat ID for handle: ${telegramHandle}`);
+    // Prefer stored chat ID over username resolution
+    const targetId = chatId ?? null;
+    if (!targetId) {
+      console.warn(`[Telegram] No chat ID stored for handle: ${telegramHandle}. User must send /start to @RFXTraderBot first.`);
       return false;
     }
-    await b.sendMessage(chatId, message, { parse_mode: "HTML" });
+    await b.sendMessage(targetId, message, { parse_mode: "HTML" });
     return true;
   } catch (err) {
-    console.error(`[Telegram] Failed to send message to ${telegramHandle}:`, err);
+    console.error(`[Telegram] Failed to send message to ${telegramHandle} (chat ID: ${chatId}):`, err);
     return false;
   }
 }
@@ -115,12 +152,10 @@ export function buildPaymentMessage(params: {
     minute: "2-digit",
     timeZoneName: "short",
   });
-
   const explorerUrl =
     network === "ERC20"
       ? `https://etherscan.io/tx/${transactionHash}`
       : `https://tronscan.org/#/transaction/${transactionHash}`;
-
   return (
     `💰 <b>Payment Received</b>\n\n` +
     `Hi ${traderName},\n\n` +

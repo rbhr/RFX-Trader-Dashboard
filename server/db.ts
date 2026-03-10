@@ -1,4 +1,4 @@
-import { eq, desc, isNull, sql } from "drizzle-orm";
+import { eq, desc, isNull, sql, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate, payments, InsertPayment, notifications, InsertNotification, riskLimitBreaches, InsertRiskLimitBreach } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -97,6 +97,28 @@ export async function getMagicNumberByNumber(magicNumber: string) {
     .select()
     .from(magicNumbers)
     .where(eq(magicNumbers.magicNumber, magicNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getMagicNumberByTelegramHandle(handle: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  // Normalise: strip leading @ for comparison, store with or without
+  const normalised = handle.startsWith('@') ? handle.slice(1) : handle;
+  const withAt = `@${normalised}`;
+
+  const result = await db
+    .select()
+    .from(magicNumbers)
+    .where(
+      or(
+        eq(magicNumbers.telegramHandle, normalised),
+        eq(magicNumbers.telegramHandle, withAt)
+      )
+    )
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;

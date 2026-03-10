@@ -641,6 +641,21 @@ export default function Dashboard() {
                         {updateTelegramMutation.isPending ? "Saving..." : "Save"}
                       </Button>
                     </div>
+                    {session?.telegramHandle && (
+                      <div className="flex items-center gap-2">
+                        {session?.telegramConnected ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                            <span className="h-2 w-2 rounded-full bg-green-500 inline-block"></span>
+                            Connected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                            <span className="h-2 w-2 rounded-full bg-amber-500 inline-block"></span>
+                            Not connected — send /start to @RFXTraderBot
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -651,12 +666,15 @@ export default function Dashboard() {
                           onError: (e) => toast.error(e.message),
                         });
                       }}
-                      disabled={testTelegramMutation.isPending || !session?.telegramHandle}
+                      disabled={testTelegramMutation.isPending || !session?.telegramHandle || !session?.telegramConnected}
                     >
                       {testTelegramMutation.isPending ? "Sending..." : "Send Test Message"}
                     </Button>
                     {!session?.telegramHandle && (
-                      <p className="text-xs text-muted-foreground">Save a handle first to send a test message.</p>
+                      <p className="text-xs text-muted-foreground">Save a handle first, then send /start to @RFXTraderBot in Telegram.</p>
+                    )}
+                    {session?.telegramHandle && !session?.telegramConnected && (
+                      <p className="text-xs text-muted-foreground">Open Telegram, search <span className="font-mono">@RFXTraderBot</span> and send <span className="font-mono">/start</span> to activate notifications.</p>
                     )}
                   </div>
                 </CardContent>

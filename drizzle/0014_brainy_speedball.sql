@@ -1,0 +1,1 @@
+ALTER TABLE `magic_numbers` ADD `telegramChatId` varchar(30);

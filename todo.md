@@ -569,3 +569,13 @@ None - All critical bugs resolved in v1.0
 - [x] Add Telegram handle input field to settings dialog with description
 - [x] Add "Send Test Message" button that calls testTelegramMessage
 - [x] Show success/error toast after test message
+
+### Telegram Chat ID Fix
+- [x] Add telegramChatId column to magicNumbers schema
+- [x] Push DB migration
+- [x] Add /start handler in server that stores chat ID by matching username
+- [x] Update sendTelegramMessage to use stored chat ID instead of resolving @username
+- [x] Backfill Richard's chat ID (7295741516 for @cybersoftwareguy)
+- [x] Update testTelegramMessage to work with chat ID
+- [x] Add Connected/Not connected status badge in settings UI
+- [x] Show /start instructions when handle saved but not yet connected
