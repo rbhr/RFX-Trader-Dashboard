@@ -310,6 +310,31 @@ export const appRouter = router({
       }
     }),
 
+    // Get max lot size per trade from Trade Guardrails feature (type 37)
+    getMaxLotSize: tradingProcedure.query(async ({ ctx }) => {
+      const { mcAccountId } = ctx.tradingSession.magicNumber;
+
+      if (!mcAccountId) {
+        return null;
+      }
+
+      try {
+        const features = await metaCopierService.getAccountFeatures(mcAccountId);
+
+        // Find the Trade Guardrails feature (type 37)
+        const guardrailFeature = features.find((f: any) => f.type?.id === 37);
+
+        if (guardrailFeature && guardrailFeature.setting?.enabled) {
+          return guardrailFeature.setting.maxLotSizeThreshold ?? null;
+        }
+
+        return null;
+      } catch (error) {
+        console.error('[Router] Error fetching max lot size:', error);
+        return null;
+      }
+    }),
+
     // Get account risk limit (absolute equity threshold before all trades close)
     getRiskLimit: tradingProcedure.query(async ({ ctx }) => {
       const { mcAccountId } = ctx.tradingSession.magicNumber;

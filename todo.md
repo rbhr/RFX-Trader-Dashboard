@@ -551,3 +551,8 @@ None - All critical bugs resolved in v1.0
 - [x] Add "Resolve All" button on Risk Limit Breaches page (visible only when active breaches exist)
 - [x] Show confirmation AlertDialog with breach count before resolving
 - [x] Refresh breach list after bulk resolve completes
+
+### Open Positions UI Updates
+- [x] Change bold/red text in Open Positions to bold green
+- [x] Add "Your maximum lot size per trade: {maxLotSizeThreshold}" below max open trades line
+- [x] Source maxLotSizeThreshold from account features Trade Guardrails setting (type 37)
