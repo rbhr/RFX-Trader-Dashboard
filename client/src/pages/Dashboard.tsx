@@ -207,6 +207,10 @@ export default function Dashboard() {
     refetchInterval: 60000, // Check equity every 60 seconds
   });
 
+  const { data: accountBalanceEquity } = trpc.trading.getAccountBalanceAndEquity.useQuery(undefined, {
+    refetchInterval: 60000, // Refresh every 60 seconds alongside equity
+  });
+
   const reportBreachMutation = trpc.trading.reportRiskLimitBreach.useMutation();
 
   // Breach detection: fire once when equity drops below risk limit
@@ -420,7 +424,7 @@ export default function Dashboard() {
           {/* Today's P&L Hero Card */}
           <Card className="bg-gradient-to-br from-primary/5 via-background to-background border-primary/20">
             <CardHeader>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <DollarSign className="h-4 w-4" />
                 <span>Today's Total P&L</span>
               </div>
@@ -454,12 +458,12 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Copier Configuration Card */}
+          {/* Account & Copier Configuration Card */}
           <Card className="border-primary/20">
             <CardHeader>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <Activity className="h-4 w-4" />
-                <span>Copier Configuration</span>
+                <span>Account &amp; Copier Configuration</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -495,6 +499,18 @@ export default function Dashboard() {
                       all trades will be closed. You will need to message an admin to re-enable trading.
                     </p>
                   )}
+                  <div className="border-t pt-2 mt-2 space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      Account Balance: <span className="font-bold text-green-600">
+                        {accountBalanceEquity?.balance != null ? formatCurrency(accountBalanceEquity.balance) : 'unavailable'}
+                      </span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Account Equity: <span className="font-bold text-green-600">
+                        {accountBalanceEquity?.equity != null ? formatCurrency(accountBalanceEquity.equity) : 'unavailable'}
+                      </span>
+                    </p>
+                  </div>
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">No copier linked to your account.</p>

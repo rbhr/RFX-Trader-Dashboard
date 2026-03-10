@@ -621,3 +621,8 @@ None - All critical bugs resolved in v1.0
 - [x] Split Today's Total P&L and Copier Configuration info into two side-by-side cards
 - [x] New "Copier Configuration" card (right) contains: multiplier, max open trades, max lot size
 - [x] Removed copier info from Open Positions header (now only in its own card)
+
+### Dashboard Card Header + Balance/Equity
+- [x] Bold headings for Today's Total P&L and Account & Copier Configuration cards
+- [x] Rename "Copier Configuration" to "Account & Copier Configuration"
+- [x] Add Account Balance and Account Equity lines below copier info (with divider)

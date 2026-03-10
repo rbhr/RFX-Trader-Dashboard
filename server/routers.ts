@@ -407,6 +407,24 @@ export const appRouter = router({
       }
     }),
 
+    // Get both balance and equity for the dashboard card
+    getAccountBalanceAndEquity: tradingProcedure.query(async ({ ctx }) => {
+      const { mcAccountId, liveAccountNumber } = ctx.tradingSession.magicNumber;
+
+      const targetAccountId = liveAccountNumber
+        ? await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber)
+        : mcAccountId;
+
+      if (!targetAccountId) return null;
+
+      try {
+        const info = await metaCopierService.getAccountInfoById(targetAccountId);
+        return { balance: info.balance ?? null, equity: info.equity ?? null };
+      } catch {
+        return null;
+      }
+    }),
+
     // Report a risk limit breach (called by the trader's dashboard when equity drops below limit)
     reportRiskLimitBreach: tradingProcedure
       .input(z.object({
