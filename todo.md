@@ -598,4 +598,4 @@ None - All critical bugs resolved in v1.0
 ### v1.4.8 Release
 - [x] Implement Telegram welcome message on /start (personalised with name, profit share, dashboard link)
 - [x] Bump version to 1.4.8 in package.json
-- [ ] Push to GitHub (via checkpoint)
+- [x] Push to GitHub (via checkpoint — version: 8586c036)
