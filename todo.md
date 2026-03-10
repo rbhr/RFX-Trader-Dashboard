@@ -626,3 +626,6 @@ None - All critical bugs resolved in v1.0
 - [x] Bold headings for Today's Total P&L and Account & Copier Configuration cards
 - [x] Rename "Copier Configuration" to "Account & Copier Configuration"
 - [x] Add Account Balance and Account Equity lines below copier info (with divider)
+
+### Fix: Account Balance/Equity showing master account instead of trader's account
+- [x] Fix getAccountBalanceAndEquity to always use mcAccountId (trader's own incubator account), removed liveAccountNumber fallback

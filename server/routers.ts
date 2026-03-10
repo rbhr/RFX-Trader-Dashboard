@@ -407,18 +407,15 @@ export const appRouter = router({
       }
     }),
 
-    // Get both balance and equity for the dashboard card
+    // Get both balance and equity for the trader's own incubator account
     getAccountBalanceAndEquity: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId, liveAccountNumber } = ctx.tradingSession.magicNumber;
+      const { mcAccountId } = ctx.tradingSession.magicNumber;
 
-      const targetAccountId = liveAccountNumber
-        ? await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber)
-        : mcAccountId;
-
-      if (!targetAccountId) return null;
+      // Always use the trader's own MC account (mcAccountId), not the master/live account
+      if (!mcAccountId) return null;
 
       try {
-        const info = await metaCopierService.getAccountInfoById(targetAccountId);
+        const info = await metaCopierService.getAccountInfoById(mcAccountId);
         return { balance: info.balance ?? null, equity: info.equity ?? null };
       } catch {
         return null;
