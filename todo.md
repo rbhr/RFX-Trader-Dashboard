@@ -2,6 +2,23 @@
 
 ---
 
+## 🚀 RELEASE MILESTONE - v1.5 (Planned)
+**Status:** 🔵 In Planning
+
+### New Admin View
+- [ ] **Admin Open Trades** — table showing all live open trades across all traders, with standard trade columns (Symbol, Type, Volume, Open Price, Current Price, Profit) plus Magic Number and Trader Name
+- [ ] **Admin Trade History** — full historical trade log across all traders with standard columns plus Magic Number and Trader Name; with grouping, sorting and subtotals by Trader, Day, Week, Month, and All-Time
+
+### Telegram Improvements
+- [ ] **Telegram welcome message** — when a trader first sends /start to @RFXTraderBot, reply with their name, profit share rate, and a link to the dashboard (personalised onboarding)
+- [ ] **Telegram handle in admin Edit Trader dialog** — let admins set or correct a trader's handle without requiring the trader to log in first
+
+### Data & Reporting
+- [ ] **Export Manage Traders to CSV** — download button that exports currently visible columns (respecting column visibility toggle) to a CSV file
+- [ ] **Trader risk limit change history** — log every risk limit update (old value, new value, changed by, timestamp) and surface it as an audit trail inside the Edit Trader dialog
+
+---
+
 ## 🎉 RELEASE MILESTONE - v1.0 (Checkpoint: aba08dbd)
 **Date:** February 15, 2026
 **Status:** ✅ Stable - All Core Features Working
@@ -599,3 +616,8 @@ None - All critical bugs resolved in v1.0
 - [x] Implement Telegram welcome message on /start (personalised with name, profit share, dashboard link)
 - [x] Bump version to 1.4.8 in package.json
 - [x] Push to GitHub (via checkpoint — version: 8586c036)
+
+### Dashboard - Copier Configuration Card
+- [x] Split Today's Total P&L and Copier Configuration info into two side-by-side cards
+- [x] New "Copier Configuration" card (right) contains: multiplier, max open trades, max lot size
+- [x] Removed copier info from Open Positions header (now only in its own card)

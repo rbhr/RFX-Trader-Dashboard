@@ -415,42 +415,93 @@ export default function Dashboard() {
       </div>
 
       <div className="container py-8 space-y-8">
-        {/* Today's P&L Hero Card */}
-        <Card className="bg-gradient-to-br from-primary/5 via-background to-background border-primary/20">
-          <CardHeader>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <DollarSign className="h-4 w-4" />
-              <span>Today's Total P&L</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {pnlLoading ? (
-              <Skeleton className="h-12 w-48" />
-            ) : (
-              <>
-                <div className={`text-4xl font-bold mb-4 ${
-                  (pnlSummary?.todayTotalPnL ?? 0) >= 0 ? "text-primary" : "text-destructive"
-                }`}>
-                  {formatCurrency(pnlSummary?.todayTotalPnL ?? 0, true)}
-                </div>
-                <div className="flex items-center gap-6 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Realized: </span>
-                    <span className="font-semibold">
-                      {formatCurrency(pnlSummary?.todayRealizedPnL ?? 0, true)}
-                    </span>
+        {/* Today's P&L + Copier Configuration side-by-side */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Today's P&L Hero Card */}
+          <Card className="bg-gradient-to-br from-primary/5 via-background to-background border-primary/20">
+            <CardHeader>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <DollarSign className="h-4 w-4" />
+                <span>Today's Total P&L</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {pnlLoading ? (
+                <Skeleton className="h-12 w-48" />
+              ) : (
+                <>
+                  <div className={`text-4xl font-bold mb-4 ${
+                    (pnlSummary?.todayTotalPnL ?? 0) >= 0 ? "text-primary" : "text-destructive"
+                  }`}>
+                    {formatCurrency(pnlSummary?.todayTotalPnL ?? 0, true)}
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Floating: </span>
-                    <span className="font-semibold">
-                      {formatCurrency(pnlSummary?.floatingPnL ?? 0, true)}
-                    </span>
+                  <div className="flex items-center gap-6 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Realized: </span>
+                      <span className="font-semibold">
+                        {formatCurrency(pnlSummary?.todayRealizedPnL ?? 0, true)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Floating: </span>
+                      <span className="font-semibold">
+                        {formatCurrency(pnlSummary?.floatingPnL ?? 0, true)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Copier Configuration Card */}
+          <Card className="border-primary/20">
+            <CardHeader>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Activity className="h-4 w-4" />
+                <span>Copier Configuration</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {copierInfo ? (
+                <>
+                  {!copierInfo.isActive ? (
+                    <p className="text-sm font-bold text-green-600">
+                      Your trades are not being copied into the Live Account
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {copierInfo.scaleType === 3 ? (
+                        <>
+                          Each of your trades is going into the Live Account as <span className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</span>
+                        </>
+                      ) : (
+                        <>
+                          Each of your trades are being multiplied by <span className="font-bold text-green-600">{copierInfo.multiplier}x</span> into the Live Account
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    Your maximum open trades: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Your maximum lot size per trade: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
+                  </p>
+                  {riskLimit != null && (
+                    <p className="text-sm text-muted-foreground">
+                      If the equity in your incubator account drops below{' '}
+                      <span className="font-bold text-green-600">${riskLimit.toLocaleString()}</span>,
+                      all trades will be closed. You will need to message an admin to re-enable trading.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No copier linked to your account.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         {/* P&L Summary Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -492,40 +543,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">
                 {positionsLoading ? "Loading..." : `${openPositions?.length ?? 0} active positions`}
               </p>
-              {copierInfo && (
-                <>
-                  {!copierInfo.isActive ? (
-                    <p className="text-sm font-bold text-green-600 mt-1">
-                      Your trades are not being copied into the Live Account
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {copierInfo.scaleType === 3 ? (
-                        <>
-                          Each of your trades is going into the Live Account as <span className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</span>
-                        </>
-                      ) : (
-                        <>
-                          Each of your trades are being multiplied by <span className="font-bold text-green-600">{copierInfo.multiplier}x</span> into the Live Account
-                        </>
-                      )}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your maximum open trades: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your maximum lot size per trade: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
-                  </p>
-                  {riskLimit != null && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      If the equity in your incubator account drops below{' '}
-                      <span className="font-bold text-green-600">${riskLimit.toLocaleString()}</span>,
-                      all trades will be closed. You will need to message an admin to re-enable trading.
-                    </p>
-                  )}
-                </>
-              )}
+
             </div>
             <Button variant="outline" size="sm" onClick={() => setLocation("/history")}>
               <Activity className="h-4 w-4 mr-2" />
