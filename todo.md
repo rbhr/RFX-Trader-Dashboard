@@ -562,3 +562,10 @@ None - All critical bugs resolved in v1.0
 - [x] Make multiplier value bold green in "multiplied by Xx" line
 - [x] Make max open trades value bold green
 - [x] Make max lot size value bold green (or "unavailable" in muted when null)
+
+### Telegram Handle in Trader Settings
+- [x] Add updateTelegramHandle tRPC procedure (saves handle to DB)
+- [x] Add testTelegramMessage tRPC procedure (sends "Hello World" to trader's Telegram)
+- [x] Add Telegram handle input field to settings dialog with description
+- [x] Add "Send Test Message" button that calls testTelegramMessage
+- [x] Show success/error toast after test message

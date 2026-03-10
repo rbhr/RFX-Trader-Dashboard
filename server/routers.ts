@@ -203,6 +203,33 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // Update Telegram handle for current trader
+    updateTelegramHandle: tradingProcedure
+      .input(z.object({
+        telegramHandle: z.string().min(1).max(100),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const magicNumberId = ctx.tradingSession.magicNumber.id;
+        await updateMagicNumber(magicNumberId, {
+          telegramHandle: input.telegramHandle,
+        });
+        return { success: true };
+      }),
+
+    // Send a test "Hello World" Telegram message to the trader's handle
+    testTelegramMessage: tradingProcedure
+      .mutation(async ({ ctx }) => {
+        const { telegramHandle, name } = ctx.tradingSession.magicNumber;
+        if (!telegramHandle) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'No Telegram handle set. Save your handle first.' });
+        }
+        const sent = await sendTelegramMessage(telegramHandle, `Hello World! 👋 This is a test message from RFX Trader Dashboard, ${name}. Your Telegram notifications are working correctly.`);
+        if (!sent) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to send Telegram message. Check that your handle is correct and you have started a chat with the bot.' });
+        }
+        return { success: true };
+      }),
+
     // Get payment history for current trader
     getPayments: tradingProcedure.query(async ({ ctx }) => {
       const magicNumberId = ctx.tradingSession.magicNumber.id;

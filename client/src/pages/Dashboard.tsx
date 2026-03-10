@@ -151,6 +151,7 @@ export default function Dashboard() {
   const [usdtAddress, setUsdtAddress] = useState<string>("");
   const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("")
   const [usdtAddressError, setUsdtAddressError] = useState<string | null>(null);
+  const [telegramHandle, setTelegramHandle] = useState<string>("");
 
   const validateUsdtAddress = (address: string, network: string): string | null => {
     if (!address) return null;
@@ -171,6 +172,8 @@ export default function Dashboard() {
   const { data: paymentHistory, isLoading: paymentsLoading } = trpc.trading.getPayments.useQuery();
   const { data: notifications, refetch: refetchNotifications } = trpc.trading.getNotifications.useQuery();
   const updateUsdtMutation = trpc.trading.updateUsdtInfo.useMutation();
+  const updateTelegramMutation = trpc.trading.updateTelegramHandle.useMutation();
+  const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
   const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
   const markAllReadMutation = trpc.trading.markAllNotificationsRead.useMutation();
 
@@ -284,6 +287,7 @@ export default function Dashboard() {
     if (session) {
       setUsdtAddress(session.usdtAddress || "");
       setUsdtNetwork(session.usdtNetwork || "");
+      setTelegramHandle(session.telegramHandle || "");
     }
   }, [session]);
 
@@ -604,17 +608,56 @@ export default function Dashboard() {
                     <span className="text-sm font-medium">Magic Number</span>
                     <span className="text-sm font-mono">{session?.magicNumber || '—'}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2">
+                  <div className="py-2 space-y-2">
                     <div>
-                      <span className="text-sm font-medium">Telegram Handle</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">Used to receive payment notifications via Telegram</p>
+                      <Label htmlFor="telegramHandle" className="text-sm font-medium">Telegram Handle</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">Used to receive payment and important notifications via Telegram</p>
                     </div>
-                    <span className="text-sm">
-                      {session?.telegramHandle 
-                        ? <span className="font-mono">{session.telegramHandle}</span>
-                        : <span className="italic text-muted-foreground">Not set — contact your manager</span>
-                      }
-                    </span>
+                    <div className="flex gap-2">
+                      <Input
+                        id="telegramHandle"
+                        placeholder="@yourusername"
+                        value={telegramHandle}
+                        onChange={(e) => setTelegramHandle(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (!telegramHandle.trim()) return;
+                          updateTelegramMutation.mutate(
+                            { telegramHandle: telegramHandle.trim() },
+                            {
+                              onSuccess: () => {
+                                toast.success("Telegram handle saved");
+                                utils.trading.getSession.invalidate();
+                              },
+                              onError: (e) => toast.error(e.message),
+                            }
+                          );
+                        }}
+                        disabled={updateTelegramMutation.isPending || !telegramHandle.trim()}
+                      >
+                        {updateTelegramMutation.isPending ? "Saving..." : "Save"}
+                      </Button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        testTelegramMutation.mutate(undefined, {
+                          onSuccess: () => toast.success("Test message sent! Check your Telegram."),
+                          onError: (e) => toast.error(e.message),
+                        });
+                      }}
+                      disabled={testTelegramMutation.isPending || !session?.telegramHandle}
+                    >
+                      {testTelegramMutation.isPending ? "Sending..." : "Send Test Message"}
+                    </Button>
+                    {!session?.telegramHandle && (
+                      <p className="text-xs text-muted-foreground">Save a handle first to send a test message.</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
