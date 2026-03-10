@@ -28,31 +28,44 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     },
   });
 
+  // Poll active breach count every 30 seconds for the sidebar badge
+  const { data: breachCountData } = trpc.admin.countActiveBreaches.useQuery(undefined, {
+    refetchInterval: 30000,
+    // Don't throw on error — badge just won't show
+    retry: false,
+  });
+  const activeBreachCount = breachCountData?.count ?? 0;
+
   const navItems = [
     {
       title: "Trader Dashboard",
       href: "/admin/dashboard",
       icon: LayoutDashboard,
+      badge: 0,
     },
     {
       title: "Manage Traders",
       href: "/admin/traders",
       icon: Users,
+      badge: 0,
     },
     {
       title: "Manage MetaCopier",
       href: "/admin/metacopier",
       icon: Settings,
+      badge: 0,
     },
     {
       title: "Manage Payments",
       href: "/admin/payments",
       icon: CreditCard,
+      badge: 0,
     },
     {
       title: "Risk Limit Breaches",
       href: "/admin/risk-breaches",
       icon: ShieldAlert,
+      badge: activeBreachCount,
     },
   ];
 
@@ -92,7 +105,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   onClick={() => setLocation(item.href)}
                 >
                   <Icon className="w-4 h-4" />
-                  {item.title}
+                  <span className="flex-1 text-left">{item.title}</span>
+                  {item.badge > 0 && (
+                    <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-semibold leading-none">
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  )}
                 </Button>
               );
             })}

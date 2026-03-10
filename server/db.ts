@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate, payments, InsertPayment, notifications, InsertNotification, riskLimitBreaches, InsertRiskLimitBreach } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -361,4 +361,37 @@ export async function resolveRiskLimitBreach(id: number) {
   if (!db) throw new Error("Database not available");
 
   await db.update(riskLimitBreaches).set({ resolvedAt: new Date() }).where(eq(riskLimitBreaches.id, id));
+}
+
+export async function countActiveRiskLimitBreaches(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(riskLimitBreaches)
+    .where(isNull(riskLimitBreaches.resolvedAt));
+
+  return Number(result[0]?.count ?? 0);
+}
+
+export async function bulkResolveRiskLimitBreaches(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Get all active breach IDs first so we can re-enable trading for each trader
+  const active = await db
+    .select()
+    .from(riskLimitBreaches)
+    .where(isNull(riskLimitBreaches.resolvedAt));
+
+  if (active.length === 0) return 0;
+
+  // Mark all active breaches as resolved in one update
+  await db
+    .update(riskLimitBreaches)
+    .set({ resolvedAt: new Date() })
+    .where(isNull(riskLimitBreaches.resolvedAt));
+
+  return active.length;
 }

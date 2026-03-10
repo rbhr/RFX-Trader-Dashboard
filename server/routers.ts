@@ -32,7 +32,9 @@ import {
   createRiskLimitBreach,
   getActiveBreachByMagicNumberId,
   getAllRiskLimitBreaches,
-  resolveRiskLimitBreach
+  resolveRiskLimitBreach,
+  countActiveRiskLimitBreaches,
+  bulkResolveRiskLimitBreaches
 } from "./db";
 import { 
   metaCopierService, 
@@ -1125,6 +1127,40 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+
+    // Count active (unresolved) risk limit breaches — used for sidebar badge
+    countActiveBreaches: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      const count = await countActiveRiskLimitBreaches();
+      return { count };
+    }),
+
+    // Bulk resolve all active breaches and re-enable trading for each affected trader
+    bulkResolveBreaches: tradingProcedure.mutation(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      // Fetch active breaches before resolving so we can re-enable each trader
+      const allBreaches = await getAllRiskLimitBreaches();
+      const activeBreaches = allBreaches.filter((b: any) => !b.resolvedAt);
+
+      const resolved = await bulkResolveRiskLimitBreaches();
+
+      // Re-enable trading and notify each affected trader
+      for (const breach of activeBreaches) {
+        await updateMagicNumber(breach.magicNumberId, { isActive: true });
+        await createNotification({
+          magicNumberId: breach.magicNumberId,
+          title: "Trading Re-enabled",
+          message: "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
+          type: "info",
+        });
+      }
+
+      return { resolved };
+    }),
 
     // Get all traders for payment dropdown
     getAllTraders: tradingProcedure.query(async ({ ctx }) => {

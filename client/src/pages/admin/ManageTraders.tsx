@@ -141,8 +141,9 @@ export default function ManageTraders() {
   const [riskLimitValue, setRiskLimitValue] = useState<number | "">("");
   const [riskLimitLoading, setRiskLimitLoading] = useState(false);
 
-  // Column visibility state — all visible by default
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+  // Column visibility state — persisted in localStorage
+  const COLUMN_STORAGE_KEY = "rfx-manage-traders-columns";
+  const defaultColumns: Record<string, boolean> = {
     manager: true,
     profitShare: true,
     copyRate: true,
@@ -156,10 +157,32 @@ export default function ManageTraders() {
     riskLimit: true,
     telegram: true,
     status: true,
+  };
+
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, boolean>;
+        // Merge with defaults so any new columns added later are visible by default
+        return { ...defaultColumns, ...parsed };
+      }
+    } catch {
+      // ignore parse errors
+    }
+    return defaultColumns;
   });
 
   const toggleColumn = (col: string) => {
-    setVisibleColumns((prev) => ({ ...prev, [col]: !prev[col] }));
+    setVisibleColumns((prev) => {
+      const next = { ...prev, [col]: !prev[col] };
+      try {
+        localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
   };
 
   const [formData, setFormData] = useState({

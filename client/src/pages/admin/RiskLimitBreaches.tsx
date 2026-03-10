@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldAlert, CheckCircle2, Clock } from "lucide-react";
+import { ShieldAlert, CheckCircle2, Clock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 
@@ -33,6 +33,7 @@ type Breach = {
 
 export default function RiskLimitBreaches() {
   const [resolveTarget, setResolveTarget] = useState<Breach | null>(null);
+  const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
   const utils = trpc.useUtils();
 
   const { data: breaches, isLoading } = trpc.admin.getRiskLimitBreaches.useQuery(undefined, {
@@ -44,9 +45,22 @@ export default function RiskLimitBreaches() {
       toast.success(`Trading re-enabled for ${resolveTarget?.traderName}`);
       setResolveTarget(null);
       utils.admin.getRiskLimitBreaches.invalidate();
+      utils.admin.countActiveBreaches.invalidate();
     },
     onError: (err: any) => {
       toast.error(`Failed to resolve breach: ${err.message}`);
+    },
+  });
+
+  const bulkResolveMutation = trpc.admin.bulkResolveBreaches.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Trading re-enabled for ${data.resolved} trader${data.resolved !== 1 ? "s" : ""}`);
+      setBulkResolveOpen(false);
+      utils.admin.getRiskLimitBreaches.invalidate();
+      utils.admin.countActiveBreaches.invalidate();
+    },
+    onError: (err: any) => {
+      toast.error(`Bulk resolve failed: ${err.message}`);
     },
   });
 
@@ -61,7 +75,7 @@ export default function RiskLimitBreaches() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="p-8 space-y-6">
         <div className="flex items-center gap-3">
           <ShieldAlert className="h-7 w-7 text-destructive" />
           <div>
@@ -71,9 +85,21 @@ export default function RiskLimitBreaches() {
             </p>
           </div>
           {activeBreaches.length > 0 && (
-            <Badge variant="destructive" className="ml-auto text-sm px-3 py-1">
-              {activeBreaches.length} Active
-            </Badge>
+            <>
+              <Badge variant="destructive" className="ml-auto text-sm px-3 py-1">
+                {activeBreaches.length} Active
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={() => setBulkResolveOpen(true)}
+                disabled={bulkResolveMutation.isPending}
+              >
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                Resolve All
+              </Button>
+            </>
           )}
         </div>
 
@@ -199,7 +225,7 @@ export default function RiskLimitBreaches() {
         )}
       </div>
 
-      {/* Confirm Re-enable Dialog */}
+      {/* Confirm Re-enable Single Breach Dialog */}
       <AlertDialog open={!!resolveTarget} onOpenChange={() => setResolveTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -226,6 +252,35 @@ export default function RiskLimitBreaches() {
               disabled={resolveMutation.isPending}
             >
               {resolveMutation.isPending ? "Processing..." : "Re-enable Trading"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Bulk Resolve Dialog */}
+      <AlertDialog open={bulkResolveOpen} onOpenChange={setBulkResolveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resolve All {activeBreaches.length} Active Breaches?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark all <strong>{activeBreaches.length}</strong> active breach
+              {activeBreaches.length !== 1 ? "es" : ""} as resolved and re-enable trading for every
+              affected trader simultaneously.
+              <br /><br />
+              Ensure you have reviewed all accounts before proceeding. Each trader will receive an
+              in-app notification that their trading has been re-enabled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => bulkResolveMutation.mutate()}
+              disabled={bulkResolveMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkResolveMutation.isPending
+                ? "Processing..."
+                : `Re-enable ${activeBreaches.length} Trader${activeBreaches.length !== 1 ? "s" : ""}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

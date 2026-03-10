@@ -534,3 +534,20 @@ None - All critical bugs resolved in v1.0
 - [x] Table container max-height for vertical scrolling (calc(100vh-220px))
 - [x] Column visibility toggle dropdown (Columns button with DropdownMenuCheckboxItem)
 - [x] 13 optional columns: Manager, Profit Share, Copy Rate, MT Account, MT Server, MT Version, MC Location, Lifetime Profit, Lifetime Share, Lifetime Income, Risk Limit, Telegram, Status
+
+### Persist Column Visibility in localStorage
+- [x] Replace useState initializer with localStorage-backed initial value
+- [x] Persist visibleColumns to localStorage on every toggle
+- [x] Key: rfx-manage-traders-columns
+
+### Breach Count Badge on Admin Sidebar
+- [x] Add backend tRPC procedure to count active unresolved risk limit breaches
+- [x] Fetch count in AdminLayout with 30s polling
+- [x] Show red badge on "Risk Limit Breaches" nav item when count > 0
+- [x] Hide badge when count is 0
+
+### Bulk Resolve Risk Limit Breaches
+- [x] Add bulkResolveRiskLimitBreaches tRPC procedure (resolves all active breaches)
+- [x] Add "Resolve All" button on Risk Limit Breaches page (visible only when active breaches exist)
+- [x] Show confirmation AlertDialog with breach count before resolving
+- [x] Refresh breach list after bulk resolve completes
