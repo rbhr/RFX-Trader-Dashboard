@@ -703,6 +703,7 @@ export const appRouter = router({
         liveAccountNumber: t.liveAccountNumber,
         manager: t.manager,
         telegramHandle: t.telegramHandle,
+        telegramConnected: !!t.telegramChatId,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
         lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
@@ -1324,6 +1325,94 @@ export const appRouter = router({
         }
 
         return { success: true };
+      }),
+
+    // Broadcast a message to all connected traders (Telegram + In-App)
+    broadcastMessage: tradingProcedure
+      .input(z.object({
+        title: z.string().min(1).max(200),
+        message: z.string().min(1).max(2000),
+        sendTelegram: z.boolean().default(true),
+        sendInApp: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const allTraders = await getAllMagicNumbers();
+        let telegramSent = 0;
+        let inAppSent = 0;
+
+        for (const trader of allTraders) {
+          // In-app notification
+          if (input.sendInApp) {
+            await createNotification({
+              magicNumberId: trader.id,
+              title: input.title,
+              message: input.message,
+              type: "info",
+              isRead: false,
+            });
+            inAppSent++;
+          }
+
+          // Telegram notification (only if trader has a connected chat ID)
+          if (input.sendTelegram && trader.telegramHandle && trader.telegramChatId) {
+            const sent = await sendTelegramMessage(
+              trader.telegramHandle,
+              `<b>${input.title}</b>\n\n${input.message}`,
+              trader.telegramChatId
+            );
+            if (sent) telegramSent++;
+          }
+        }
+
+        return { telegramSent, inAppSent, totalTraders: allTraders.length };
+      }),
+
+    // Send a direct message to a single trader (Telegram + In-App)
+    sendDirectMessage: tradingProcedure
+      .input(z.object({
+        traderId: z.number(),
+        title: z.string().min(1).max(200),
+        message: z.string().min(1).max(2000),
+        sendTelegram: z.boolean().default(true),
+        sendInApp: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+
+        let telegramSent = false;
+        let inAppSent = false;
+
+        if (input.sendInApp) {
+          await createNotification({
+            magicNumberId: trader.id,
+            title: input.title,
+            message: input.message,
+            type: "info",
+            isRead: false,
+          });
+          inAppSent = true;
+        }
+
+        if (input.sendTelegram && trader.telegramHandle && trader.telegramChatId) {
+          telegramSent = await sendTelegramMessage(
+            trader.telegramHandle,
+            `<b>${input.title}</b>\n\n${input.message}`,
+            trader.telegramChatId
+          );
+        }
+
+        return { telegramSent, inAppSent, traderName: trader.name };
       }),
   }),
 

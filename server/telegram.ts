@@ -2,6 +2,7 @@ import TelegramBot from "node-telegram-bot-api";
 import { getMagicNumberByTelegramHandle, updateMagicNumber } from "./db";
 
 let bot: TelegramBot | null = null;
+let pollingStarted = false;
 
 function getBot(): TelegramBot | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -18,14 +19,26 @@ function getBot(): TelegramBot | null {
  * This must be called once at server startup.
  */
 export function startTelegramPolling(): void {
+  if (pollingStarted) {
+    console.log("[Telegram] Polling already started — skipping duplicate init");
+    return;
+  }
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.warn("[Telegram] No bot token — polling disabled");
     return;
   }
+  pollingStarted = true;
 
-  // Use a separate polling bot instance to avoid conflicts
-  const pollingBot = new TelegramBot(token, { polling: true });
+  // Use a separate polling bot instance; dropPendingUpdates clears any stale sessions
+  const pollingBot = new TelegramBot(token, {
+    polling: { params: { timeout: 10, allowed_updates: ['message'] } }
+  });
+
+  // Gracefully stop polling on process exit to avoid 409 on next restart
+  const stopPolling = () => pollingBot.stopPolling().catch(() => {});
+  process.once('SIGTERM', stopPolling);
+  process.once('SIGINT', stopPolling);
 
   pollingBot.on("message", async (msg) => {
     const chatId = msg.chat.id;
@@ -57,7 +70,10 @@ export function startTelegramPolling(): void {
   });
 
   pollingBot.on("polling_error", (err) => {
-    console.error("[Telegram] Polling error:", err.message);
+    // 409 Conflict is expected during dev hot-reloads; suppress to avoid log noise
+    if (!err.message.includes('409')) {
+      console.error("[Telegram] Polling error:", err.message);
+    }
   });
 
   console.log("[Telegram] Bot polling started — listening for /start messages");

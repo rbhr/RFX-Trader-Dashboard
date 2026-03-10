@@ -41,7 +41,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users, ArrowUpDown, ArrowUp, ArrowDown, Columns3 } from "lucide-react";
+import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users, ArrowUpDown, ArrowUp, ArrowDown, Columns3, Megaphone, Send } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Trader {
   id: number;
@@ -59,6 +60,7 @@ interface Trader {
   liveAccountNumber: string | null;
   manager: string | null;
   telegramHandle: string | null;
+  telegramConnected: boolean;
   copierInfo: {
     multiplier: number;
     fixedLotSize: number;
@@ -141,6 +143,21 @@ export default function ManageTraders() {
   const [riskLimitValue, setRiskLimitValue] = useState<number | "">("");
   const [riskLimitLoading, setRiskLimitLoading] = useState(false);
 
+  // Broadcast dialog state
+  const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastSendTelegram, setBroadcastSendTelegram] = useState(true);
+  const [broadcastSendInApp, setBroadcastSendInApp] = useState(true);
+
+  // Direct message dialog state
+  const [dmDialogOpen, setDmDialogOpen] = useState(false);
+  const [dmTrader, setDmTrader] = useState<Trader | null>(null);
+  const [dmTitle, setDmTitle] = useState("");
+  const [dmMessage, setDmMessage] = useState("");
+  const [dmSendTelegram, setDmSendTelegram] = useState(true);
+  const [dmSendInApp, setDmSendInApp] = useState(true);
+
   // Column visibility state — persisted in localStorage
   const COLUMN_STORAGE_KEY = "rfx-manage-traders-columns";
   const defaultColumns: Record<string, boolean> = {
@@ -204,6 +221,27 @@ export default function ManageTraders() {
 
   const utils = trpc.useUtils();
   const { data: traders, isLoading } = trpc.admin.listTraders.useQuery();
+
+  const broadcastMutation = trpc.admin.broadcastMessage.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Broadcast sent: ${data.telegramSent} Telegram, ${data.inAppSent} in-app`);
+      setBroadcastDialogOpen(false);
+      setBroadcastTitle("");
+      setBroadcastMessage("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const sendDirectMutation = trpc.admin.sendDirectMessage.useMutation({
+    onSuccess: (data) => {
+      const channels = [data.telegramSent && 'Telegram', data.inAppSent && 'in-app'].filter(Boolean).join(' & ');
+      toast.success(`Message sent to ${data.traderName} via ${channels || 'no channels'}`);
+      setDmDialogOpen(false);
+      setDmTitle("");
+      setDmMessage("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const { data: copiers, refetch: refetchCopiers } = trpc.admin.getCopiers.useQuery(
     { traderId: selectedTrader?.id || 0 },
     { enabled: copiersDialogOpen && !!selectedTrader }
@@ -552,6 +590,11 @@ export default function ManageTraders() {
               <option value="RFX">RFX</option>
               <option value="HubbFX">HubbFX</option>
             </select>
+            {/* Broadcast message button */}
+            <Button variant="outline" onClick={() => setBroadcastDialogOpen(true)}>
+              <Megaphone className="h-4 w-4 mr-2" />
+              Broadcast
+            </Button>
             {/* Column visibility toggle */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -812,9 +855,35 @@ export default function ManageTraders() {
                       )}
                       {visibleColumns.telegram && (
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">
-                            {trader.telegramHandle || <span className="italic opacity-50">Not set</span>}
-                          </span>
+                          {trader.telegramHandle ? (
+                            <button
+                              className={`flex items-center gap-1.5 text-sm group ${
+                                trader.telegramConnected
+                                  ? 'cursor-pointer hover:text-primary'
+                                  : 'cursor-default text-muted-foreground'
+                              }`}
+                              onClick={() => {
+                                if (!trader.telegramConnected) return;
+                                setDmTrader(trader);
+                                setDmTitle("");
+                                setDmMessage("");
+                                setDmSendTelegram(true);
+                                setDmSendInApp(true);
+                                setDmDialogOpen(true);
+                              }}
+                              title={trader.telegramConnected ? `Send message to ${trader.telegramHandle}` : 'Not connected to bot'}
+                            >
+                              <span className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                                trader.telegramConnected ? 'bg-green-500' : 'bg-gray-300'
+                              }`} />
+                              <span>{trader.telegramHandle}</span>
+                              {trader.telegramConnected && (
+                                <Send className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="italic text-sm opacity-50">Not set</span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.status && (
@@ -884,6 +953,141 @@ export default function ManageTraders() {
             </Table>
           </div>
         )}
+
+        {/* Broadcast Message Dialog */}
+        <Dialog open={broadcastDialogOpen} onOpenChange={setBroadcastDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5" />
+                Broadcast Message
+              </DialogTitle>
+              <DialogDescription>
+                Send a message to all traders via Telegram and/or in-app notification.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="broadcast-title">Title</Label>
+                <Input
+                  id="broadcast-title"
+                  value={broadcastTitle}
+                  onChange={(e) => setBroadcastTitle(e.target.value)}
+                  placeholder="e.g. System Maintenance Notice"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="broadcast-message">Message</Label>
+                <Textarea
+                  id="broadcast-message"
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  placeholder="Write your message here..."
+                  rows={5}
+                />
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <Switch checked={broadcastSendTelegram} onCheckedChange={setBroadcastSendTelegram} id="bc-telegram" />
+                  <Label htmlFor="bc-telegram" className="cursor-pointer">Telegram</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={broadcastSendInApp} onCheckedChange={setBroadcastSendInApp} id="bc-inapp" />
+                  <Label htmlFor="bc-inapp" className="cursor-pointer">In-App</Label>
+                </div>
+              </div>
+              {traders && (
+                <p className="text-xs text-muted-foreground">
+                  Will send to <strong>{traders.length}</strong> traders
+                  {broadcastSendTelegram && ` (${traders.filter(t => t.telegramConnected).length} connected to Telegram)`}.
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBroadcastDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => broadcastMutation.mutate({
+                  title: broadcastTitle,
+                  message: broadcastMessage,
+                  sendTelegram: broadcastSendTelegram,
+                  sendInApp: broadcastSendInApp,
+                })}
+                disabled={!broadcastTitle.trim() || !broadcastMessage.trim() || broadcastMutation.isPending}
+              >
+                {broadcastMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                ) : (
+                  <><Megaphone className="h-4 w-4 mr-2" />Send Broadcast</>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Direct Message Dialog */}
+        <Dialog open={dmDialogOpen} onOpenChange={setDmDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Send className="h-5 w-5" />
+                Message {dmTrader?.name}
+              </DialogTitle>
+              <DialogDescription>
+                Send a direct message to {dmTrader?.telegramHandle} via Telegram and/or in-app notification.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="dm-title">Title</Label>
+                <Input
+                  id="dm-title"
+                  value={dmTitle}
+                  onChange={(e) => setDmTitle(e.target.value)}
+                  placeholder="e.g. Account Update"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dm-message">Message</Label>
+                <Textarea
+                  id="dm-message"
+                  value={dmMessage}
+                  onChange={(e) => setDmMessage(e.target.value)}
+                  placeholder="Write your message here..."
+                  rows={5}
+                />
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <Switch checked={dmSendTelegram} onCheckedChange={setDmSendTelegram} id="dm-telegram" />
+                  <Label htmlFor="dm-telegram" className="cursor-pointer">Telegram</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={dmSendInApp} onCheckedChange={setDmSendInApp} id="dm-inapp" />
+                  <Label htmlFor="dm-inapp" className="cursor-pointer">In-App</Label>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDmDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => dmTrader && sendDirectMutation.mutate({
+                  traderId: dmTrader.id,
+                  title: dmTitle,
+                  message: dmMessage,
+                  sendTelegram: dmSendTelegram,
+                  sendInApp: dmSendInApp,
+                })}
+                disabled={!dmTitle.trim() || !dmMessage.trim() || sendDirectMutation.isPending}
+              >
+                {sendDirectMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                ) : (
+                  <><Send className="h-4 w-4 mr-2" />Send Message</>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Add Trader Dialog */}
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>

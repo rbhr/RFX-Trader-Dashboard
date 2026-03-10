@@ -579,3 +579,18 @@ None - All critical bugs resolved in v1.0
 - [x] Update testTelegramMessage to work with chat ID
 - [x] Add Connected/Not connected status badge in settings UI
 - [x] Show /start instructions when handle saved but not yet connected
+
+### v1.5 - Telegram Welcome Message (TODO)
+- [ ] Send a customised Telegram welcome message when a trader first sends /start to @RFXTraderBot (include profit share rate and dashboard link)
+
+### Broadcast Message (Telegram + In-App)
+- [x] Add broadcastMessage tRPC admin procedure (sends Telegram + In-App notification to all connected traders)
+- [x] Add "Broadcast" button in Manage Traders toolbar between Manager filter and Columns selector
+- [x] Build broadcast dialog: title + message fields, preview recipient count, send button
+- [x] Show per-channel delivery summary (X Telegram sent, Y in-app sent)
+
+### Manage Traders - Telegram Status Column + Click-to-Message
+- [x] Add Telegram column to Manage Traders table (green dot if connected, grey if not)
+- [x] Clicking a green handle opens a "Send Message" dialog (title + message fields)
+- [x] Add sendDirectMessage tRPC admin procedure (sends to single trader by ID)
+- [x] Show success/error toast after send
