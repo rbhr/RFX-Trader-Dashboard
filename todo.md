@@ -635,3 +635,6 @@ None - All critical bugs resolved in v1.0
 - [x] Fix 1: Changed getAccountEquity to always use mcAccountId (trader's own incubator account)
 - [x] Fix 2: Created server-side BreachMonitor (breachMonitor.ts) that runs every 5 minutes, checks all traders, and records breaches automatically
 - [x] Verified: Kashif (Magic: 22730) and Zeeshan (Magic: 67576) breaches detected and recorded on first run
+
+### Breach Monitor Interval
+- [x] Changed breach monitor interval from 5 minutes to 1 minute

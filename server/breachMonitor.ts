@@ -20,7 +20,7 @@ import {
 } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 
-const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MONITOR_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 
@@ -108,7 +108,7 @@ async function checkAllTraders(): Promise<void> {
 export function startBreachMonitor(): void {
   if (monitorTimer) return; // Already started
 
-  console.log("[BreachMonitor] Starting — checking every 5 minutes");
+  console.log("[BreachMonitor] Starting — checking every 1 minute");
 
   // Run immediately on startup, then on interval
   checkAllTraders();
