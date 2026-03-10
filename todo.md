@@ -594,3 +594,8 @@ None - All critical bugs resolved in v1.0
 - [x] Clicking a green handle opens a "Send Message" dialog (title + message fields)
 - [x] Add sendDirectMessage tRPC admin procedure (sends to single trader by ID)
 - [x] Show success/error toast after send
+
+### v1.4.8 Release
+- [x] Implement Telegram welcome message on /start (personalised with name, profit share, dashboard link)
+- [x] Bump version to 1.4.8 in package.json
+- [ ] Push to GitHub (via checkpoint)

@@ -49,13 +49,27 @@ export function startTelegramPolling(): void {
       try {
         const trader = await getMagicNumberByTelegramHandle(username);
         if (trader) {
+          const isFirstLink = !trader.telegramChatId;
           await updateMagicNumber(trader.id, { telegramChatId: String(chatId) });
-          await pollingBot.sendMessage(
-            chatId,
-            `✅ <b>Connected!</b>\n\nHi ${trader.name}, your Telegram is now linked to RFX Trader Dashboard. You will receive payment and important notifications here.`,
-            { parse_mode: "HTML" }
-          );
-          console.log(`[Telegram] Linked chat ID ${chatId} to trader ${trader.name} (@${username})`);
+
+          // Build personalised welcome message
+          const profitSharePct = (parseFloat(trader.profitShare ?? "0.35") * 100).toFixed(0);
+          const dashboardUrl = "https://rfxtrader.manus.space";
+          const welcomeMsg = isFirstLink
+            ? (
+                `✅ <b>Welcome to RFX Trader Dashboard, ${trader.name}!</b>\n\n` +
+                `Your Telegram is now linked. Here's a quick summary of your account:\n\n` +
+                `• 💼 <b>Profit Share Rate:</b> ${profitSharePct}%\n` +
+                `• 📊 <b>Dashboard:</b> <a href="${dashboardUrl}">${dashboardUrl}</a>\n\n` +
+                `You'll receive payment confirmations, risk limit alerts, and important updates here. Welcome aboard! 🚀`
+              )
+            : (
+                `✅ <b>Re-linked!</b>\n\n` +
+                `Hi ${trader.name}, your Telegram is still connected to RFX Trader Dashboard. Notifications will continue to be delivered here.`
+              );
+
+          await pollingBot.sendMessage(chatId, welcomeMsg, { parse_mode: "HTML", disable_web_page_preview: true } as any);
+          console.log(`[Telegram] ${isFirstLink ? 'Linked' : 'Re-linked'} chat ID ${chatId} to trader ${trader.name} (@${username})`);
         } else {
           await pollingBot.sendMessage(
             chatId,
