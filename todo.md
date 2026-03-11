@@ -641,3 +641,13 @@ None - All critical bugs resolved in v1.0
 
 ### Settings Dialog Default Tab
 - [x] Changed settings dialog default tab from "Payments" to "Account"
+
+### Risk Limit Breaches Table Improvements
+- [x] Equity at Breach and Risk Limit at Breach columns already exist in the table (added with bulk resolve feature)
+- [x] Show "Last checked" timestamp from breach monitor on the Risk Limit Breaches page
+
+### v1.4.9 Release
+- [x] Add getBreachMonitorStatus tRPC procedure exposing lastCheckedAt
+- [x] Show "Last checked: X ago" on Risk Limit Breaches page
+- [x] Bump version to 1.4.9 in package.json and version strings
+- [ ] Push to GitHub and create PR (via checkpoint)

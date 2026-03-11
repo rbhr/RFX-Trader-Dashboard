@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldAlert, CheckCircle2, Clock, ShieldCheck } from "lucide-react";
+import { ShieldAlert, CheckCircle2, Clock, ShieldCheck, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 
@@ -39,6 +39,21 @@ export default function RiskLimitBreaches() {
   const { data: breaches, isLoading } = trpc.admin.getRiskLimitBreaches.useQuery(undefined, {
     refetchInterval: 30000,
   });
+
+  const { data: monitorStatus } = trpc.admin.getBreachMonitorStatus.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
+
+  const formatLastChecked = (d: Date | null | undefined) => {
+    if (!d) return "Not yet run";
+    const date = new Date(d);
+    const diffMs = Date.now() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    return date.toLocaleTimeString();
+  };
 
   const resolveMutation = trpc.admin.resolveRiskLimitBreach.useMutation({
     onSuccess: () => {
@@ -84,6 +99,11 @@ export default function RiskLimitBreaches() {
               Traders whose equity dropped below their risk limit. Resolve to re-enable trading.
             </p>
           </div>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <RefreshCw className="h-3 w-3" />
+              Last checked: {formatLastChecked(monitorStatus?.lastCheckedAt)}
+            </span>
           {activeBreaches.length > 0 && (
             <>
               <Badge variant="destructive" className="ml-auto text-sm px-3 py-1">
@@ -101,6 +121,7 @@ export default function RiskLimitBreaches() {
               </Button>
             </>
           )}
+          </div>
         </div>
 
         {/* Active Breaches */}

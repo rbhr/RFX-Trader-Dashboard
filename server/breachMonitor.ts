@@ -23,6 +23,11 @@ import { notifyOwner } from "./_core/notification";
 const MONITOR_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
+let lastCheckedAt: Date | null = null;
+
+export function getLastCheckedAt(): Date | null {
+  return lastCheckedAt;
+}
 
 async function checkAllTraders(): Promise<void> {
   if (isRunning) return; // Prevent overlapping runs
@@ -102,6 +107,7 @@ async function checkAllTraders(): Promise<void> {
     console.error("[BreachMonitor] Fatal error during check:", error);
   } finally {
     isRunning = false;
+    lastCheckedAt = new Date();
   }
 }
 

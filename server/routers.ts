@@ -48,6 +48,7 @@ import {
 import { nanoid } from "nanoid";
 import { sendTelegramMessage, buildPaymentMessage, buildRiskLimitBreachMessage, buildAdminRiskLimitAlertMessage } from "./telegram";
 import { notifyOwner } from "./_core/notification";
+import { getLastCheckedAt } from "./breachMonitor";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
 
@@ -1204,6 +1205,14 @@ export const appRouter = router({
       }
       const count = await countActiveRiskLimitBreaches();
       return { count };
+    }),
+
+    // Get breach monitor status (last checked timestamp)
+    getBreachMonitorStatus: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      return { lastCheckedAt: getLastCheckedAt() };
     }),
 
     // Bulk resolve all active breaches and re-enable trading for each affected trader
