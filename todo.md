@@ -638,3 +638,6 @@ None - All critical bugs resolved in v1.0
 
 ### Breach Monitor Interval
 - [x] Changed breach monitor interval from 5 minutes to 1 minute
+
+### Settings Dialog Default Tab
+- [x] Changed settings dialog default tab from "Payments" to "Account"

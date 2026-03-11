@@ -619,7 +619,7 @@ export default function Dashboard() {
             </DialogDescription>
           </DialogHeader>
           
-          <Tabs defaultValue="payments" className="w-full">
+          <Tabs defaultValue="account" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="account">Account</TabsTrigger>
               <TabsTrigger value="payments">Payments</TabsTrigger>
