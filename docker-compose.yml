@@ -11,6 +11,8 @@ services:
       DATABASE_URL: mysql://rfx:${MYSQL_PASSWORD}@mysql:3306/rfx_trader
       NODE_ENV: production
       PORT: 3000
+    ports:
+      - "3000:3000"
     networks:
       - internal
 
