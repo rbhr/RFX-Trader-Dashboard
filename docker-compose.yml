@@ -1,0 +1,58 @@
+services:
+  rfx-app:
+    build: .
+    container_name: rfx-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: mysql://rfx:${MYSQL_PASSWORD}@mysql:3306/rfx_trader
+      NODE_ENV: production
+      PORT: 3000
+    networks:
+      - internal
+
+  mysql:
+    image: mysql:8.0
+    container_name: rfx-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: rfx_trader
+      MYSQL_USER: rfx
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: rfx-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - rfx-app
+    networks:
+      - internal
+
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
