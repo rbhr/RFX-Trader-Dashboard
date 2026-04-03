@@ -4,7 +4,7 @@ WORKDIR /app
 RUN corepack enable pnpm
 COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Stage 2: Build frontend + bundle server
 FROM node:22-slim AS build
