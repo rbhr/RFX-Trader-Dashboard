@@ -1,4 +1,26 @@
+volumes:
+  portainer_data:
+  caddy_data:
+  caddy_config:
+
 services:
+  portainer:
+    command: "-H unix:///var/run/docker.sock"
+    container_name: portainer
+    environment:
+      - TZ=Australia/Adelaide
+      - CAP_HOST_MANAGEMENT=1
+    image: portainer/portainer-ce:latest
+    ports:
+      - "9000:9000"
+    restart: always
+    volumes:
+      - portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+      - /:/host
+
   rfx-app:
     build: .
     container_name: rfx-app
@@ -11,6 +33,8 @@ services:
       DATABASE_URL: mysql://rfx:${MYSQL_PASSWORD}@mysql:3306/rfx_trader
       NODE_ENV: production
       PORT: 3000
+    ports:
+      - "3000:3000"
     networks:
       - internal
 
@@ -49,9 +73,6 @@ services:
     networks:
       - internal
 
-volumes:
-  caddy_data:
-  caddy_config:
 
 networks:
   internal:
