@@ -4,5 +4,6 @@ dist
 .env
 .env.*
 .manus-logs
+data
 *.md
 !README.md
