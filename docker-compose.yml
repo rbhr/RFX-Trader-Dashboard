@@ -24,7 +24,7 @@ services:
       MYSQL_USER: rfx
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - ./data/mysql:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -50,7 +50,6 @@ services:
       - internal
 
 volumes:
-  mysql_data:
   caddy_data:
   caddy_config:
 
