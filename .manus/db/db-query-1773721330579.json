@@ -1,0 +1,210 @@
+{
+  "query": "DESCRIBE magic_numbers;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute DESCRIBE magic_numbers;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "magicNumber",
+      "Type": "varchar(20)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(100)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "password",
+      "Type": "varchar(255)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "profitShare",
+      "Type": "decimal(5,4)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0.3500",
+      "Extra": ""
+    },
+    {
+      "Field": "showAllData",
+      "Type": "tinyint(1)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "isActive",
+      "Type": "tinyint(1)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "1",
+      "Extra": ""
+    },
+    {
+      "Field": "createdAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    },
+    {
+      "Field": "isAdmin",
+      "Type": "tinyint(1)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "mtAccount",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "mtServer",
+      "Type": "varchar(100)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "mtPassword",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "lifetimeProfit",
+      "Type": "decimal(15,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0.00",
+      "Extra": ""
+    },
+    {
+      "Field": "lifetimeProfitShare",
+      "Type": "decimal(15,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0.00",
+      "Extra": ""
+    },
+    {
+      "Field": "lifetimeIncome",
+      "Type": "decimal(15,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0.00",
+      "Extra": ""
+    },
+    {
+      "Field": "mtVersion",
+      "Type": "varchar(10)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "MT5",
+      "Extra": ""
+    },
+    {
+      "Field": "mcLocation",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "London",
+      "Extra": ""
+    },
+    {
+      "Field": "liveAccountNumber",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "mcAccountId",
+      "Type": "varchar(100)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "manager",
+      "Type": "varchar(100)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "RFX",
+      "Extra": ""
+    },
+    {
+      "Field": "usdtAddress",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "usdtNetwork",
+      "Type": "enum('TRC20','ERC20')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "telegramHandle",
+      "Type": "varchar(100)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "telegramChatId",
+      "Type": "varchar(30)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nmagicNumber\tvarchar(20)\tNO\tUNI\tNULL\t\nname\tvarchar(100)\tNO\t\tNULL\t\npassword\tvarchar(255)\tNO\t\tNULL\t\nprofitShare\tdecimal(5,4)\tNO\t\t0.3500\t\nshowAllData\ttinyint(1)\tNO\t\t0\t\nisActive\ttinyint(1)\tNO\t\t1\t\ncreatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\nisAdmin\ttinyint(1)\tNO\t\t0\t\nmtAccount\tvarchar(50)\tYES\t\tNULL\t\nmtServer\tvarchar(100)\tYES\t\tNULL\t\nmtPassword\tvarchar(255)\tYES\t\tNULL\t\nlifetimeProfit\tdecimal(15,2)\tYES\t\t0.00\t\nlifetimeProfitShare\tdecimal(15,2)\tYES\t\t0.00\t\nlifetimeIncome\tdecimal(15,2)\tYES\t\t0.00\t\nmtVersion\tvarchar(10)\tYES\t\tMT5\t\nmcLocation\tvarchar(50)\tYES\t\tLondon\t\nliveAccountNumber\tvarchar(50)\tYES\t\tNULL\t\nmcAccountId\tvarchar(100)\tYES\t\tNULL\t\nmanager\tvarchar(100)\tYES\t\tRFX\t\nusdtAddress\tvarchar(255)\tYES\t\tNULL\t\nusdtNetwork\tenum('TRC20','ERC20')\tYES\t\tNULL\t\ntelegramHandle\tvarchar(100)\tYES\t\tNULL\t\ntelegramChatId\tvarchar(30)\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 1531
+}

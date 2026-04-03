@@ -8,6 +8,7 @@
 ### New Admin View
 - [ ] **Admin Open Trades** — table showing all live open trades across all traders, with standard trade columns (Symbol, Type, Volume, Open Price, Current Price, Profit) plus Magic Number and Trader Name
 - [ ] **Admin Trade History** — full historical trade log across all traders with standard columns plus Magic Number and Trader Name; with grouping, sorting and subtotals by Trader, Day, Week, Month, and All-Time
+- [ ] **Trader's Dashboard for Admin** — admin can view any individual trader's dashboard (P&L, open positions, account & copier configuration) as if they were that trader, accessible from the Manage Traders table
 
 ### Telegram Improvements
 - [ ] **Telegram welcome message** — when a trader first sends /start to @RFXTraderBot, reply with their name, profit share rate, and a link to the dashboard (personalised onboarding)

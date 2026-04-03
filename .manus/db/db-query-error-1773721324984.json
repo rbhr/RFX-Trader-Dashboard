@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  name,\n  magic_number AS magic,\n  telegram_handle AS telegram,\n  live_account_number AS mt5_account_number,\n  live_account_server AS mt5_server,\n  CONCAT('RFX - ', name, ' - ', magic_number) AS combo_output\nFROM magic_numbers\nORDER BY name ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ameLg19WeQnXbo.d217c23b11d8 --database UFJcnp7xGLAHrBuYvntBwN --execute \nSELECT \n  name,\n  magic_number AS magic,\n  telegram_handle AS telegram,\n  live_account_number AS mt5_account_number,\n  live_account_server AS mt5_server,\n  CONCAT('RFX - ', name, ' - ', magic_number) AS combo_output\nFROM magic_numbers\nORDER BY name ASC;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'magic_number' in 'field list'"
+  ]
+}
