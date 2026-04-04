@@ -14,6 +14,9 @@
 - [ ] **Telegram welcome message** — when a trader first sends /start to @RFXTraderBot, reply with their name, profit share rate, and a link to the dashboard (personalised onboarding)
 - [ ] **Telegram handle in admin Edit Trader dialog** — let admins set or correct a trader's handle without requiring the trader to log in first
 
+### Security
+- [ ] **Hash magic number passwords** — migrate plaintext passwords in `magic_numbers` table to bcrypt hashes; update login procedure to verify with `bcrypt.compare()`; include a one-time migration script to hash existing passwords
+
 ### Data & Reporting
 - [ ] **Export Manage Traders to CSV** — download button that exports currently visible columns (respecting column visibility toggle) to a CSV file
 - [ ] **Trader risk limit change history** — log every risk limit update (old value, new value, changed by, timestamp) and surface it as an audit trail inside the Edit Trader dialog
