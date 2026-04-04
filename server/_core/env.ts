@@ -7,4 +7,12 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  tronPrivateKey: process.env.TRON_PRIVATE_KEY ?? "",
+  tronFullNode: process.env.TRON_FULL_NODE ?? "https://api.trongrid.io",
+  tronUsdtContract:
+    process.env.TRON_USDT_CONTRACT ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+  evmPrivateKey: process.env.EVM_PRIVATE_KEY ?? "",
+  evmRpcUrl: process.env.EVM_RPC_URL ?? "",
+  evmUsdtContract: process.env.EVM_USDT_CONTRACT ?? "",
+  evmChainName: process.env.EVM_CHAIN_NAME ?? "EVM",
 };

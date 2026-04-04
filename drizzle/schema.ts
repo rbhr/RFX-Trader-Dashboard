@@ -128,6 +128,7 @@ export const payments = mysqlTable("payments", {
   transactionHash: varchar("transactionHash", { length: 255 }).notNull(),
   paymentDate: timestamp("paymentDate").notNull(),
   networkFee: decimal("networkFee", { precision: 15, scale: 2 }).default("0.00"),
+  network: mysqlEnum("network", ["TRC20", "ERC20"]),
   notificationSent: boolean("notificationSent").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

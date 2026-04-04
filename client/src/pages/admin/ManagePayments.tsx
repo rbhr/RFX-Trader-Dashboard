@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,10 +41,13 @@ export default function ManagePayments() {
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<"manual" | "wallet">("manual");
 
   const { data: traders, isLoading: tradersLoading } = trpc.admin.getAllTraders.useQuery();
   const { data: paymentHistory, isLoading: paymentsLoading, refetch: refetchPayments } = trpc.admin.getAllPayments.useQuery();
+  const { data: walletInfo } = trpc.admin.getWalletInfo.useQuery(undefined, { refetchInterval: 30_000 });
   const makePaymentMutation = trpc.admin.makePayment.useMutation();
+  const sendWalletPaymentMutation = trpc.admin.sendWalletPayment.useMutation();
 
   // Update payment date to current time on mount
   useEffect(() => {
@@ -65,44 +69,63 @@ export default function ManagePayments() {
   }, []);
 
   const handleMakePayment = () => {
-    if (!selectedTraderId || !amount || !transactionHash) {
-      toast.error("Please fill in all required fields");
-      return;
+    if (paymentMode === "manual") {
+      if (!selectedTraderId || !amount || !transactionHash) {
+        toast.error("Please fill in all required fields");
+        return;
+      }
+    } else {
+      if (!selectedTraderId || !amount) {
+        toast.error("Please select a trader and enter an amount");
+        return;
+      }
+      const selectedTrader = traders?.find(t => t.id === parseInt(selectedTraderId));
+      if (!selectedTrader?.usdtAddress || !selectedTrader?.usdtNetwork) {
+        toast.error("Selected trader has no USDT address configured");
+        return;
+      }
     }
     setConfirmDialogOpen(true);
+  };
+
+  const resetForm = () => {
+    setSelectedTraderId("");
+    setAmount("");
+    setNetworkFee("0");
+    setTransactionHash("");
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    setPaymentDate(`${year}-${month}-${day}T${hours}:${minutes}`);
   };
 
   const handleConfirmPayment = async () => {
     setConfirmDialogOpen(false);
     try {
-      await makePaymentMutation.mutateAsync({
-        magicNumberId: parseInt(selectedTraderId),
-        amount: parseFloat(amount),
-        networkFee: parseFloat(networkFee),
-        transactionHash,
-        paymentDate: new Date(paymentDate),
-      });
+      if (paymentMode === "wallet") {
+        const result = await sendWalletPaymentMutation.mutateAsync({
+          magicNumberId: parseInt(selectedTraderId),
+          amount: parseFloat(amount),
+        });
+        toast.success(`Payment sent on-chain! TX: ${result.txHash.substring(0, 12)}...`);
+      } else {
+        await makePaymentMutation.mutateAsync({
+          magicNumberId: parseInt(selectedTraderId),
+          amount: parseFloat(amount),
+          networkFee: parseFloat(networkFee),
+          transactionHash,
+          paymentDate: new Date(paymentDate),
+        });
+        toast.success("Payment recorded and trader notified");
+      }
 
-      toast.success("Payment recorded and trader notified");
-      
-      // Reset form
-      setSelectedTraderId("");
-      setAmount("");
-      setNetworkFee("0");
-      setTransactionHash("");
-      // Reset to current local time
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      setPaymentDate(`${year}-${month}-${day}T${hours}:${minutes}`);
-      
-      // Refresh payment history
+      resetForm();
       refetchPayments();
-    } catch (error) {
-      toast.error("Failed to record payment");
+    } catch (error: any) {
+      toast.error(error?.message || "Payment failed");
     }
   };
 
@@ -152,14 +175,80 @@ export default function ManagePayments() {
         </div>
 
         <div className="grid gap-6">
+          {/* Wallet Info Card */}
+          {(walletInfo?.trc20 || walletInfo?.erc20) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="w-5 h-5" />
+                  Wallet Balances
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  {walletInfo.trc20 && (
+                    <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
+                      <div className="text-sm font-medium text-muted-foreground">TRC-20 (TRON)</div>
+                      <div className="text-2xl font-bold">{walletInfo.trc20.usdtBalance} USDT</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground truncate">{walletInfo.trc20.address}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(walletInfo.trc20!.address); toast.success("Address copied"); }}
+                          className="p-1 hover:bg-accent rounded shrink-0"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {walletInfo.erc20 && (
+                    <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
+                      <div className="text-sm font-medium text-muted-foreground">ERC-20 ({walletInfo.erc20.chainName})</div>
+                      <div className="text-2xl font-bold">{walletInfo.erc20.usdtBalance} USDT</div>
+                      <div className="text-sm text-muted-foreground">
+                        Gas: {parseFloat(walletInfo.erc20.nativeBalance).toFixed(4)} {walletInfo.erc20.chainName === "EVM" ? "ETH" : walletInfo.erc20.chainName === "Polygon" ? "MATIC" : "ETH"}
+                      </div>
+                      {parseFloat(walletInfo.erc20.nativeBalance) < 0.01 && (
+                        <div className="flex items-center gap-1 text-xs text-amber-500">
+                          <AlertCircle className="w-3 h-3" />
+                          Low gas balance
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground truncate">{walletInfo.erc20.address}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(walletInfo.erc20!.address); toast.success("Address copied"); }}
+                          className="p-1 hover:bg-accent rounded shrink-0"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Make Payment</CardTitle>
               <CardDescription>
-                Record a new payment to a trader
+                {paymentMode === "wallet" ? "Send USDT directly from the server wallet" : "Record a payment already sent externally"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Payment mode toggle */}
+              <Tabs value={paymentMode} onValueChange={(v) => setPaymentMode(v as "manual" | "wallet")}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="manual" className="flex-1">Record Manual</TabsTrigger>
+                  <TabsTrigger value="wallet" className="flex-1" disabled={!walletInfo?.trc20 && !walletInfo?.erc20}>
+                    <Wallet className="w-4 h-4 mr-2" />
+                    Send from Wallet
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="trader">Trader</Label>
@@ -183,18 +272,34 @@ export default function ManagePayments() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="paymentDate">Payment Date & Time</Label>
-                  <Input
-                    id="paymentDate"
-                    type="datetime-local"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                  />
-                </div>
+                {paymentMode === "manual" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="paymentDate">Payment Date & Time</Label>
+                    <Input
+                      id="paymentDate"
+                      type="datetime-local"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {paymentMode === "wallet" && selectedTraderId && (() => {
+                  const selectedTrader = traders?.find(t => t.id === parseInt(selectedTraderId));
+                  const network = selectedTrader?.usdtNetwork;
+                  const sourceBalance = network === "ERC20" ? walletInfo?.erc20?.usdtBalance : walletInfo?.trc20?.usdtBalance;
+                  return (
+                    <div className="space-y-2">
+                      <Label>Source Wallet ({network || "Not Set"})</Label>
+                      <div className="text-sm text-muted-foreground p-2 bg-muted/50 rounded border">
+                        {sourceBalance ? `${sourceBalance} USDT available` : "Wallet not configured for this network"}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className={paymentMode === "manual" ? "grid grid-cols-3 gap-4" : ""}>
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount (USDT)</Label>
                   <Input
@@ -207,27 +312,31 @@ export default function ManagePayments() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="networkFee">Network Fee (USDT)</Label>
-                  <Input
-                    id="networkFee"
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={networkFee}
-                    onChange={(e) => setNetworkFee(e.target.value)}
-                  />
-                </div>
+                {paymentMode === "manual" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="networkFee">Network Fee (USDT)</Label>
+                      <Input
+                        id="networkFee"
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={networkFee}
+                        onChange={(e) => setNetworkFee(e.target.value)}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="transactionHash">Transaction Hash</Label>
-                  <Input
-                    id="transactionHash"
-                    placeholder="Enter transaction hash"
-                    value={transactionHash}
-                    onChange={(e) => setTransactionHash(e.target.value)}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="transactionHash">Transaction Hash</Label>
+                      <Input
+                        id="transactionHash"
+                        placeholder="Enter transaction hash"
+                        value={transactionHash}
+                        onChange={(e) => setTransactionHash(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* USDT Address Display */}
@@ -258,17 +367,45 @@ export default function ManagePayments() {
                     </div>
                   );
                 }
+                if (paymentMode === "wallet") {
+                  return (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-600">
+                      <AlertCircle className="w-4 h-4 inline mr-2" />
+                      This trader has no USDT address configured. They need to set one in their dashboard first.
+                    </div>
+                  );
+                }
                 return null;
               })()}
 
-              <Button 
-                onClick={handleMakePayment} 
-                disabled={makePaymentMutation.isPending || !selectedTraderId || !amount || !transactionHash}
-                className="w-full"
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {makePaymentMutation.isPending ? "Recording Payment..." : "Payment Has Been Made"}
-              </Button>
+              {paymentMode === "manual" ? (
+                <Button
+                  onClick={handleMakePayment}
+                  disabled={makePaymentMutation.isPending || !selectedTraderId || !amount || !transactionHash}
+                  className="w-full"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {makePaymentMutation.isPending ? "Recording Payment..." : "Payment Has Been Made"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleMakePayment}
+                  disabled={sendWalletPaymentMutation.isPending || !selectedTraderId || !amount}
+                  className="w-full"
+                >
+                  {sendWalletPaymentMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending on-chain...
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="w-4 h-4 mr-2" />
+                      Send USDT from Wallet
+                    </>
+                  )}
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -364,25 +501,47 @@ export default function ManagePayments() {
                           <span className="text-muted-foreground">Network</span>
                           <span className="font-medium text-foreground">{trader?.usdtNetwork || 'TRC20'}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Network Fee</span>
-                          <span className="font-medium text-foreground">{parseFloat(networkFee || '0').toFixed(2)} USDT</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">TX Hash</span>
-                          <span className="font-mono text-xs text-foreground break-all max-w-[200px] text-right">{transactionHash}</span>
-                        </div>
+                        {paymentMode === "wallet" ? (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">From</span>
+                              <span className="font-mono text-xs text-foreground break-all max-w-[200px] text-right">
+                                {trader?.usdtNetwork === "ERC20" ? walletInfo?.erc20?.address : walletInfo?.trc20?.address}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">To</span>
+                              <span className="font-mono text-xs text-foreground break-all max-w-[200px] text-right">{trader?.usdtAddress}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Network Fee</span>
+                              <span className="font-medium text-foreground">{parseFloat(networkFee || '0').toFixed(2)} USDT</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">TX Hash</span>
+                              <span className="font-mono text-xs text-foreground break-all max-w-[200px] text-right">{transactionHash}</span>
+                            </div>
+                          </>
+                        )}
                       </>
                     );
                   })()}
                 </div>
+                {paymentMode === "wallet" && (
+                  <p className="text-amber-500 text-xs">This will send a real on-chain transaction. It cannot be reversed.</p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmPayment} disabled={makePaymentMutation.isPending}>
-              {makePaymentMutation.isPending ? "Recording..." : "Confirm Payment"}
+            <AlertDialogAction onClick={handleConfirmPayment} disabled={makePaymentMutation.isPending || sendWalletPaymentMutation.isPending}>
+              {(makePaymentMutation.isPending || sendWalletPaymentMutation.isPending)
+                ? (paymentMode === "wallet" ? "Sending..." : "Recording...")
+                : (paymentMode === "wallet" ? "Confirm & Send" : "Confirm Payment")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

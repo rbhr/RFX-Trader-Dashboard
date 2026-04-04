@@ -49,6 +49,9 @@ import { nanoid } from "nanoid";
 import { sendTelegramMessage, buildPaymentMessage, buildRiskLimitBreachMessage, buildAdminRiskLimitAlertMessage } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
+import { getWalletAddress as getTronWalletAddress, getUsdtBalance as getTronBalance, sendUsdt, isTronConfigured } from "./tron";
+import { getWalletAddress as getEvmWalletAddress, getUsdtBalance as getEvmBalance, sendUsdtErc20, getNativeBalance, isEvmConfigured } from "./erc20";
+import { ENV } from "./_core/env";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
 
@@ -79,6 +82,63 @@ const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
     },
   });
 });
+
+/** Shared helper: record a payment and send notifications. */
+async function recordPaymentAndNotify(params: {
+  magicNumberId: number;
+  amount: number;
+  transactionHash: string;
+  networkFee?: number;
+  network?: "TRC20" | "ERC20";
+  paymentDate: Date;
+}) {
+  const { magicNumberId, amount, transactionHash, networkFee = 0, network, paymentDate } = params;
+
+  await createPayment({
+    magicNumberId,
+    amount: amount.toString(),
+    networkFee: networkFee.toString(),
+    transactionHash,
+    paymentDate,
+    network: network ?? null,
+    notificationSent: true,
+  });
+
+  const trader = await getMagicNumberById(magicNumberId);
+  if (trader) {
+    const currentLifetimeIncome = parseFloat(trader.lifetimeIncome || "0");
+    const newLifetimeIncome = currentLifetimeIncome + amount;
+    await updateMagicNumber(magicNumberId, {
+      lifetimeIncome: newLifetimeIncome.toFixed(2),
+    });
+
+    await createNotification({
+      magicNumberId,
+      title: "Payment Received",
+      message: `You have received a payment of $${amount.toFixed(2)}. Transaction hash: ${transactionHash}`,
+      type: "payment",
+      isRead: false,
+    });
+    console.log(`[Payment] In-app notification sent to ${trader.name} for payment of $${amount}`);
+
+    if (trader.telegramHandle && trader.telegramChatId) {
+      const telegramMsg = buildPaymentMessage({
+        traderName: trader.name,
+        amount,
+        network: network || trader.usdtNetwork || "TRC20",
+        networkFee,
+        transactionHash,
+        paymentDate,
+      });
+      const sent = await sendTelegramMessage(trader.telegramHandle, telegramMsg, trader.telegramChatId);
+      if (sent) {
+        console.log(`[Payment] Telegram notification sent to ${trader.telegramHandle}`);
+      } else {
+        console.warn(`[Payment] Telegram notification failed for ${trader.telegramHandle} — in-app notification still delivered`);
+      }
+    }
+  }
+}
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -1275,7 +1335,7 @@ export const appRouter = router({
           notificationSent: p.notificationSent,
           traderName: trader?.name || 'Unknown',
           magicNumber: trader?.magicNumber || 'N/A',
-          network: trader?.usdtNetwork || 'TRC20',
+          network: p.network || trader?.usdtNetwork || 'TRC20',
           networkFee: parseFloat(p.networkFee || '0'),
           usdtAddress: trader?.usdtAddress || null,
         };
@@ -1296,54 +1356,15 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
         }
 
-        // Create payment record
-        await createPayment({
-          magicNumberId: input.magicNumberId,
-          amount: input.amount.toString(),
-          networkFee: (input.networkFee || 0).toString(),
-          transactionHash: input.transactionHash,
-          paymentDate: input.paymentDate,
-          notificationSent: true,
-        });
-
-        // Get trader info for notification and update lifetime income
         const trader = await getMagicNumberById(input.magicNumberId);
-        if (trader) {
-          // Update lifetime income
-          const currentLifetimeIncome = parseFloat(trader.lifetimeIncome || "0");
-          const newLifetimeIncome = currentLifetimeIncome + input.amount;
-          await updateMagicNumber(input.magicNumberId, {
-            lifetimeIncome: newLifetimeIncome.toFixed(2),
-          });
-          
-          // Create in-app notification for trader
-          await createNotification({
-            magicNumberId: input.magicNumberId,
-            title: "Payment Received",
-            message: `You have received a payment of $${input.amount.toFixed(2)}. Transaction hash: ${input.transactionHash}`,
-            type: "payment",
-            isRead: false,
-          });
-          console.log(`[Payment] In-app notification sent to ${trader.name} for payment of $${input.amount}`);
-
-          // Send Telegram notification if trader has a handle and chat ID
-          if (trader.telegramHandle && trader.telegramChatId) {
-            const telegramMsg = buildPaymentMessage({
-              traderName: trader.name,
-              amount: input.amount,
-              network: trader.usdtNetwork || 'TRC20',
-              networkFee: input.networkFee || 0,
-              transactionHash: input.transactionHash,
-              paymentDate: input.paymentDate,
-            });
-            const sent = await sendTelegramMessage(trader.telegramHandle, telegramMsg, trader.telegramChatId);
-            if (sent) {
-              console.log(`[Payment] Telegram notification sent to ${trader.telegramHandle}`);
-            } else {
-              console.warn(`[Payment] Telegram notification failed for ${trader.telegramHandle} — in-app notification still delivered`);
-            }
-          }
-        }
+        await recordPaymentAndNotify({
+          magicNumberId: input.magicNumberId,
+          amount: input.amount,
+          transactionHash: input.transactionHash,
+          networkFee: input.networkFee,
+          network: (trader?.usdtNetwork as "TRC20" | "ERC20") ?? undefined,
+          paymentDate: input.paymentDate,
+        });
 
         return { success: true };
       }),
@@ -1434,6 +1455,95 @@ export const appRouter = router({
         }
 
         return { telegramSent, inAppSent, traderName: trader.name };
+      }),
+
+    // Get wallet addresses and balances for configured chains
+    getWalletInfo: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+
+      let trc20: { address: string; usdtBalance: string } | null = null;
+      let erc20: { address: string; usdtBalance: string; nativeBalance: string; chainName: string } | null = null;
+
+      if (isTronConfigured()) {
+        try {
+          const [address, usdtBalance] = await Promise.all([
+            getTronWalletAddress(),
+            getTronBalance(),
+          ]);
+          trc20 = { address, usdtBalance };
+        } catch (err) {
+          console.error("[Wallet] Failed to fetch TRC-20 wallet info:", err);
+        }
+      }
+
+      if (isEvmConfigured()) {
+        try {
+          const [address, usdtBalance, nativeBalance] = await Promise.all([
+            getEvmWalletAddress(),
+            getEvmBalance(),
+            getNativeBalance(),
+          ]);
+          erc20 = { address, usdtBalance, nativeBalance, chainName: ENV.evmChainName };
+        } catch (err) {
+          console.error("[Wallet] Failed to fetch ERC-20 wallet info:", err);
+        }
+      }
+
+      return { trc20, erc20 };
+    }),
+
+    // Send USDT from the configured wallet to a trader's address
+    sendWalletPayment: tradingProcedure
+      .input(z.object({
+        magicNumberId: z.number().int().positive(),
+        amount: z.number().positive().max(10_000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        const trader = await getMagicNumberById(input.magicNumberId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+        if (!trader.usdtAddress || !trader.usdtNetwork) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Trader has no USDT address or network configured" });
+        }
+
+        const network = trader.usdtNetwork as "TRC20" | "ERC20";
+        let txHash: string;
+
+        try {
+          if (network === "TRC20") {
+            if (!isTronConfigured()) {
+              throw new Error("TRON wallet is not configured on this server");
+            }
+            txHash = await sendUsdt(trader.usdtAddress, input.amount);
+          } else {
+            if (!isEvmConfigured()) {
+              throw new Error("EVM wallet is not configured on this server");
+            }
+            txHash = await sendUsdtErc20(trader.usdtAddress, input.amount);
+          }
+        } catch (err: any) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: err?.message ?? "On-chain transaction failed",
+          });
+        }
+
+        await recordPaymentAndNotify({
+          magicNumberId: input.magicNumberId,
+          amount: input.amount,
+          transactionHash: txHash,
+          network,
+          paymentDate: new Date(),
+        });
+
+        return { success: true, txHash, network };
       }),
   }),
 
