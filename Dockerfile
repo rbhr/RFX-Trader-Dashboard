@@ -24,6 +24,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/drizzle.config.ts ./
 
 ENV NODE_ENV=production
 EXPOSE 3000
