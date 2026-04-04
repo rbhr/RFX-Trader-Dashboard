@@ -396,12 +396,12 @@ export default function ManagePayments() {
               {/* Header with Logo */}
               <div className="text-center space-y-2">
                 <div className="flex justify-center">
-                  <img 
-                    src={selectedPayment.network === 'TRC20' 
-                      ? '/icons8-tether-50.png' 
-                      : '/icons8-tether-502.png'
-                    } 
-                    alt="USDT Logo" 
+                  <img
+                    src={selectedPayment.network === 'TRC20'
+                      ? '/usdt-trc20.png'
+                      : '/usdt-erc20.png'
+                    }
+                    alt={`USDT ${selectedPayment.network || 'Logo'}`}
                     className="w-16 h-16"
                   />
                 </div>
