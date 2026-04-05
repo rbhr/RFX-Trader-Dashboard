@@ -38,10 +38,20 @@ export function getWalletAddress(): string {
   return getTronWeb().defaultAddress.base58 as string;
 }
 
+// Cache the USDT contract instance to avoid repeated TronGrid calls
+let _usdtContract: any = null;
+
+async function getUsdtContract(): Promise<any> {
+  if (!_usdtContract) {
+    const tronWeb = getTronWeb();
+    _usdtContract = await tronWeb.contract().at(ENV.tronUsdtContract);
+  }
+  return _usdtContract;
+}
+
 /** Returns the USDT balance of the wallet in human-readable form (e.g. "150.50"). */
 export async function getUsdtBalance(): Promise<string> {
-  const tronWeb = getTronWeb();
-  const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
+  const contract = await getUsdtContract();
   const address = getWalletAddress();
   const raw = await contract.balanceOf(address).call();
   return (Number(raw) / USDT_DECIMALS).toFixed(2);
@@ -51,8 +61,7 @@ export async function getUsdtBalance(): Promise<string> {
  * Returns the USDT balance of any TRON address (used for gasfree address).
  */
 async function getUsdtBalanceOf(address: string): Promise<string> {
-  const tronWeb = getTronWeb();
-  const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
+  const contract = await getUsdtContract();
   const raw = await contract.balanceOf(address).call();
   return (Number(raw) / USDT_DECIMALS).toFixed(2);
 }
