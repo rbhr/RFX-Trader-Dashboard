@@ -1,10 +1,11 @@
 import { TronWeb } from "tronweb";
+import { createHmac } from "crypto";
 import { ENV } from "./_core/env";
 
 const USDT_DECIMALS = 1_000_000;
 
 const GASFREE_API_BASE = "https://open.gasfree.io/tron";
-// TRON mainnet chainId for GasFree SDK
+const GASFREE_BASE_PATH = "/tron"; // base path for HMAC signature
 const TRON_MAINNET_CHAIN_ID = Number("0x2b6653dc");
 
 let _tronWeb: TronWeb | null = null;
@@ -46,43 +47,72 @@ export async function getUsdtBalance(): Promise<string> {
   return (Number(raw) / USDT_DECIMALS).toFixed(2);
 }
 
-// ─── GasFree API helpers ───────────────────────────────────────────
+/**
+ * Returns the USDT balance of any TRON address (used for gasfree address).
+ */
+async function getUsdtBalanceOf(address: string): Promise<string> {
+  const tronWeb = getTronWeb();
+  const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
+  const raw = await contract.balanceOf(address).call();
+  return (Number(raw) / USDT_DECIMALS).toFixed(2);
+}
 
-function gasFreeHeaders(): Record<string, string> {
+// ─── GasFree API helpers (HMAC-SHA256 auth) ───────────────────────
+
+function gasFreeSign(method: string, apiPath: string, timestamp: number): string {
+  // message = METHOD + FULL_PATH + TIMESTAMP
+  // full path = /tron + /api/v1/...
+  const fullPath = `${GASFREE_BASE_PATH}${apiPath}`;
+  const message = `${method}${fullPath}${timestamp}`;
+  const hmac = createHmac("sha256", ENV.gasFreeApiSecret);
+  hmac.update(message);
+  return hmac.digest("base64");
+}
+
+function gasFreeHeaders(method: string, apiPath: string): Record<string, string> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = gasFreeSign(method, apiPath, timestamp);
   return {
     "Content-Type": "application/json",
-    "X-API-KEY": ENV.gasFreeApiKey,
-    "X-API-SECRET": ENV.gasFreeApiSecret,
+    Timestamp: timestamp.toString(),
+    Authorization: `ApiKey ${ENV.gasFreeApiKey}:${signature}`,
   };
 }
 
 async function gasFreeGet(path: string): Promise<any> {
   const res = await fetch(`${GASFREE_API_BASE}${path}`, {
-    headers: gasFreeHeaders(),
+    headers: gasFreeHeaders("GET", path),
   });
   if (!res.ok) {
     throw new Error(`GasFree API ${path} returned ${res.status}: ${await res.text()}`);
   }
-  return res.json();
+  const json = await res.json();
+  if (json.code && json.code !== 200) {
+    throw new Error(`GasFree API error: ${json.message || json.reason || JSON.stringify(json)}`);
+  }
+  return json;
 }
 
 async function gasFreePost(path: string, body: any): Promise<any> {
   const res = await fetch(`${GASFREE_API_BASE}${path}`, {
     method: "POST",
-    headers: gasFreeHeaders(),
+    headers: gasFreeHeaders("POST", path),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error(`GasFree API ${path} returned ${res.status}: ${await res.text()}`);
   }
-  return res.json();
+  const json = await res.json();
+  if (json.code && json.code !== 200) {
+    throw new Error(`GasFree API error: ${json.message || json.reason || JSON.stringify(json)}`);
+  }
+  return json;
 }
+
+// ─── GasFree transfer ─────────────────────────────────────────────
 
 /**
  * Sends USDT via GasFree (no TRX needed — fee deducted in USDT).
- * @param recipientAddress - TRON base58 address
- * @param amount - Human-readable USDT amount (e.g. 50.00)
- * @returns Transaction hash string
  */
 async function sendUsdtGasFree(
   recipientAddress: string,
@@ -91,34 +121,32 @@ async function sendUsdtGasFree(
   const tronWeb = getTronWeb();
   const userAddress = getWalletAddress();
 
-  // 1. Get account info (nonce, gasfree address, activation status)
+  // 1. Get account info (nonce, gasfree address)
   const accountInfo = await gasFreeGet(`/api/v1/address/${userAddress}`);
-  const nonce = accountInfo.data?.nonce ?? accountInfo.nonce ?? 0;
+  const data = accountInfo.data;
+  const nonce = data?.nonce ?? 0;
 
   // 2. Get provider config
   const providerData = await gasFreeGet("/api/v1/config/provider/all");
-  const providers = providerData.data ?? providerData;
-  const provider = Array.isArray(providers) ? providers[0] : providers;
+  const providers = providerData.data?.providers ?? [];
+  const provider = providers[0];
   if (!provider?.address) {
     throw new Error("No GasFree service provider available");
   }
+  const defaultDeadline = provider.config?.defaultDeadlineDuration ?? 300;
 
   // 3. Get token config for maxFee
   const tokenData = await gasFreeGet("/api/v1/config/token/all");
-  const tokens = tokenData.data ?? tokenData;
-  const tokenList = Array.isArray(tokens) ? tokens : [];
-  const usdtToken = tokenList.find(
-    (t: any) =>
-      t.token_address === ENV.tronUsdtContract ||
-      t.tokenAddress === ENV.tronUsdtContract,
+  const tokens = tokenData.data?.tokens ?? [];
+  const usdtToken = tokens.find(
+    (t: any) => t.tokenAddress === ENV.tronUsdtContract,
   );
-  // Default maxFee: 2 USDT (2_000_000 in 6 decimals) if token config not found
-  const transferFeeRaw = usdtToken?.transfer_fee ?? usdtToken?.transferFee ?? "2000000";
+  const transferFeeRaw = usdtToken?.transferFee ?? "2000000";
 
   const rawAmount = Math.round(amount * USDT_DECIMALS).toString();
-  const deadline = Math.floor(Date.now() / 1000) + (provider.config?.default_deadline_duration ?? 300);
+  const deadline = Math.floor(Date.now() / 1000) + defaultDeadline;
 
-  // 4. Assemble TIP-712 message using the GasFree SDK
+  // 4. Assemble TIP-712 message
   const { TronGasFree } = (await import("@gasfree/gasfree-sdk")).default;
   const gasFree = new TronGasFree({ chainId: TRON_MAINNET_CHAIN_ID });
 
@@ -142,8 +170,8 @@ async function sendUsdtGasFree(
     ENV.tronPrivateKey,
   );
 
-  // 6. Submit the signed transfer to the GasFree API
-  const submitResult = await gasFreePost("/api/v1/transfer/submit", {
+  // 6. Submit
+  const submitResult = await gasFreePost("/api/v1/gasfree/submit", {
     token: ENV.tronUsdtContract,
     serviceProvider: provider.address,
     user: userAddress,
@@ -156,7 +184,7 @@ async function sendUsdtGasFree(
     sig: signature,
   });
 
-  const transferId = submitResult.data?.id ?? submitResult.id;
+  const transferId = submitResult.data?.id;
   if (!transferId) {
     throw new Error("GasFree transfer submission failed — no transfer ID returned");
   }
@@ -166,24 +194,27 @@ async function sendUsdtGasFree(
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 2000));
 
-    const status = await gasFreeGet(`/api/v1/transfer/${transferId}`);
-    const state = status.data?.state ?? status.state;
-    const txnHash = status.data?.txn_hash ?? status.txnHash ?? status.data?.txnHash;
+    const status = await gasFreeGet(`/api/v1/gasfree/${transferId}`);
+    const state = status.data?.state;
+    const txnHash = status.data?.txnHash;
 
     if (state === "SUCCESS" || state === "COMPLETED") {
       if (txnHash) return txnHash;
     }
     if (state === "FAILED" || state === "REJECTED") {
-      throw new Error(`GasFree transfer ${state}: ${JSON.stringify(status.data ?? status)}`);
+      throw new Error(`GasFree transfer ${state}: ${JSON.stringify(status.data)}`);
     }
   }
 
   throw new Error("GasFree transfer timed out waiting for confirmation");
 }
 
+// ─── GasFree account info ─────────────────────────────────────────
+
 /**
  * Returns the GasFree account info: derived address and USDT balance.
- * This is the address that needs to be funded with USDT for gasfree transfers.
+ * The gasfree address is where USDT needs to be deposited for gasfree transfers.
+ * Balance is queried on-chain for the gasfree address.
  */
 export async function getGasFreeAccountInfo(): Promise<{
   gasFreeAddress: string;
@@ -191,22 +222,16 @@ export async function getGasFreeAccountInfo(): Promise<{
 }> {
   const userAddress = getWalletAddress();
   const accountInfo = await gasFreeGet(`/api/v1/address/${userAddress}`);
-  const data = accountInfo.data ?? accountInfo;
+  const gasFreeAddress = accountInfo.data?.gasFreeAddress ?? "";
 
-  const gasFreeAddress =
-    data.gas_free_address ?? data.gasFreeAddress ?? "";
-
-  // Balance from the API (raw 6 decimals) or fall back to on-chain query
+  // Query the on-chain USDT balance of the gasfree address
   let usdtBalance = "0.00";
-  const assets = data.assets ?? [];
-  const usdtAsset = assets.find(
-    (a: any) =>
-      a.token_address === ENV.tronUsdtContract ||
-      a.tokenAddress === ENV.tronUsdtContract,
-  );
-  if (usdtAsset) {
-    const rawBalance = parseFloat(usdtAsset.balance ?? usdtAsset.amount ?? "0");
-    usdtBalance = (rawBalance / USDT_DECIMALS).toFixed(2);
+  if (gasFreeAddress) {
+    try {
+      usdtBalance = await getUsdtBalanceOf(gasFreeAddress);
+    } catch (err) {
+      console.error("[TRON] Failed to query gasfree address balance:", err);
+    }
   }
 
   return { gasFreeAddress, usdtBalance };
@@ -217,9 +242,6 @@ export async function getGasFreeAccountInfo(): Promise<{
 /**
  * Sends USDT to a recipient address.
  * Uses GasFree if configured, otherwise falls back to standard TRC-20 transfer.
- * @param recipientAddress - TRON base58 address (starts with T)
- * @param amount - Human-readable USDT amount (e.g. 50.00)
- * @returns Transaction hash string
  */
 export async function sendUsdt(
   recipientAddress: string,
