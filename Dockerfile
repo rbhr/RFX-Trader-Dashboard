@@ -10,6 +10,8 @@ RUN pnpm install
 FROM node:22-slim AS build
 WORKDIR /app
 RUN corepack enable pnpm
+ARG BUILD_HASH=dev
+ENV BUILD_HASH=$BUILD_HASH
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build

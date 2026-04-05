@@ -22,7 +22,10 @@ services:
       - /:/host
 
   rfx-app:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_HASH: ${BUILD_HASH:-dev}
     container_name: rfx-app
     restart: unless-stopped
     depends_on:
