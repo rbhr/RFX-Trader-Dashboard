@@ -4,7 +4,12 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { defineConfig } from "vite";
 
-const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+let commitHash = process.env.BUILD_HASH || "dev";
+try {
+  commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+} catch {
+  // git not available (e.g. Docker build) — use BUILD_HASH env var
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
