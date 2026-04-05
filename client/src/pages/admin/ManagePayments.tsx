@@ -194,16 +194,37 @@ export default function ManagePayments() {
                           <span className="text-[10px] font-semibold bg-green-500/20 text-green-600 px-1.5 py-0.5 rounded">GasFree</span>
                         )}
                       </div>
-                      <div className="text-2xl font-bold">{walletInfo.trc20.usdtBalance} USDT</div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground truncate">{walletInfo.trc20.address}</span>
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(walletInfo.trc20!.address); toast.success("Address copied"); }}
-                          className="p-1 hover:bg-accent rounded shrink-0"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                      </div>
+                      {walletInfo.trc20.gasFreeEnabled && walletInfo.trc20.gasFreeBalance ? (
+                        <>
+                          <div className="text-2xl font-bold">{walletInfo.trc20.gasFreeBalance} USDT</div>
+                          <div className="text-xs text-muted-foreground">GasFree wallet</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-muted-foreground truncate">{walletInfo.trc20.gasFreeAddress}</span>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(walletInfo.trc20!.gasFreeAddress!); toast.success("GasFree address copied"); }}
+                              className="p-1 hover:bg-accent rounded shrink-0"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1 pt-1 border-t">
+                            Main wallet: {walletInfo.trc20.usdtBalance} USDT
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-2xl font-bold">{walletInfo.trc20.usdtBalance} USDT</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-muted-foreground truncate">{walletInfo.trc20.address}</span>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(walletInfo.trc20!.address); toast.success("Address copied"); }}
+                              className="p-1 hover:bg-accent rounded shrink-0"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                   {walletInfo.erc20 && (

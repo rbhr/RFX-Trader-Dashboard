@@ -181,6 +181,37 @@ async function sendUsdtGasFree(
   throw new Error("GasFree transfer timed out waiting for confirmation");
 }
 
+/**
+ * Returns the GasFree account info: derived address and USDT balance.
+ * This is the address that needs to be funded with USDT for gasfree transfers.
+ */
+export async function getGasFreeAccountInfo(): Promise<{
+  gasFreeAddress: string;
+  usdtBalance: string;
+}> {
+  const userAddress = getWalletAddress();
+  const accountInfo = await gasFreeGet(`/api/v1/address/${userAddress}`);
+  const data = accountInfo.data ?? accountInfo;
+
+  const gasFreeAddress =
+    data.gas_free_address ?? data.gasFreeAddress ?? "";
+
+  // Balance from the API (raw 6 decimals) or fall back to on-chain query
+  let usdtBalance = "0.00";
+  const assets = data.assets ?? [];
+  const usdtAsset = assets.find(
+    (a: any) =>
+      a.token_address === ENV.tronUsdtContract ||
+      a.tokenAddress === ENV.tronUsdtContract,
+  );
+  if (usdtAsset) {
+    const rawBalance = parseFloat(usdtAsset.balance ?? usdtAsset.amount ?? "0");
+    usdtBalance = (rawBalance / USDT_DECIMALS).toFixed(2);
+  }
+
+  return { gasFreeAddress, usdtBalance };
+}
+
 // ─── Public send function ──────────────────────────────────────────
 
 /**

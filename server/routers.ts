@@ -49,7 +49,7 @@ import { nanoid } from "nanoid";
 import { sendTelegramMessage, buildPaymentMessage, buildRiskLimitBreachMessage, buildAdminRiskLimitAlertMessage } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
-import { getWalletAddress as getTronWalletAddress, getUsdtBalance as getTronBalance, sendUsdt, isTronConfigured, isGasFreeConfigured } from "./tron";
+import { getWalletAddress as getTronWalletAddress, getUsdtBalance as getTronBalance, sendUsdt, isTronConfigured, isGasFreeConfigured, getGasFreeAccountInfo } from "./tron";
 import { getWalletAddress as getEvmWalletAddress, getUsdtBalance as getEvmBalance, sendUsdtErc20, getNativeBalance, isEvmConfigured } from "./erc20";
 import { ENV } from "./_core/env";
 
@@ -1463,7 +1463,13 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
       }
 
-      let trc20: { address: string; usdtBalance: string; gasFreeEnabled: boolean } | null = null;
+      let trc20: {
+        address: string;
+        usdtBalance: string;
+        gasFreeEnabled: boolean;
+        gasFreeAddress?: string;
+        gasFreeBalance?: string;
+      } | null = null;
       let erc20: { address: string; usdtBalance: string; nativeBalance: string; chainName: string } | null = null;
 
       if (isTronConfigured()) {
@@ -1473,6 +1479,17 @@ export const appRouter = router({
             getTronBalance(),
           ]);
           trc20 = { address, usdtBalance, gasFreeEnabled: isGasFreeConfigured() };
+
+          // Fetch GasFree address and balance if configured
+          if (isGasFreeConfigured()) {
+            try {
+              const gfInfo = await getGasFreeAccountInfo();
+              trc20.gasFreeAddress = gfInfo.gasFreeAddress;
+              trc20.gasFreeBalance = gfInfo.usdtBalance;
+            } catch (err) {
+              console.error("[Wallet] Failed to fetch GasFree account info:", err);
+            }
+          }
         } catch (err) {
           console.error("[Wallet] Failed to fetch TRC-20 wallet info:", err);
         }
