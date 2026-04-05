@@ -1,10 +1,17 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { execSync } from "node:child_process";
 import path from "node:path";
 import { defineConfig } from "vite";
 
+const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+    __BUILD_HASH__: JSON.stringify(commitHash),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
