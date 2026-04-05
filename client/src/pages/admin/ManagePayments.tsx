@@ -188,7 +188,12 @@ export default function ManagePayments() {
                 <div className="grid grid-cols-2 gap-4">
                   {walletInfo.trc20 && (
                     <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
-                      <div className="text-sm font-medium text-muted-foreground">TRC-20 (TRON)</div>
+                      <div className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        TRC-20 (TRON)
+                        {walletInfo.trc20.gasFreeEnabled && (
+                          <span className="text-[10px] font-semibold bg-green-500/20 text-green-600 px-1.5 py-0.5 rounded">GasFree</span>
+                        )}
+                      </div>
                       <div className="text-2xl font-bold">{walletInfo.trc20.usdtBalance} USDT</div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs text-muted-foreground truncate">{walletInfo.trc20.address}</span>

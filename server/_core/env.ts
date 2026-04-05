@@ -15,4 +15,6 @@ export const ENV = {
   evmRpcUrl: process.env.EVM_RPC_URL ?? "",
   evmUsdtContract: process.env.EVM_USDT_CONTRACT ?? "",
   evmChainName: process.env.EVM_CHAIN_NAME ?? "EVM",
+  gasFreeApiKey: process.env.GASFREE_API_KEY ?? "",
+  gasFreeApiSecret: process.env.GASFREE_API_SECRET ?? "",
 };

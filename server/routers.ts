@@ -49,7 +49,7 @@ import { nanoid } from "nanoid";
 import { sendTelegramMessage, buildPaymentMessage, buildRiskLimitBreachMessage, buildAdminRiskLimitAlertMessage } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
-import { getWalletAddress as getTronWalletAddress, getUsdtBalance as getTronBalance, sendUsdt, isTronConfigured } from "./tron";
+import { getWalletAddress as getTronWalletAddress, getUsdtBalance as getTronBalance, sendUsdt, isTronConfigured, isGasFreeConfigured } from "./tron";
 import { getWalletAddress as getEvmWalletAddress, getUsdtBalance as getEvmBalance, sendUsdtErc20, getNativeBalance, isEvmConfigured } from "./erc20";
 import { ENV } from "./_core/env";
 
@@ -1463,7 +1463,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
       }
 
-      let trc20: { address: string; usdtBalance: string } | null = null;
+      let trc20: { address: string; usdtBalance: string; gasFreeEnabled: boolean } | null = null;
       let erc20: { address: string; usdtBalance: string; nativeBalance: string; chainName: string } | null = null;
 
       if (isTronConfigured()) {
@@ -1472,7 +1472,7 @@ export const appRouter = router({
             getTronWalletAddress(),
             getTronBalance(),
           ]);
-          trc20 = { address, usdtBalance };
+          trc20 = { address, usdtBalance, gasFreeEnabled: isGasFreeConfigured() };
         } catch (err) {
           console.error("[Wallet] Failed to fetch TRC-20 wallet info:", err);
         }
