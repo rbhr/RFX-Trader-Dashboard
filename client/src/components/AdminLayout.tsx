@@ -122,7 +122,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Version Info and Logout Button */}
         <div className="p-3 pb-4 space-y-3">
           <div className="text-xs text-center text-muted-foreground">
-            App version 1.4.9 · Build 24b8d4e
+            App version {__APP_VERSION__} · Build {__BUILD_HASH__}
           </div>
           <Button
             variant="ghost"

@@ -992,7 +992,7 @@ export default function Dashboard() {
       
       {/* Footer with version info */}
       <div className="text-center py-4 text-xs text-muted-foreground">
-        App version 1.4.9 · Build 24b8d4e
+        App version {__APP_VERSION__} · Build {__BUILD_HASH__}
       </div>
     </div>
   );
