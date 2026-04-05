@@ -262,19 +262,15 @@ export async function sendUsdt(
     throw new Error("Invalid TRON wallet address");
   }
 
-  // Try GasFree first if configured
+  // Use GasFree if configured — no fallback to avoid double-sending
   if (isGasFreeConfigured()) {
-    try {
-      console.log("[TRON] Sending via GasFree...");
-      const hash = await sendUsdtGasFree(recipientAddress, amount);
-      console.log("[TRON] GasFree transfer complete:", hash);
-      return hash;
-    } catch (err) {
-      console.error("[TRON] GasFree transfer failed, falling back to standard:", err);
-    }
+    console.log("[TRON] Sending via GasFree...");
+    const hash = await sendUsdtGasFree(recipientAddress, amount);
+    console.log("[TRON] GasFree transfer complete:", hash);
+    return hash;
   }
 
-  // Fallback: standard TRC-20 transfer (requires TRX for fees)
+  // Standard TRC-20 transfer (requires TRX for fees)
   console.log("[TRON] Sending via standard TRC-20 transfer...");
   const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
   const rawAmount = Math.round(amount * USDT_DECIMALS);
