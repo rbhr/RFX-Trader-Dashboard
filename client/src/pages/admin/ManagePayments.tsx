@@ -313,7 +313,11 @@ export default function ManagePayments() {
                 {paymentMode === "wallet" && selectedTraderId && (() => {
                   const selectedTrader = traders?.find(t => t.id === parseInt(selectedTraderId));
                   const network = selectedTrader?.usdtNetwork;
-                  const sourceBalance = network === "ERC20" ? walletInfo?.erc20?.usdtBalance : walletInfo?.trc20?.usdtBalance;
+                  const sourceBalance = network === "ERC20"
+                    ? walletInfo?.erc20?.usdtBalance
+                    : (walletInfo?.trc20?.gasFreeEnabled && walletInfo?.trc20?.gasFreeBalance)
+                      ? walletInfo.trc20.gasFreeBalance
+                      : walletInfo?.trc20?.usdtBalance;
                   return (
                     <div className="space-y-2">
                       <Label>Source Wallet ({network || "Not Set"})</Label>
