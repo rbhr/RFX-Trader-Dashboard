@@ -231,6 +231,12 @@ export default function Dashboard(props: {
     refetchInterval: 60000,
   });
 
+  // Trade history — only fetched when embedded (admin view-as mode)
+  const { data: allTimePositions, isLoading: historyLoading } = trpc.trading.getAllTimePositions.useQuery(viewAsInput, {
+    enabled: embedded,
+    refetchInterval: 300000,
+  });
+
   const { data: accountBalanceEquity } = trpc.trading.getAccountBalanceAndEquity.useQuery(viewAsInput, {
     refetchInterval: 60000,
   });
@@ -611,10 +617,12 @@ export default function Dashboard(props: {
               </p>
 
             </div>
-            <Button variant="outline" size="sm" onClick={() => setLocation("/history")}>
-              <Activity className="h-4 w-4 mr-2" />
-              View History
-            </Button>
+            {!embedded && (
+              <Button variant="outline" size="sm" onClick={() => setLocation("/history")}>
+                <Activity className="h-4 w-4 mr-2" />
+                View History
+              </Button>
+            )}
           </div>
 
           {positionsLoading ? (
@@ -656,6 +664,40 @@ export default function Dashboard(props: {
               </CardContent>
             </Card>
           )}
+        {/* Trade History — shown inline when embedded in admin view */}
+        {embedded && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Trade History</h2>
+            {historyLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <Skeleton className="h-6 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : allTimePositions && allTimePositions.length > 0 ? (
+              <div className="space-y-3">
+                {allTimePositions.map((position: any, index: number) => (
+                  <PositionCard key={position.id ?? index} position={position} index={index} />
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Activity className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="font-semibold mb-2">No Trade History</h3>
+                  <p className="text-sm text-muted-foreground">
+                    No closed positions found for this trader.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
         </div>
       </div>
 
