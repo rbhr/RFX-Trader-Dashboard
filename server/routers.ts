@@ -84,6 +84,31 @@ const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
   });
 });
 
+/** Zod schema for optional admin view-as-trader input. */
+const viewAsInput = z.object({ viewAsTraderId: z.number().int().positive().optional() }).optional();
+
+/**
+ * Resolves the trader to use for a query. If viewAsTraderId is provided
+ * and the caller is admin, returns that trader's data. Otherwise returns
+ * the caller's own trader data.
+ */
+async function resolveTrader(
+  ctx: { tradingSession: { magicNumber: any } },
+  viewAsTraderId?: number,
+) {
+  if (!viewAsTraderId) return ctx.tradingSession.magicNumber;
+
+  if (!ctx.tradingSession.magicNumber.isAdmin) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can view as another trader" });
+  }
+
+  const trader = await getMagicNumberById(viewAsTraderId);
+  if (!trader) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+  }
+  return trader;
+}
+
 /** Shared helper: record a payment and send notifications. */
 async function recordPaymentAndNotify(params: {
   magicNumberId: number;
@@ -231,23 +256,27 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    // Get current session info
-    getSession: tradingProcedure.query(({ ctx }) => {
-      return {
-        magicNumber: ctx.tradingSession.magicNumber.magicNumber,
-        name: ctx.tradingSession.magicNumber.name,
-        profitShare: parseFloat(ctx.tradingSession.magicNumber.profitShare),
-        showAllData: ctx.tradingSession.magicNumber.showAllData,
-        isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
-        lifetimeProfit: parseFloat(ctx.tradingSession.magicNumber.lifetimeProfit || '0'),
-        lifetimeProfitShare: parseFloat(ctx.tradingSession.magicNumber.lifetimeProfitShare || '0'),
-        lifetimeIncome: parseFloat(ctx.tradingSession.magicNumber.lifetimeIncome || '0'),
-        usdtAddress: ctx.tradingSession.magicNumber.usdtAddress || null,
-        usdtNetwork: ctx.tradingSession.magicNumber.usdtNetwork || null,
-        telegramHandle: ctx.tradingSession.magicNumber.telegramHandle || null,
-        telegramConnected: !!ctx.tradingSession.magicNumber.telegramChatId,
-      };
-    }),
+    // Get current session info (or viewed trader info for admin)
+    getSession: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        return {
+          id: trader.id,
+          magicNumber: trader.magicNumber,
+          name: trader.name,
+          profitShare: parseFloat(trader.profitShare),
+          showAllData: trader.showAllData,
+          isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
+          lifetimeProfit: parseFloat(trader.lifetimeProfit || '0'),
+          lifetimeProfitShare: parseFloat(trader.lifetimeProfitShare || '0'),
+          lifetimeIncome: parseFloat(trader.lifetimeIncome || '0'),
+          usdtAddress: trader.usdtAddress || null,
+          usdtNetwork: trader.usdtNetwork || null,
+          telegramHandle: trader.telegramHandle || null,
+          telegramConnected: !!trader.telegramChatId,
+        };
+      }),
 
     // Update USDT payment information
     updateUsdtInfo: tradingProcedure
@@ -296,9 +325,10 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Get payment history for current trader
-    getPayments: tradingProcedure.query(async ({ ctx }) => {
-      const magicNumberId = ctx.tradingSession.magicNumber.id;
+    // Get payment history for current trader (or viewed trader for admin)
+    getPayments: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const magicNumberId = trader.id;
       const payments = await getPaymentsByMagicNumberId(magicNumberId);
       
       return payments.map(p => ({
@@ -310,9 +340,10 @@ export const appRouter = router({
       }));
     }),
 
-    // Get notifications for current trader
-    getNotifications: tradingProcedure.query(async ({ ctx }) => {
-      const magicNumberId = ctx.tradingSession.magicNumber.id;
+    // Get notifications for current trader (or viewed trader for admin)
+    getNotifications: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const magicNumberId = trader.id;
       const notifs = await getNotificationsByMagicNumberId(magicNumberId);
       
       return notifs.map(n => ({
@@ -341,8 +372,9 @@ export const appRouter = router({
     }),
 
     // Get copier configuration for trader's live account
-    getCopierInfo: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getCopierInfo: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, liveAccountNumber } = trader;
       
       if (!liveAccountNumber) {
         return null; // No live account assigned
@@ -379,8 +411,9 @@ export const appRouter = router({
     }),
 
     // Get max open trades from trader's MC account features
-    getMaxOpenTrades: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId } = ctx.tradingSession.magicNumber;
+    getMaxOpenTrades: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { mcAccountId } = trader;
       
       if (!mcAccountId) {
         return null; // No MC account
@@ -404,8 +437,9 @@ export const appRouter = router({
     }),
 
     // Get max lot size per trade from Trade Guardrails feature (type 37)
-    getMaxLotSize: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId } = ctx.tradingSession.magicNumber;
+    getMaxLotSize: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { mcAccountId } = trader;
 
       if (!mcAccountId) {
         return null;
@@ -429,8 +463,9 @@ export const appRouter = router({
     }),
 
     // Get account risk limit (absolute equity threshold before all trades close)
-    getRiskLimit: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId } = ctx.tradingSession.magicNumber;
+    getRiskLimit: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { mcAccountId } = trader;
 
       if (!mcAccountId) {
         return null;
@@ -451,8 +486,9 @@ export const appRouter = router({
     }),
 
     // Get current account equity for breach detection
-    getAccountEquity: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId } = ctx.tradingSession.magicNumber;
+    getAccountEquity: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { mcAccountId } = trader;
 
       // Always use the trader's own MC account for equity (breach detection must compare
       // the trader's incubator account equity against their risk limit, not the master account)
@@ -467,8 +503,9 @@ export const appRouter = router({
     }),
 
     // Get both balance and equity for the trader's own incubator account
-    getAccountBalanceAndEquity: tradingProcedure.query(async ({ ctx }) => {
-      const { mcAccountId } = ctx.tradingSession.magicNumber;
+    getAccountBalanceAndEquity: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { mcAccountId } = trader;
 
       // Always use the trader's own MC account (mcAccountId), not the master/live account
       if (!mcAccountId) return null;
@@ -538,8 +575,9 @@ export const appRouter = router({
       }),
 
     // Get open positions
-    getOpenPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getOpenPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, showAllData, liveAccountNumber } = trader;
       
       // If trader has a live account assigned, fetch from that account
       if (liveAccountNumber && !showAllData) {
@@ -558,8 +596,9 @@ export const appRouter = router({
     }),
 
     // Get today's closed positions
-    getTodayPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getTodayPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, showAllData, liveAccountNumber } = trader;
       
       // If trader has a live account assigned, fetch from that account
       if (liveAccountNumber && !showAllData) {
@@ -585,8 +624,9 @@ export const appRouter = router({
     }),
 
     // Get week's positions
-    getWeekPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getWeekPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, showAllData, liveAccountNumber } = trader;
       
       // If trader has a live account assigned, fetch from that account
       if (liveAccountNumber && !showAllData) {
@@ -612,8 +652,9 @@ export const appRouter = router({
     }),
 
     // Get month's positions
-    getMonthPositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getMonthPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, showAllData, liveAccountNumber } = trader;
       
       // If trader has a live account assigned, fetch from that account
       if (liveAccountNumber && !showAllData) {
@@ -639,8 +680,9 @@ export const appRouter = router({
     }),
 
     // Get all-time positions
-    getAllTimePositions: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getAllTimePositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, showAllData, liveAccountNumber } = trader;
       
       // If trader has a live account assigned, fetch from that account
       if (liveAccountNumber && !showAllData) {
@@ -671,8 +713,9 @@ export const appRouter = router({
     }),
 
     // Calculate P&L summary
-    getPnLSummary: tradingProcedure.query(async ({ ctx }) => {
-      const { magicNumber, showAllData, profitShare, liveAccountNumber } = ctx.tradingSession.magicNumber;
+    getPnLSummary: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
+      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+      const { magicNumber, showAllData, profitShare, liveAccountNumber } = trader;
       
       // If trader has a live account assigned, fetch from that account
       let liveAccountId: string | null = null;

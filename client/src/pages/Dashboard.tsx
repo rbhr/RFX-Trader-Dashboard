@@ -145,13 +145,31 @@ function PositionCard({ position, index }: { position: any; index: number }) {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { session, isLoading: sessionLoading, logout } = useTradingSession();
+  const { session: selfSession, isLoading: sessionLoading, logout } = useTradingSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [usdtAddress, setUsdtAddress] = useState<string>("");
   const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("")
   const [usdtAddressError, setUsdtAddressError] = useState<string | null>(null);
   const [telegramHandle, setTelegramHandle] = useState<string>("");
+
+  // Admin view-as-trader state
+  const [viewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
+  const isViewingAsTrader = viewAsTraderId !== undefined;
+  const viewAsInput = viewAsTraderId ? { viewAsTraderId } : undefined;
+
+  // Fetch trader list for admin dropdown
+  const { data: allTraders } = trpc.admin.getAllTraders.useQuery(undefined, {
+    enabled: !!selfSession?.isAdmin,
+  });
+
+  // When viewing as another trader, fetch their session info
+  const { data: viewedSession } = trpc.trading.getSession.useQuery(viewAsInput, {
+    enabled: isViewingAsTrader,
+  });
+
+  // Use viewed trader's session when in view-as mode, otherwise self
+  const session = isViewingAsTrader ? viewedSession : selfSession;
 
   const validateUsdtAddress = (address: string, network: string): string | null => {
     if (!address) return null;
@@ -169,8 +187,8 @@ export default function Dashboard() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
-  const { data: paymentHistory, isLoading: paymentsLoading } = trpc.trading.getPayments.useQuery();
-  const { data: notifications, refetch: refetchNotifications } = trpc.trading.getNotifications.useQuery();
+  const { data: paymentHistory, isLoading: paymentsLoading } = trpc.trading.getPayments.useQuery(viewAsInput);
+  const { data: notifications, refetch: refetchNotifications } = trpc.trading.getNotifications.useQuery(viewAsInput);
   const updateUsdtMutation = trpc.trading.updateUsdtInfo.useMutation();
   const updateTelegramMutation = trpc.trading.updateTelegramHandle.useMutation();
   const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
@@ -179,44 +197,45 @@ export default function Dashboard() {
 
   const unreadCount = notifications?.filter(n => !n.isRead).length || 0;
 
-  const { data: pnlSummary, isLoading: pnlLoading } = trpc.trading.getPnLSummary.useQuery(undefined, {
-    refetchInterval: 60000, // Refresh every 60 seconds
+  const { data: pnlSummary, isLoading: pnlLoading } = trpc.trading.getPnLSummary.useQuery(viewAsInput, {
+    refetchInterval: 60000,
   });
 
-  const { data: openPositions, isLoading: positionsLoading } = trpc.trading.getOpenPositions.useQuery(undefined, {
-    refetchInterval: 30000, // Refresh every 30 seconds
+  const { data: openPositions, isLoading: positionsLoading } = trpc.trading.getOpenPositions.useQuery(viewAsInput, {
+    refetchInterval: 30000,
   });
 
-  const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(undefined, {
-    refetchInterval: 60000, // Refresh every 60 seconds
+  const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
+    refetchInterval: 60000,
   });
 
-  const { data: maxOpenTrades } = trpc.trading.getMaxOpenTrades.useQuery(undefined, {
-    refetchInterval: 300000, // Refresh every 5 minutes (doesn't change often)
+  const { data: maxOpenTrades } = trpc.trading.getMaxOpenTrades.useQuery(viewAsInput, {
+    refetchInterval: 300000,
   });
 
-  const { data: maxLotSize } = trpc.trading.getMaxLotSize.useQuery(undefined, {
-    refetchInterval: 300000, // Refresh every 5 minutes
+  const { data: maxLotSize } = trpc.trading.getMaxLotSize.useQuery(viewAsInput, {
+    refetchInterval: 300000,
   });
 
-  const { data: riskLimit } = trpc.trading.getRiskLimit.useQuery(undefined, {
-    refetchInterval: 300000, // Refresh every 5 minutes
+  const { data: riskLimit } = trpc.trading.getRiskLimit.useQuery(viewAsInput, {
+    refetchInterval: 300000,
   });
 
-  const { data: accountEquity } = trpc.trading.getAccountEquity.useQuery(undefined, {
-    refetchInterval: 60000, // Check equity every 60 seconds
+  const { data: accountEquity } = trpc.trading.getAccountEquity.useQuery(viewAsInput, {
+    refetchInterval: 60000,
   });
 
-  const { data: accountBalanceEquity } = trpc.trading.getAccountBalanceAndEquity.useQuery(undefined, {
-    refetchInterval: 60000, // Refresh every 60 seconds alongside equity
+  const { data: accountBalanceEquity } = trpc.trading.getAccountBalanceAndEquity.useQuery(viewAsInput, {
+    refetchInterval: 60000,
   });
 
   const reportBreachMutation = trpc.trading.reportRiskLimitBreach.useMutation();
 
-  // Breach detection: fire once when equity drops below risk limit
+  // Breach detection: fire once when equity drops below risk limit (only for own account)
   const breachReportedRef = useRef(false);
   useEffect(() => {
     if (
+      !isViewingAsTrader &&
       accountEquity != null &&
       riskLimit != null &&
       accountEquity < riskLimit &&
@@ -244,7 +263,7 @@ export default function Dashboard() {
   }, [accountEquity, riskLimit]);
 
   // Redirect to login if not authenticated
-  if (!sessionLoading && !session) {
+  if (!sessionLoading && !selfSession) {
     setLocation("/");
     return null;
   }
@@ -286,14 +305,14 @@ export default function Dashboard() {
     }
   };
 
-  // Initialize USDT fields when session loads
+  // Initialize USDT fields when own session loads (not viewed trader)
   useEffect(() => {
-    if (session) {
-      setUsdtAddress(session.usdtAddress || "");
-      setUsdtNetwork(session.usdtNetwork || "");
-      setTelegramHandle(session.telegramHandle || "");
+    if (selfSession) {
+      setUsdtAddress(selfSession.usdtAddress || "");
+      setUsdtNetwork(selfSession.usdtNetwork || "");
+      setTelegramHandle(selfSession.telegramHandle || "");
     }
-  }, [session]);
+  }, [selfSession]);
 
   if (sessionLoading) {
     return (
@@ -322,6 +341,27 @@ export default function Dashboard() {
                   {session?.name} • Magic #{session?.magicNumber}
                 </p>
               </div>
+              {/* Admin trader picker */}
+              {selfSession?.isAdmin && allTraders && (
+                <div className="ml-4">
+                  <Select
+                    value={viewAsTraderId?.toString() ?? "self"}
+                    onValueChange={(v) => setViewAsTraderId(v === "self" ? undefined : parseInt(v))}
+                  >
+                    <SelectTrigger className="w-[220px] h-8 text-sm">
+                      <SelectValue placeholder="View as trader..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="self">My Dashboard</SelectItem>
+                      {allTraders.map((t) => (
+                        <SelectItem key={t.id} value={t.id.toString()}>
+                          {t.name} - {t.magicNumber}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Popover>
@@ -401,14 +441,16 @@ export default function Dashboard() {
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSettingsOpen(true)}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
+              {!isViewingAsTrader && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
