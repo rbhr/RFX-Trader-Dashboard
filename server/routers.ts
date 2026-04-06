@@ -1546,9 +1546,29 @@ export const appRouter = router({
             txHash = await sendUsdtErc20(trader.usdtAddress, input.amount);
           }
         } catch (err: any) {
+          const msg = err?.message ?? "On-chain transaction failed";
+
+          // If the transfer was submitted but confirmation timed out,
+          // record it as pending so the admin doesn't have to re-enter manually
+          if (msg.includes("submitted") && msg.includes("timed out")) {
+            const pendingHash = `PENDING-${Date.now()}`;
+            await recordPaymentAndNotify({
+              magicNumberId: input.magicNumberId,
+              amount: input.amount,
+              transactionHash: pendingHash,
+              network,
+              paymentDate: new Date(),
+            });
+            console.warn(`[Payment] Recorded pending payment ${pendingHash} for ${trader.name} — GasFree confirmation timed out`);
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: `Payment was sent but confirmation timed out. It has been recorded as pending — check TronScan to verify and update the transaction hash.`,
+            });
+          }
+
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: err?.message ?? "On-chain transaction failed",
+            message: msg,
           });
         }
 
