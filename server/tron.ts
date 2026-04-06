@@ -214,7 +214,7 @@ async function sendUsdtGasFree(
 
       // Check for any success-like state (case-insensitive)
       const upperState = (state || "").toUpperCase();
-      if (upperState === "SUCCESS" || upperState === "COMPLETED" || upperState === "CONFIRMED") {
+      if (upperState === "SUCCESS" || upperState === "SUCCEED" || upperState === "COMPLETED" || upperState === "CONFIRMED") {
         if (txnHash) return txnHash;
       }
       if (upperState === "FAILED" || upperState === "REJECTED" || upperState === "EXPIRED") {
