@@ -25,6 +25,7 @@ import {
   getPaymentsByMagicNumberId,
   getAllPayments,
   updatePaymentNotificationStatus,
+  updatePaymentTransactionHash,
   createNotification,
   getNotificationsByMagicNumberId,
   markNotificationAsRead,
@@ -1366,6 +1367,22 @@ export const appRouter = router({
           paymentDate: input.paymentDate,
         });
 
+        return { success: true };
+      }),
+
+    // Update transaction hash on a pending payment
+    updatePaymentHash: tradingProcedure
+      .input(z.object({
+        paymentId: z.number().int().positive(),
+        transactionHash: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+
+        await updatePaymentTransactionHash(input.paymentId, input.transactionHash);
+        console.log(`[Payment] Updated tx hash for payment #${input.paymentId}: ${input.transactionHash}`);
         return { success: true };
       }),
 

@@ -308,6 +308,13 @@ export async function updatePaymentNotificationStatus(id: number, sent: boolean)
   await db.update(payments).set({ notificationSent: sent }).where(eq(payments.id, id));
 }
 
+export async function updatePaymentTransactionHash(id: number, transactionHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(payments).set({ transactionHash }).where(eq(payments.id, id));
+}
+
 // Notification management functions
 export async function createNotification(data: InsertNotification) {
   const db = await getDb();

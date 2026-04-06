@@ -20,7 +20,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2 } from "lucide-react";
+import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2, Pencil, Check } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,12 +42,14 @@ export default function ManagePayments() {
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"manual" | "wallet">("manual");
+  const [editingTxHash, setEditingTxHash] = useState<string>("");
 
   const { data: traders, isLoading: tradersLoading } = trpc.admin.getAllTraders.useQuery();
   const { data: paymentHistory, isLoading: paymentsLoading, refetch: refetchPayments } = trpc.admin.getAllPayments.useQuery();
   const { data: walletInfo } = trpc.admin.getWalletInfo.useQuery(undefined, { refetchInterval: 30_000 });
   const makePaymentMutation = trpc.admin.makePayment.useMutation();
   const sendWalletPaymentMutation = trpc.admin.sendWalletPayment.useMutation();
+  const updateHashMutation = trpc.admin.updatePaymentHash.useMutation();
 
   // Update payment date to current time on mount
   useEffect(() => {
@@ -651,33 +653,69 @@ export default function ManagePayments() {
                   <span>{selectedPayment.networkFee || 0} USDT</span>
                 </div>
 
-                <div className="flex justify-between py-3 border-b">
-                  <span className="text-muted-foreground">Transaction ID</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm">
-                      {selectedPayment.transactionHash.substring(0, 8)}...{selectedPayment.transactionHash.substring(selectedPayment.transactionHash.length - 6)}
-                    </span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedPayment.transactionHash);
-                        toast.success('Transaction hash copied');
-                      }}
-                      className="p-1 hover:bg-accent rounded"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    <a
-                      href={selectedPayment.network === 'ERC20' 
-                        ? `https://etherscan.io/tx/${selectedPayment.transactionHash}`
-                        : `https://tronscan.org/#/transaction/${selectedPayment.transactionHash}`
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 hover:bg-accent rounded"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                <div className="py-3 border-b space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Transaction ID</span>
+                    {selectedPayment.transactionHash.startsWith("PENDING-") ? (
+                      <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">Pending confirmation</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">
+                          {selectedPayment.transactionHash.substring(0, 8)}...{selectedPayment.transactionHash.substring(selectedPayment.transactionHash.length - 6)}
+                        </span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedPayment.transactionHash);
+                            toast.success('Transaction hash copied');
+                          }}
+                          className="p-1 hover:bg-accent rounded"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <a
+                          href={selectedPayment.network === 'ERC20'
+                            ? `https://etherscan.io/tx/${selectedPayment.transactionHash}`
+                            : `https://tronscan.org/#/transaction/${selectedPayment.transactionHash}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 hover:bg-accent rounded"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    )}
                   </div>
+                  {selectedPayment.transactionHash.startsWith("PENDING-") && (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Paste transaction hash from TronScan"
+                        value={editingTxHash}
+                        onChange={(e) => setEditingTxHash(e.target.value)}
+                        className="font-mono text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        disabled={!editingTxHash || updateHashMutation.isPending}
+                        onClick={async () => {
+                          try {
+                            await updateHashMutation.mutateAsync({
+                              paymentId: selectedPayment.id,
+                              transactionHash: editingTxHash,
+                            });
+                            toast.success("Transaction hash updated");
+                            setEditingTxHash("");
+                            setProofDialogOpen(false);
+                            refetchPayments();
+                          } catch {
+                            toast.error("Failed to update hash");
+                          }
+                        }}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-between py-3">
