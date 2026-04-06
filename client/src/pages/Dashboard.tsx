@@ -143,7 +143,12 @@ function PositionCard({ position, index }: { position: any; index: number }) {
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard(props: {
+  viewAsTraderId?: number;
+  embedded?: boolean;
+  [key: string]: any;
+}) {
+  const { viewAsTraderId: externalViewAsTraderId, embedded = false } = props ?? {};
   const [, setLocation] = useLocation();
   const { session: selfSession, isLoading: sessionLoading, logout } = useTradingSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -153,14 +158,15 @@ export default function Dashboard() {
   const [usdtAddressError, setUsdtAddressError] = useState<string | null>(null);
   const [telegramHandle, setTelegramHandle] = useState<string>("");
 
-  // Admin view-as-trader state
-  const [viewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
+  // View-as-trader: use external prop (from AdminDashboard) or internal state
+  const [internalViewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
+  const viewAsTraderId = externalViewAsTraderId ?? internalViewAsTraderId;
   const isViewingAsTrader = viewAsTraderId !== undefined;
   const viewAsInput = viewAsTraderId ? { viewAsTraderId } : undefined;
 
-  // Fetch trader list for admin dropdown
+  // Fetch trader list for admin dropdown (only when not embedded — AdminDashboard has its own picker)
   const { data: allTraders } = trpc.admin.getAllTraders.useQuery(undefined, {
-    enabled: !!selfSession?.isAdmin,
+    enabled: !!selfSession?.isAdmin && !embedded,
   });
 
   // When viewing as another trader, fetch their session info
@@ -262,8 +268,8 @@ export default function Dashboard() {
     }
   }, [accountEquity, riskLimit]);
 
-  // Redirect to login if not authenticated
-  if (!sessionLoading && !selfSession) {
+  // Redirect to login if not authenticated (skip when embedded in admin layout)
+  if (!embedded && !sessionLoading && !selfSession) {
     setLocation("/");
     return null;
   }
@@ -314,7 +320,7 @@ export default function Dashboard() {
     }
   }, [selfSession]);
 
-  if (sessionLoading) {
+  if (!embedded && sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -326,8 +332,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
+    <div className={embedded ? "" : "min-h-screen bg-background"}>
+      {/* Header — hidden when embedded in admin layout */}
+      {!embedded && (
       <div className="border-b bg-card">
         <div className="container py-4">
           <div className="flex items-center justify-between">
@@ -459,8 +466,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      )}
 
-      <div className="container py-8 space-y-8">
+      <div className={embedded ? "space-y-8" : "container py-8 space-y-8"}>
         {/* Today's P&L + Copier Configuration side-by-side */}
         <div className="grid gap-4 md:grid-cols-2">
           {/* Today's P&L Hero Card */}
