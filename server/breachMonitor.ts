@@ -47,7 +47,7 @@ async function checkAllTraders(): Promise<void> {
         ]);
 
         const equity = accountInfo?.equity;
-        if (equity == null) continue;
+        if (equity == null || equity === 0) continue; // Skip null/zero — zero usually means API returned bad data
 
         // Find the first active absolute risk limit
         const activeLimit = limits?.find(
