@@ -41,7 +41,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, CheckCircle2, XCircle, Loader2, Users, ArrowUpDown, ArrowUp, ArrowDown, Columns3, Megaphone, Send } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  Plus,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Columns3,
+  Megaphone,
+  Send,
+} from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 interface Trader {
@@ -79,10 +93,16 @@ function TraderRiskLimitCell({ mcAccountId }: { mcAccountId: string | null }) {
     { mcAccountId: mcAccountId! },
     { enabled: !!mcAccountId, staleTime: 5 * 60 * 1000 }
   );
-  if (!mcAccountId) return <span className="italic opacity-50 text-sm">No MC</span>;
-  if (isLoading) return <span className="text-sm text-muted-foreground">...</span>;
+  if (!mcAccountId)
+    return <span className="italic opacity-50 text-sm">No MC</span>;
+  if (isLoading)
+    return <span className="text-sm text-muted-foreground">...</span>;
   if (!data) return <span className="italic opacity-50 text-sm">Not set</span>;
-  return <span className="text-sm font-medium text-destructive">${data.absoluteRiskLimit.toFixed(2)}</span>;
+  return (
+    <span className="text-sm font-medium text-destructive">
+      ${data.absoluteRiskLimit.toFixed(2)}
+    </span>
+  );
 }
 
 // Risk limit input field that pre-fills with current value from API
@@ -112,7 +132,9 @@ function RiskLimitField({
 
   return (
     <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+        $
+      </span>
       <Input
         id="edit-riskLimit"
         type="number"
@@ -122,7 +144,9 @@ function RiskLimitField({
         value={isLoading ? "" : value}
         placeholder={isLoading ? "Loading..." : "e.g. 300"}
         disabled={isLoading}
-        onChange={(e) => onChange(e.target.value === "" ? "" : parseFloat(e.target.value))}
+        onChange={e =>
+          onChange(e.target.value === "" ? "" : parseFloat(e.target.value))
+        }
       />
     </div>
   );
@@ -135,10 +159,16 @@ export default function ManageTraders() {
   const [mcStatusDialogOpen, setMcStatusDialogOpen] = useState(false);
   const [copiersDialogOpen, setCopiersDialogOpen] = useState(false);
   const [selectedTrader, setSelectedTrader] = useState<Trader | null>(null);
-  const [mcStatus, setMcStatus] = useState<{ exists: boolean; accountId?: string; mtAccount?: string } | null>(null);
-  const [managerFilter, setManagerFilter] = useState<string>('all');
-  const [sortField, setSortField] = useState<keyof Trader | 'copyRate' | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [mcStatus, setMcStatus] = useState<{
+    exists: boolean;
+    accountId?: string;
+    mtAccount?: string;
+  } | null>(null);
+  const [managerFilter, setManagerFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<keyof Trader | "copyRate" | null>(
+    null
+  );
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const [riskLimitValue, setRiskLimitValue] = useState<number | "">("");
   const [riskLimitLoading, setRiskLimitLoading] = useState(false);
@@ -149,6 +179,12 @@ export default function ManageTraders() {
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastSendTelegram, setBroadcastSendTelegram] = useState(true);
   const [broadcastSendInApp, setBroadcastSendInApp] = useState(true);
+
+  // Previous magic numbers / master accounts input state
+  const [newPrevMagic, setNewPrevMagic] = useState("");
+  const [newPrevMagicNote, setNewPrevMagicNote] = useState("");
+  const [newPrevAccount, setNewPrevAccount] = useState("");
+  const [newPrevAccountNote, setNewPrevAccountNote] = useState("");
 
   // Direct message dialog state
   const [dmDialogOpen, setDmDialogOpen] = useState(false);
@@ -176,22 +212,24 @@ export default function ManageTraders() {
     status: true,
   };
 
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    try {
-      const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Record<string, boolean>;
-        // Merge with defaults so any new columns added later are visible by default
-        return { ...defaultColumns, ...parsed };
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
+    () => {
+      try {
+        const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as Record<string, boolean>;
+          // Merge with defaults so any new columns added later are visible by default
+          return { ...defaultColumns, ...parsed };
+        }
+      } catch {
+        // ignore parse errors
       }
-    } catch {
-      // ignore parse errors
+      return defaultColumns;
     }
-    return defaultColumns;
-  });
+  );
 
   const toggleColumn = (col: string) => {
-    setVisibleColumns((prev) => {
+    setVisibleColumns(prev => {
       const next = { ...prev, [col]: !prev[col] };
       try {
         localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
@@ -223,39 +261,94 @@ export default function ManageTraders() {
   const { data: traders, isLoading } = trpc.admin.listTraders.useQuery();
 
   const broadcastMutation = trpc.admin.broadcastMessage.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Broadcast sent: ${data.telegramSent} Telegram, ${data.inAppSent} in-app`);
+    onSuccess: data => {
+      toast.success(
+        `Broadcast sent: ${data.telegramSent} Telegram, ${data.inAppSent} in-app`
+      );
       setBroadcastDialogOpen(false);
       setBroadcastTitle("");
       setBroadcastMessage("");
     },
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const sendDirectMutation = trpc.admin.sendDirectMessage.useMutation({
-    onSuccess: (data) => {
-      const channels = [data.telegramSent && 'Telegram', data.inAppSent && 'in-app'].filter(Boolean).join(' & ');
-      toast.success(`Message sent to ${data.traderName} via ${channels || 'no channels'}`);
+    onSuccess: data => {
+      const channels = [
+        data.telegramSent && "Telegram",
+        data.inAppSent && "in-app",
+      ]
+        .filter(Boolean)
+        .join(" & ");
+      toast.success(
+        `Message sent to ${data.traderName} via ${channels || "no channels"}`
+      );
       setDmDialogOpen(false);
       setDmTitle("");
       setDmMessage("");
     },
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
-  const { data: copiers, refetch: refetchCopiers } = trpc.admin.getCopiers.useQuery(
-    { traderId: selectedTrader?.id || 0 },
-    { enabled: copiersDialogOpen && !!selectedTrader }
-  );
+  const { data: copiers, refetch: refetchCopiers } =
+    trpc.admin.getCopiers.useQuery(
+      { traderId: selectedTrader?.id || 0 },
+      { enabled: copiersDialogOpen && !!selectedTrader }
+    );
   const { data: rfxMasterAccounts } = trpc.admin.getRfxMasterAccounts.useQuery(
     undefined,
     { enabled: editDialogOpen }
   );
 
+  // Previous magic numbers & master accounts queries
+  const { data: prevMagicNumbers, refetch: refetchPrevMagics } =
+    trpc.admin.getPreviousMagicNumbers.useQuery(
+      { traderId: selectedTrader?.id || 0 },
+      { enabled: editDialogOpen && !!selectedTrader }
+    );
+  const { data: prevMasterAccounts, refetch: refetchPrevAccounts } =
+    trpc.admin.getPreviousMasterAccounts.useQuery(
+      { traderId: selectedTrader?.id || 0 },
+      { enabled: editDialogOpen && !!selectedTrader }
+    );
+
+  const addPrevMagic = trpc.admin.addPreviousMagicNumber.useMutation({
+    onSuccess: () => {
+      refetchPrevMagics();
+      setNewPrevMagic("");
+      setNewPrevMagicNote("");
+      toast.success("Previous magic number added");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const removePrevMagic = trpc.admin.removePreviousMagicNumber.useMutation({
+    onSuccess: () => {
+      refetchPrevMagics();
+      toast.success("Previous magic number removed");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const addPrevAccount = trpc.admin.addPreviousMasterAccount.useMutation({
+    onSuccess: () => {
+      refetchPrevAccounts();
+      setNewPrevAccount("");
+      setNewPrevAccountNote("");
+      toast.success("Previous master account added");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const removePrevAccount = trpc.admin.removePreviousMasterAccount.useMutation({
+    onSuccess: () => {
+      refetchPrevAccounts();
+      toast.success("Previous master account removed");
+    },
+    onError: error => toast.error(error.message),
+  });
+
   const updateRiskLimit = trpc.admin.updateTraderRiskLimit.useMutation({
     onSuccess: () => {
       toast.success("Risk limit updated successfully");
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(`Risk limit update failed: ${error.message}`);
     },
   });
@@ -266,7 +359,7 @@ export default function ManageTraders() {
       toast.success("Trader updated successfully");
       setEditDialogOpen(false);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message);
     },
   });
@@ -278,7 +371,7 @@ export default function ManageTraders() {
       setAddDialogOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message);
     },
   });
@@ -289,26 +382,28 @@ export default function ManageTraders() {
       toast.success("Trader deleted successfully");
       setDeleteDialogOpen(false);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message);
     },
   });
 
   const checkMcStatus = trpc.admin.checkMetaCopierStatus.useMutation({
-    onSuccess: (data) => {
+    onSuccess: data => {
       setMcStatus(data);
       setMcStatusDialogOpen(true);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message);
     },
   });
 
   const createMcAccount = trpc.admin.createMetaCopierAccount.useMutation({
-    onSuccess: (data) => {
-      toast.dismiss('mc-account-creation');
+    onSuccess: data => {
+      toast.dismiss("mc-account-creation");
       if (data.success) {
-        toast.success(data.message || "MetaCopier account created successfully");
+        toast.success(
+          data.message || "MetaCopier account created successfully"
+        );
         setMcStatusDialogOpen(false);
         // Refresh trader list to show updated magic number
         utils.admin.listTraders.invalidate();
@@ -316,8 +411,8 @@ export default function ManageTraders() {
         toast.error(data.message || "Failed to create MetaCopier account");
       }
     },
-    onError: (error) => {
-      toast.dismiss('mc-account-creation');
+    onError: error => {
+      toast.dismiss("mc-account-creation");
       toast.error(error.message);
     },
   });
@@ -394,10 +489,13 @@ export default function ManageTraders() {
 
   const handleCreateMcAccount = () => {
     if (!selectedTrader) return;
-    toast.loading("Creating MetaCopier account... This can take a couple of minutes. Please don't close this page.", {
-      id: 'mc-account-creation',
-      duration: 300000, // 5 minutes
-    });
+    toast.loading(
+      "Creating MetaCopier account... This can take a couple of minutes. Please don't close this page.",
+      {
+        id: "mc-account-creation",
+        duration: 300000, // 5 minutes
+      }
+    );
     createMcAccount.mutate({ traderId: selectedTrader.id });
   };
 
@@ -411,7 +509,7 @@ export default function ManageTraders() {
       toast.success("Copier status updated");
       refetchCopiers();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message);
     },
   });
@@ -421,16 +519,20 @@ export default function ManageTraders() {
       toast.success("Copier removed successfully");
       refetchCopiers();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message);
     },
   });
 
-  const handleCopierAction = (copier: any, action: 'D' | 'M' | 'A' | 'X') => {
+  const handleCopierAction = (copier: any, action: "D" | "M" | "A" | "X") => {
     if (!selectedTrader) return;
 
-    if (action === 'X') {
-      if (confirm(`Remove copier to ${copier.toAccountAlias}? This will check for open positions first.`)) {
+    if (action === "X") {
+      if (
+        confirm(
+          `Remove copier to ${copier.toAccountAlias}? This will check for open positions first.`
+        )
+      ) {
         removeCopier.mutate({
           traderId: selectedTrader.id,
           toAccountId: copier.toAccountId,
@@ -441,9 +543,9 @@ export default function ManageTraders() {
     }
 
     const statusMap = {
-      'D': 'DISABLED' as const,
-      'M': 'MANAGE' as const,
-      'A': 'ACTIVE' as const,
+      D: "DISABLED" as const,
+      M: "MANAGE" as const,
+      A: "ACTIVE" as const,
     };
 
     updateCopierStatus.mutate({
@@ -511,58 +613,75 @@ export default function ManageTraders() {
   };
 
   // Handle column sorting
-  const handleSort = (field: keyof Trader | 'copyRate') => {
+  const handleSort = (field: keyof Trader | "copyRate") => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection("asc");
     }
   };
 
   // Filter and sort traders
   const filteredAndSortedTraders = (() => {
-    let result = traders?.filter(trader => {
-      if (managerFilter === 'all') return true;
-      return trader.manager === managerFilter;
-    }) || [];
+    let result =
+      traders?.filter(trader => {
+        if (managerFilter === "all") return true;
+        return trader.manager === managerFilter;
+      }) || [];
 
     if (sortField) {
       result = [...result].sort((a, b) => {
         // Handle copyRate as a special computed field
         let aVal: any;
         let bVal: any;
-        
-        if (sortField === 'copyRate') {
-          aVal = a.copierInfo?.isActive ? (a.copierInfo.scaleType === 3 ? a.copierInfo.fixedLotSize : a.copierInfo.multiplier) : 0;
-          bVal = b.copierInfo?.isActive ? (b.copierInfo.scaleType === 3 ? b.copierInfo.fixedLotSize : b.copierInfo.multiplier) : 0;
+
+        if (sortField === "copyRate") {
+          aVal = a.copierInfo?.isActive
+            ? a.copierInfo.scaleType === 3
+              ? a.copierInfo.fixedLotSize
+              : a.copierInfo.multiplier
+            : 0;
+          bVal = b.copierInfo?.isActive
+            ? b.copierInfo.scaleType === 3
+              ? b.copierInfo.fixedLotSize
+              : b.copierInfo.multiplier
+            : 0;
         } else {
           aVal = a[sortField];
           bVal = b[sortField];
         }
-        
+
         // Handle null values
         if (aVal === null && bVal === null) return 0;
         if (aVal === null) return 1;
         if (bVal === null) return -1;
-        
+
         // Compare values
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          return sortDirection === 'asc' 
+        if (typeof aVal === "string" && typeof bVal === "string") {
+          return sortDirection === "asc"
             ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
         }
-        
-        if (typeof aVal === 'number' && typeof bVal === 'number') {
-          return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+
+        if (typeof aVal === "number" && typeof bVal === "number") {
+          return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
         }
-        
-        if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
-          return sortDirection === 'asc' 
-            ? (aVal === bVal ? 0 : aVal ? 1 : -1)
-            : (aVal === bVal ? 0 : bVal ? 1 : -1);
+
+        if (typeof aVal === "boolean" && typeof bVal === "boolean") {
+          return sortDirection === "asc"
+            ? aVal === bVal
+              ? 0
+              : aVal
+                ? 1
+                : -1
+            : aVal === bVal
+              ? 0
+              : bVal
+                ? 1
+                : -1;
         }
-        
+
         return 0;
       });
     }
@@ -583,7 +702,7 @@ export default function ManageTraders() {
           <div className="flex gap-3">
             <select
               value={managerFilter}
-              onChange={(e) => setManagerFilter(e.target.value)}
+              onChange={e => setManagerFilter(e.target.value)}
               className="px-3 py-2 border rounded-md bg-background"
             >
               <option value="all">All Managers</option>
@@ -591,7 +710,10 @@ export default function ManageTraders() {
               <option value="HubbFX">HubbFX</option>
             </select>
             {/* Broadcast message button */}
-            <Button variant="outline" onClick={() => setBroadcastDialogOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setBroadcastDialogOpen(true)}
+            >
               <Megaphone className="h-4 w-4 mr-2" />
               Broadcast
             </Button>
@@ -606,21 +728,23 @@ export default function ManageTraders() {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {([
-                  ['manager', 'Manager'],
-                  ['profitShare', 'Profit Share'],
-                  ['copyRate', 'Copy Rate'],
-                  ['mtAccount', 'MT Account'],
-                  ['mtServer', 'MT Server'],
-                  ['mtVersion', 'MT Version'],
-                  ['mcLocation', 'MC Location'],
-                  ['lifetimeProfit', 'Lifetime Profit'],
-                  ['lifetimeShare', 'Lifetime Share'],
-                  ['lifetimeIncome', 'Lifetime Income'],
-                  ['riskLimit', 'Risk Limit'],
-                  ['telegram', 'Telegram'],
-                  ['status', 'Status'],
-                ] as [string, string][]).map(([key, label]) => (
+                {(
+                  [
+                    ["manager", "Manager"],
+                    ["profitShare", "Profit Share"],
+                    ["copyRate", "Copy Rate"],
+                    ["mtAccount", "MT Account"],
+                    ["mtServer", "MT Server"],
+                    ["mtVersion", "MT Version"],
+                    ["mcLocation", "MC Location"],
+                    ["lifetimeProfit", "Lifetime Profit"],
+                    ["lifetimeShare", "Lifetime Share"],
+                    ["lifetimeIncome", "Lifetime Income"],
+                    ["riskLimit", "Risk Limit"],
+                    ["telegram", "Telegram"],
+                    ["status", "Status"],
+                  ] as [string, string][]
+                ).map(([key, label]) => (
                   <DropdownMenuCheckboxItem
                     key={key}
                     checked={visibleColumns[key]}
@@ -647,125 +771,288 @@ export default function ManageTraders() {
             <Table>
               <TableHeader className="sticky top-0 z-30">
                 <TableRow>
-                  <TableHead className="cursor-pointer select-none sticky left-0 z-40 bg-background" onClick={() => handleSort('name')}>
+                  <TableHead
+                    className="cursor-pointer select-none sticky left-0 z-40 bg-background"
+                    onClick={() => handleSort("name")}
+                  >
                     <div className="flex items-center gap-1">
                       Name
-                      {sortField === 'name' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      {sortField === "name" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="h-4 w-4" />
+                        ) : (
+                          <ArrowDown className="h-4 w-4" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-30" />
+                      )}
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none sticky left-[160px] z-40 bg-background" onClick={() => handleSort('magicNumber')}>
+                  <TableHead
+                    className="cursor-pointer select-none sticky left-[160px] z-40 bg-background"
+                    onClick={() => handleSort("magicNumber")}
+                  >
                     <div className="flex items-center gap-1">
                       Magic
-                      {sortField === 'magicNumber' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                      {sortField === "magicNumber" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="h-4 w-4" />
+                        ) : (
+                          <ArrowDown className="h-4 w-4" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-30" />
+                      )}
                     </div>
                   </TableHead>
                   {visibleColumns.manager && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('manager')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("manager")}
+                    >
                       <div className="flex items-center gap-1">
                         Manager
-                        {sortField === 'manager' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "manager" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.profitShare && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('profitShare')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("profitShare")}
+                    >
                       <div className="flex items-center gap-1">
                         Profit Share
-                        {sortField === 'profitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "profitShare" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.copyRate && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('copyRate')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("copyRate")}
+                    >
                       <div className="flex items-center gap-1">
                         Copy Rate
-                        {sortField === 'copyRate' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "copyRate" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.mtAccount && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtAccount')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("mtAccount")}
+                    >
                       <div className="flex items-center gap-1">
                         MT Account
-                        {sortField === 'mtAccount' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "mtAccount" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.mtServer && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtServer')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("mtServer")}
+                    >
                       <div className="flex items-center gap-1">
                         MT Server
-                        {sortField === 'mtServer' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "mtServer" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.mtVersion && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mtVersion')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("mtVersion")}
+                    >
                       <div className="flex items-center gap-1">
                         MT Version
-                        {sortField === 'mtVersion' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "mtVersion" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.mcLocation && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('mcLocation')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("mcLocation")}
+                    >
                       <div className="flex items-center gap-1">
                         MC Location
-                        {sortField === 'mcLocation' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "mcLocation" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.lifetimeProfit && (
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfit')}>
+                    <TableHead
+                      className="text-right cursor-pointer select-none"
+                      onClick={() => handleSort("lifetimeProfit")}
+                    >
                       <div className="flex items-center justify-end gap-1">
                         Lifetime Profit
-                        {sortField === 'lifetimeProfit' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "lifetimeProfit" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.lifetimeShare && (
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeProfitShare')}>
+                    <TableHead
+                      className="text-right cursor-pointer select-none"
+                      onClick={() => handleSort("lifetimeProfitShare")}
+                    >
                       <div className="flex items-center justify-end gap-1">
                         Lifetime Share
-                        {sortField === 'lifetimeProfitShare' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "lifetimeProfitShare" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.lifetimeIncome && (
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('lifetimeIncome')}>
+                    <TableHead
+                      className="text-right cursor-pointer select-none"
+                      onClick={() => handleSort("lifetimeIncome")}
+                    >
                       <div className="flex items-center justify-end gap-1">
                         Lifetime Income
-                        {sortField === 'lifetimeIncome' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "lifetimeIncome" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
-                  {visibleColumns.riskLimit && <TableHead>Risk Limit</TableHead>}
+                  {visibleColumns.riskLimit && (
+                    <TableHead>Risk Limit</TableHead>
+                  )}
                   {visibleColumns.telegram && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('telegramHandle')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("telegramHandle")}
+                    >
                       <div className="flex items-center gap-1">
                         Telegram
-                        {sortField === 'telegramHandle' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "telegramHandle" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
                   {visibleColumns.status && (
-                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('isActive')}>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => handleSort("isActive")}
+                    >
                       <div className="flex items-center gap-1">
                         Status
-                        {sortField === 'isActive' ? (sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4 opacity-30" />}
+                        {sortField === "isActive" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
                       </div>
                     </TableHead>
                   )}
-                  <TableHead className="text-right sticky right-0 z-40 bg-background">Actions</TableHead>
+                  <TableHead className="text-right sticky right-0 z-40 bg-background">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedTraders && filteredAndSortedTraders.length > 0 ? (
-                  filteredAndSortedTraders.map((trader) => (
+                {filteredAndSortedTraders &&
+                filteredAndSortedTraders.length > 0 ? (
+                  filteredAndSortedTraders.map(trader => (
                     <TableRow key={trader.id}>
-                      <TableCell className="font-medium sticky left-0 z-10 bg-background">{trader.name}</TableCell>
+                      <TableCell className="font-medium sticky left-0 z-10 bg-background">
+                        {trader.name}
+                      </TableCell>
                       <TableCell className="sticky left-[160px] z-10 bg-background">
-                        <span className="font-mono text-sm">{trader.magicNumber}</span>
+                        <span className="font-mono text-sm">
+                          {trader.magicNumber}
+                        </span>
                         {trader.isAdmin && (
                           <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
                             Admin
@@ -775,7 +1062,7 @@ export default function ManageTraders() {
                       {visibleColumns.manager && (
                         <TableCell>
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary">
-                            {trader.manager || 'RFX'}
+                            {trader.manager || "RFX"}
                           </span>
                         </TableCell>
                       )}
@@ -788,15 +1075,22 @@ export default function ManageTraders() {
                               max="100"
                               step="0.1"
                               value={(trader.profitShare * 100).toFixed(1)}
-                              onChange={(e) => {
-                                const newValue = parseFloat(e.target.value) / 100;
-                                if (!isNaN(newValue) && newValue >= 0 && newValue <= 1) {
+                              onChange={e => {
+                                const newValue =
+                                  parseFloat(e.target.value) / 100;
+                                if (
+                                  !isNaN(newValue) &&
+                                  newValue >= 0 &&
+                                  newValue <= 1
+                                ) {
                                   handleUpdateProfitShare(trader, newValue);
                                 }
                               }}
                               className="w-16 h-8 text-sm"
                             />
-                            <span className="text-sm text-muted-foreground">%</span>
+                            <span className="text-sm text-muted-foreground">
+                              %
+                            </span>
                           </div>
                         </TableCell>
                       )}
@@ -805,9 +1099,11 @@ export default function ManageTraders() {
                           <span className="font-mono text-sm font-semibold">
                             {trader.copierInfo ? (
                               trader.copierInfo.isActive ? (
-                                trader.copierInfo.scaleType === 3
-                                  ? trader.copierInfo.fixedLotSize.toFixed(2)
-                                  : `${trader.copierInfo.multiplier}x`
+                                trader.copierInfo.scaleType === 3 ? (
+                                  trader.copierInfo.fixedLotSize.toFixed(2)
+                                ) : (
+                                  `${trader.copierInfo.multiplier}x`
+                                )
                               ) : (
                                 <span className="text-muted-foreground">0</span>
                               )
@@ -819,38 +1115,58 @@ export default function ManageTraders() {
                       )}
                       {visibleColumns.mtAccount && (
                         <TableCell>
-                          <span className="font-mono text-sm">{trader.mtAccount || "-"}</span>
+                          <span className="font-mono text-sm">
+                            {trader.mtAccount || "-"}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.mtServer && (
-                        <TableCell className="text-sm">{trader.mtServer || "-"}</TableCell>
+                        <TableCell className="text-sm">
+                          {trader.mtServer || "-"}
+                        </TableCell>
                       )}
                       {visibleColumns.mtVersion && (
-                        <TableCell className="text-sm">{trader.mtVersion || "-"}</TableCell>
+                        <TableCell className="text-sm">
+                          {trader.mtVersion || "-"}
+                        </TableCell>
                       )}
                       {visibleColumns.mcLocation && (
-                        <TableCell className="text-sm">{trader.mcLocation || "-"}</TableCell>
+                        <TableCell className="text-sm">
+                          {trader.mcLocation || "-"}
+                        </TableCell>
                       )}
                       {visibleColumns.lifetimeProfit && (
                         <TableCell className="text-right">
-                          <span className={trader.lifetimeProfit >= 0 ? "text-success" : "text-destructive"}>
+                          <span
+                            className={
+                              trader.lifetimeProfit >= 0
+                                ? "text-success"
+                                : "text-destructive"
+                            }
+                          >
                             ${trader.lifetimeProfit.toFixed(2)}
                           </span>
                         </TableCell>
                       )}
                       {visibleColumns.lifetimeShare && (
                         <TableCell className="text-right">
-                          <span className="text-success">${trader.lifetimeProfitShare.toFixed(2)}</span>
+                          <span className="text-success">
+                            ${trader.lifetimeProfitShare.toFixed(2)}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.lifetimeIncome && (
                         <TableCell className="text-right">
-                          <span className="text-success">${trader.lifetimeIncome.toFixed(2)}</span>
+                          <span className="text-success">
+                            ${trader.lifetimeIncome.toFixed(2)}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.riskLimit && (
                         <TableCell>
-                          <TraderRiskLimitCell mcAccountId={trader.mcAccountId} />
+                          <TraderRiskLimitCell
+                            mcAccountId={trader.mcAccountId}
+                          />
                         </TableCell>
                       )}
                       {visibleColumns.telegram && (
@@ -859,8 +1175,8 @@ export default function ManageTraders() {
                             <button
                               className={`flex items-center gap-1.5 text-sm group ${
                                 trader.telegramConnected
-                                  ? 'cursor-pointer hover:text-primary'
-                                  : 'cursor-default text-muted-foreground'
+                                  ? "cursor-pointer hover:text-primary"
+                                  : "cursor-default text-muted-foreground"
                               }`}
                               onClick={() => {
                                 if (!trader.telegramConnected) return;
@@ -871,18 +1187,28 @@ export default function ManageTraders() {
                                 setDmSendInApp(true);
                                 setDmDialogOpen(true);
                               }}
-                              title={trader.telegramConnected ? `Send message to ${trader.telegramHandle}` : 'Not connected to bot'}
+                              title={
+                                trader.telegramConnected
+                                  ? `Send message to ${trader.telegramHandle}`
+                                  : "Not connected to bot"
+                              }
                             >
-                              <span className={`h-2 w-2 rounded-full flex-shrink-0 ${
-                                trader.telegramConnected ? 'bg-green-500' : 'bg-gray-300'
-                              }`} />
+                              <span
+                                className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                                  trader.telegramConnected
+                                    ? "bg-green-500"
+                                    : "bg-gray-300"
+                                }`}
+                              />
                               <span>{trader.telegramHandle}</span>
                               {trader.telegramConnected && (
                                 <Send className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
                               )}
                             </button>
                           ) : (
-                            <span className="italic text-sm opacity-50">Not set</span>
+                            <span className="italic text-sm opacity-50">
+                              Not set
+                            </span>
                           )}
                         </TableCell>
                       )}
@@ -906,7 +1232,9 @@ export default function ManageTraders() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleCheckMcStatus(trader)}
-                            disabled={!trader.mtAccount || checkMcStatus.isPending}
+                            disabled={
+                              !trader.mtAccount || checkMcStatus.isPending
+                            }
                           >
                             {checkMcStatus.isPending ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -944,7 +1272,10 @@ export default function ManageTraders() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell
+                      colSpan={11}
+                      className="text-center py-8 text-muted-foreground"
+                    >
                       No traders found. Add your first trader to get started.
                     </TableCell>
                   </TableRow>
@@ -955,7 +1286,10 @@ export default function ManageTraders() {
         )}
 
         {/* Broadcast Message Dialog */}
-        <Dialog open={broadcastDialogOpen} onOpenChange={setBroadcastDialogOpen}>
+        <Dialog
+          open={broadcastDialogOpen}
+          onOpenChange={setBroadcastDialogOpen}
+        >
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -963,7 +1297,8 @@ export default function ManageTraders() {
                 Broadcast Message
               </DialogTitle>
               <DialogDescription>
-                Send a message to all traders via Telegram and/or in-app notification.
+                Send a message to all traders via Telegram and/or in-app
+                notification.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -972,7 +1307,7 @@ export default function ManageTraders() {
                 <Input
                   id="broadcast-title"
                   value={broadcastTitle}
-                  onChange={(e) => setBroadcastTitle(e.target.value)}
+                  onChange={e => setBroadcastTitle(e.target.value)}
                   placeholder="e.g. System Maintenance Notice"
                 />
               </div>
@@ -981,43 +1316,74 @@ export default function ManageTraders() {
                 <Textarea
                   id="broadcast-message"
                   value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  onChange={e => setBroadcastMessage(e.target.value)}
                   placeholder="Write your message here..."
                   rows={5}
                 />
               </div>
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
-                  <Switch checked={broadcastSendTelegram} onCheckedChange={setBroadcastSendTelegram} id="bc-telegram" />
-                  <Label htmlFor="bc-telegram" className="cursor-pointer">Telegram</Label>
+                  <Switch
+                    checked={broadcastSendTelegram}
+                    onCheckedChange={setBroadcastSendTelegram}
+                    id="bc-telegram"
+                  />
+                  <Label htmlFor="bc-telegram" className="cursor-pointer">
+                    Telegram
+                  </Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch checked={broadcastSendInApp} onCheckedChange={setBroadcastSendInApp} id="bc-inapp" />
-                  <Label htmlFor="bc-inapp" className="cursor-pointer">In-App</Label>
+                  <Switch
+                    checked={broadcastSendInApp}
+                    onCheckedChange={setBroadcastSendInApp}
+                    id="bc-inapp"
+                  />
+                  <Label htmlFor="bc-inapp" className="cursor-pointer">
+                    In-App
+                  </Label>
                 </div>
               </div>
               {traders && (
                 <p className="text-xs text-muted-foreground">
                   Will send to <strong>{traders.length}</strong> traders
-                  {broadcastSendTelegram && ` (${traders.filter(t => t.telegramConnected).length} connected to Telegram)`}.
+                  {broadcastSendTelegram &&
+                    ` (${traders.filter(t => t.telegramConnected).length} connected to Telegram)`}
+                  .
                 </p>
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setBroadcastDialogOpen(false)}>Cancel</Button>
               <Button
-                onClick={() => broadcastMutation.mutate({
-                  title: broadcastTitle,
-                  message: broadcastMessage,
-                  sendTelegram: broadcastSendTelegram,
-                  sendInApp: broadcastSendInApp,
-                })}
-                disabled={!broadcastTitle.trim() || !broadcastMessage.trim() || broadcastMutation.isPending}
+                variant="outline"
+                onClick={() => setBroadcastDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() =>
+                  broadcastMutation.mutate({
+                    title: broadcastTitle,
+                    message: broadcastMessage,
+                    sendTelegram: broadcastSendTelegram,
+                    sendInApp: broadcastSendInApp,
+                  })
+                }
+                disabled={
+                  !broadcastTitle.trim() ||
+                  !broadcastMessage.trim() ||
+                  broadcastMutation.isPending
+                }
               >
                 {broadcastMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
                 ) : (
-                  <><Megaphone className="h-4 w-4 mr-2" />Send Broadcast</>
+                  <>
+                    <Megaphone className="h-4 w-4 mr-2" />
+                    Send Broadcast
+                  </>
                 )}
               </Button>
             </DialogFooter>
@@ -1033,7 +1399,8 @@ export default function ManageTraders() {
                 Message {dmTrader?.name}
               </DialogTitle>
               <DialogDescription>
-                Send a direct message to {dmTrader?.telegramHandle} via Telegram and/or in-app notification.
+                Send a direct message to {dmTrader?.telegramHandle} via Telegram
+                and/or in-app notification.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -1042,7 +1409,7 @@ export default function ManageTraders() {
                 <Input
                   id="dm-title"
                   value={dmTitle}
-                  onChange={(e) => setDmTitle(e.target.value)}
+                  onChange={e => setDmTitle(e.target.value)}
                   placeholder="e.g. Account Update"
                 />
               </div>
@@ -1051,38 +1418,65 @@ export default function ManageTraders() {
                 <Textarea
                   id="dm-message"
                   value={dmMessage}
-                  onChange={(e) => setDmMessage(e.target.value)}
+                  onChange={e => setDmMessage(e.target.value)}
                   placeholder="Write your message here..."
                   rows={5}
                 />
               </div>
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
-                  <Switch checked={dmSendTelegram} onCheckedChange={setDmSendTelegram} id="dm-telegram" />
-                  <Label htmlFor="dm-telegram" className="cursor-pointer">Telegram</Label>
+                  <Switch
+                    checked={dmSendTelegram}
+                    onCheckedChange={setDmSendTelegram}
+                    id="dm-telegram"
+                  />
+                  <Label htmlFor="dm-telegram" className="cursor-pointer">
+                    Telegram
+                  </Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch checked={dmSendInApp} onCheckedChange={setDmSendInApp} id="dm-inapp" />
-                  <Label htmlFor="dm-inapp" className="cursor-pointer">In-App</Label>
+                  <Switch
+                    checked={dmSendInApp}
+                    onCheckedChange={setDmSendInApp}
+                    id="dm-inapp"
+                  />
+                  <Label htmlFor="dm-inapp" className="cursor-pointer">
+                    In-App
+                  </Label>
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDmDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setDmDialogOpen(false)}>
+                Cancel
+              </Button>
               <Button
-                onClick={() => dmTrader && sendDirectMutation.mutate({
-                  traderId: dmTrader.id,
-                  title: dmTitle,
-                  message: dmMessage,
-                  sendTelegram: dmSendTelegram,
-                  sendInApp: dmSendInApp,
-                })}
-                disabled={!dmTitle.trim() || !dmMessage.trim() || sendDirectMutation.isPending}
+                onClick={() =>
+                  dmTrader &&
+                  sendDirectMutation.mutate({
+                    traderId: dmTrader.id,
+                    title: dmTitle,
+                    message: dmMessage,
+                    sendTelegram: dmSendTelegram,
+                    sendInApp: dmSendInApp,
+                  })
+                }
+                disabled={
+                  !dmTitle.trim() ||
+                  !dmMessage.trim() ||
+                  sendDirectMutation.isPending
+                }
               >
                 {sendDirectMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
                 ) : (
-                  <><Send className="h-4 w-4 mr-2" />Send Message</>
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Message
+                  </>
                 )}
               </Button>
             </DialogFooter>
@@ -1105,7 +1499,9 @@ export default function ManageTraders() {
                   <Input
                     id="magicNumber"
                     value={formData.magicNumber}
-                    onChange={(e) => setFormData({ ...formData, magicNumber: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, magicNumber: e.target.value })
+                    }
                     placeholder="99999"
                     className="text-muted-foreground"
                   />
@@ -1115,7 +1511,9 @@ export default function ManageTraders() {
                   <Input
                     id="name"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
                     placeholder="Trader name"
                   />
                 </div>
@@ -1127,7 +1525,9 @@ export default function ManageTraders() {
                     id="password"
                     type="password"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
                     placeholder="Login password"
                   />
                 </div>
@@ -1140,7 +1540,12 @@ export default function ManageTraders() {
                     max="1"
                     step="0.01"
                     value={formData.profitShare}
-                    onChange={(e) => setFormData({ ...formData, profitShare: parseFloat(e.target.value) })}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        profitShare: parseFloat(e.target.value),
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -1152,7 +1557,9 @@ export default function ManageTraders() {
                     <Input
                       id="mtAccount"
                       value={formData.mtAccount}
-                      onChange={(e) => setFormData({ ...formData, mtAccount: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtAccount: e.target.value })
+                      }
                       placeholder="e.g., 12345678"
                     />
                   </div>
@@ -1161,7 +1568,9 @@ export default function ManageTraders() {
                     <Input
                       id="mtServer"
                       value={formData.mtServer}
-                      onChange={(e) => setFormData({ ...formData, mtServer: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtServer: e.target.value })
+                      }
                       placeholder="e.g., BrokerName-Live"
                     />
                   </div>
@@ -1173,7 +1582,9 @@ export default function ManageTraders() {
                       id="mtPassword"
                       type="password"
                       value={formData.mtPassword}
-                      onChange={(e) => setFormData({ ...formData, mtPassword: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtPassword: e.target.value })
+                      }
                       placeholder="MT account password"
                     />
                   </div>
@@ -1182,7 +1593,9 @@ export default function ManageTraders() {
                     <select
                       id="mtVersion"
                       value={formData.mtVersion}
-                      onChange={(e) => setFormData({ ...formData, mtVersion: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtVersion: e.target.value })
+                      }
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="MT4">MT4</option>
@@ -1195,7 +1608,9 @@ export default function ManageTraders() {
                   <select
                     id="mcLocation"
                     value={formData.mcLocation}
-                    onChange={(e) => setFormData({ ...formData, mcLocation: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, mcLocation: e.target.value })
+                    }
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="London">London</option>
@@ -1210,8 +1625,13 @@ export default function ManageTraders() {
               <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmitAdd} disabled={createTrader.isPending}>
-                {createTrader.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Button
+                onClick={handleSubmitAdd}
+                disabled={createTrader.isPending}
+              >
+                {createTrader.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 Create Trader
               </Button>
             </DialogFooter>
@@ -1231,14 +1651,20 @@ export default function ManageTraders() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Magic Number</Label>
-                  <Input value={formData.magicNumber} disabled className="bg-muted" />
+                  <Input
+                    value={formData.magicNumber}
+                    disabled
+                    className="bg-muted"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-name">Name</Label>
                   <Input
                     id="edit-name"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
                   />
                 </div>
               </div>
@@ -1249,7 +1675,9 @@ export default function ManageTraders() {
                     id="edit-password"
                     type="password"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
                     placeholder="Leave blank to keep current"
                   />
                 </div>
@@ -1262,7 +1690,12 @@ export default function ManageTraders() {
                     max="100"
                     step="0.1"
                     value={(formData.profitShare * 100).toFixed(1)}
-                    onChange={(e) => setFormData({ ...formData, profitShare: parseFloat(e.target.value) / 100 })}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        profitShare: parseFloat(e.target.value) / 100,
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -1274,7 +1707,9 @@ export default function ManageTraders() {
                     <Input
                       id="edit-mtAccount"
                       value={formData.mtAccount}
-                      onChange={(e) => setFormData({ ...formData, mtAccount: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtAccount: e.target.value })
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -1282,18 +1717,24 @@ export default function ManageTraders() {
                     <Input
                       id="edit-mtServer"
                       value={formData.mtServer}
-                      onChange={(e) => setFormData({ ...formData, mtServer: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtServer: e.target.value })
+                      }
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-mtPassword">MT Password (optional)</Label>
+                    <Label htmlFor="edit-mtPassword">
+                      MT Password (optional)
+                    </Label>
                     <Input
                       id="edit-mtPassword"
                       type="password"
                       value={formData.mtPassword}
-                      onChange={(e) => setFormData({ ...formData, mtPassword: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtPassword: e.target.value })
+                      }
                       placeholder="Leave blank to keep current"
                     />
                   </div>
@@ -1302,7 +1743,9 @@ export default function ManageTraders() {
                     <select
                       id="edit-mtVersion"
                       value={formData.mtVersion}
-                      onChange={(e) => setFormData({ ...formData, mtVersion: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, mtVersion: e.target.value })
+                      }
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="MT4">MT4</option>
@@ -1315,7 +1758,9 @@ export default function ManageTraders() {
                   <select
                     id="edit-mcLocation"
                     value={formData.mcLocation}
-                    onChange={(e) => setFormData({ ...formData, mcLocation: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, mcLocation: e.target.value })
+                    }
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="London">London</option>
@@ -1325,16 +1770,26 @@ export default function ManageTraders() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-liveAccountNumber">Live Account Number</Label>
+                  <Label htmlFor="edit-liveAccountNumber">
+                    Live Account Number
+                  </Label>
                   <select
                     id="edit-liveAccountNumber"
                     value={formData.liveAccountNumber}
-                    onChange={(e) => setFormData({ ...formData, liveAccountNumber: e.target.value })}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        liveAccountNumber: e.target.value,
+                      })
+                    }
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Select Live Account</option>
                     {rfxMasterAccounts?.map((account: any) => (
-                      <option key={account.id} value={account.loginAccountNumber}>
+                      <option
+                        key={account.id}
+                        value={account.loginAccountNumber}
+                      >
                         {account.alias} ({account.loginAccountNumber})
                       </option>
                     ))}
@@ -1345,7 +1800,12 @@ export default function ManageTraders() {
                   <Input
                     id="edit-telegramHandle"
                     value={formData.telegramHandle}
-                    onChange={(e) => setFormData({ ...formData, telegramHandle: e.target.value })}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        telegramHandle: e.target.value,
+                      })
+                    }
                     placeholder="@username"
                   />
                 </div>
@@ -1359,7 +1819,10 @@ export default function ManageTraders() {
                       loading={riskLimitLoading}
                       setLoading={setRiskLimitLoading}
                     />
-                    <p className="text-xs text-muted-foreground">Absolute equity risk limit. If equity drops below this value, all trades are closed.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Absolute equity risk limit. If equity drops below this
+                      value, all trades are closed.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1367,44 +1830,236 @@ export default function ManageTraders() {
                 <h3 className="font-semibold mb-3">Lifetime Metrics</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-lifetimeProfit">Lifetime Profit ($)</Label>
+                    <Label htmlFor="edit-lifetimeProfit">
+                      Lifetime Profit ($)
+                    </Label>
                     <Input
                       id="edit-lifetimeProfit"
                       type="number"
                       step="0.01"
                       value={formData.lifetimeProfit}
-                      onChange={(e) => setFormData({ ...formData, lifetimeProfit: parseFloat(e.target.value) || 0 })}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          lifetimeProfit: parseFloat(e.target.value) || 0,
+                        })
+                      }
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-lifetimeProfitShare">Lifetime Share ($)</Label>
+                    <Label htmlFor="edit-lifetimeProfitShare">
+                      Lifetime Share ($)
+                    </Label>
                     <Input
                       id="edit-lifetimeProfitShare"
                       type="number"
                       step="0.01"
                       value={formData.lifetimeProfitShare}
-                      onChange={(e) => setFormData({ ...formData, lifetimeProfitShare: parseFloat(e.target.value) || 0 })}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          lifetimeProfitShare: parseFloat(e.target.value) || 0,
+                        })
+                      }
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-lifetimeIncome">Lifetime Income ($)</Label>
+                    <Label htmlFor="edit-lifetimeIncome">
+                      Lifetime Income ($)
+                    </Label>
                     <Input
                       id="edit-lifetimeIncome"
                       type="number"
                       step="0.01"
                       value={formData.lifetimeIncome}
-                      onChange={(e) => setFormData({ ...formData, lifetimeIncome: parseFloat(e.target.value) || 0 })}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          lifetimeIncome: parseFloat(e.target.value) || 0,
+                        })
+                      }
                     />
                   </div>
                 </div>
               </div>
+
+              {/* Previous Magic Numbers */}
+              <div className="border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-3">Previous Magic Numbers</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Historical magic numbers this trader used. Lifetime P&L will
+                  aggregate across all.
+                </p>
+                {prevMagicNumbers && prevMagicNumbers.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {prevMagicNumbers.map(pm => (
+                      <div
+                        key={pm.id}
+                        className="flex items-center gap-2 text-sm bg-muted/50 rounded px-3 py-2"
+                      >
+                        <span className="font-mono font-medium">
+                          {pm.previousMagicNumber}
+                        </span>
+                        {pm.note && (
+                          <span className="text-muted-foreground">
+                            — {pm.note}
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-auto h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          onClick={() => removePrevMagic.mutate({ id: pm.id })}
+                          disabled={removePrevMagic.isPending}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Magic number"
+                    value={newPrevMagic}
+                    onChange={e => setNewPrevMagic(e.target.value)}
+                    className="w-36"
+                  />
+                  <Input
+                    placeholder="Note (optional)"
+                    value={newPrevMagicNote}
+                    onChange={e => setNewPrevMagicNote(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      !newPrevMagic.trim() ||
+                      !selectedTrader ||
+                      addPrevMagic.isPending
+                    }
+                    onClick={() => {
+                      if (selectedTrader && newPrevMagic.trim()) {
+                        addPrevMagic.mutate({
+                          traderId: selectedTrader.id,
+                          magicNumber: newPrevMagic.trim(),
+                          note: newPrevMagicNote.trim() || undefined,
+                        });
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Previous Master Accounts */}
+              <div className="border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-3">Previous Master Accounts</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Historical master/live accounts this trader was assigned to.
+                  Lifetime P&L will aggregate across all.
+                </p>
+                {prevMasterAccounts && prevMasterAccounts.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {prevMasterAccounts.map(pa => {
+                      const acct = rfxMasterAccounts?.find(
+                        (a: any) =>
+                          a.loginAccountNumber === pa.liveAccountNumber
+                      );
+                      return (
+                        <div
+                          key={pa.id}
+                          className="flex items-center gap-2 text-sm bg-muted/50 rounded px-3 py-2"
+                        >
+                          <span className="font-mono font-medium">
+                            {acct
+                              ? `${acct.alias} (${pa.liveAccountNumber})`
+                              : pa.liveAccountNumber}
+                          </span>
+                          {pa.note && (
+                            <span className="text-muted-foreground">
+                              — {pa.note}
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ml-auto h-6 w-6 p-0 text-destructive hover:text-destructive"
+                            onClick={() =>
+                              removePrevAccount.mutate({ id: pa.id })
+                            }
+                            disabled={removePrevAccount.isPending}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select
+                    className="border rounded px-2 py-1 text-sm w-56 bg-background"
+                    value={newPrevAccount}
+                    onChange={e => setNewPrevAccount(e.target.value)}
+                  >
+                    <option value="">Select account</option>
+                    {rfxMasterAccounts
+                      ?.filter(
+                        (a: any) =>
+                          a.loginAccountNumber !== formData.liveAccountNumber
+                      )
+                      .map((a: any) => (
+                        <option key={a.id} value={a.loginAccountNumber}>
+                          {a.alias} ({a.loginAccountNumber})
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    placeholder="Note (optional)"
+                    value={newPrevAccountNote}
+                    onChange={e => setNewPrevAccountNote(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      !newPrevAccount ||
+                      !selectedTrader ||
+                      addPrevAccount.isPending
+                    }
+                    onClick={() => {
+                      if (selectedTrader && newPrevAccount) {
+                        addPrevAccount.mutate({
+                          traderId: selectedTrader.id,
+                          liveAccountNumber: newPrevAccount,
+                          note: newPrevAccountNote.trim() || undefined,
+                        });
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add
+                  </Button>
+                </div>
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setEditDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleSubmitEdit} disabled={updateTrader.isPending}>
-                {updateTrader.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Button
+                onClick={handleSubmitEdit}
+                disabled={updateTrader.isPending}
+              >
+                {updateTrader.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 Save Changes
               </Button>
             </DialogFooter>
@@ -1417,17 +2072,23 @@ export default function ManageTraders() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Trader</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete <strong>{selectedTrader?.name}</strong>? This action
-                cannot be undone and will remove all associated data.
+                Are you sure you want to delete{" "}
+                <strong>{selectedTrader?.name}</strong>? This action cannot be
+                undone and will remove all associated data.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => selectedTrader && deleteTrader.mutate({ id: selectedTrader.id })}
+                onClick={() =>
+                  selectedTrader &&
+                  deleteTrader.mutate({ id: selectedTrader.id })
+                }
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {deleteTrader.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {deleteTrader.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1452,7 +2113,11 @@ export default function ManageTraders() {
                       <div className="text-center">
                         <p className="font-semibold text-lg">Account Found</p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          MT Account <span className="font-mono">{mcStatus.mtAccount}</span> exists in MetaCopier
+                          MT Account{" "}
+                          <span className="font-mono">
+                            {mcStatus.mtAccount}
+                          </span>{" "}
+                          exists in MetaCopier
                         </p>
                         {mcStatus.accountId && (
                           <p className="text-xs text-muted-foreground mt-2">
@@ -1465,9 +2130,15 @@ export default function ManageTraders() {
                     <>
                       <XCircle className="h-16 w-16 text-destructive" />
                       <div className="text-center">
-                        <p className="font-semibold text-lg">Account Not Found</p>
+                        <p className="font-semibold text-lg">
+                          Account Not Found
+                        </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          MT Account <span className="font-mono">{mcStatus.mtAccount}</span> does not exist in MetaCopier
+                          MT Account{" "}
+                          <span className="font-mono">
+                            {mcStatus.mtAccount}
+                          </span>{" "}
+                          does not exist in MetaCopier
                         </p>
                         <p className="text-sm text-muted-foreground mt-2">
                           Would you like to create this account?
@@ -1480,12 +2151,20 @@ export default function ManageTraders() {
             </div>
             <DialogFooter>
               {mcStatus && !mcStatus.exists && (
-                <Button onClick={handleCreateMcAccount} disabled={createMcAccount.isPending}>
-                  {createMcAccount.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Button
+                  onClick={handleCreateMcAccount}
+                  disabled={createMcAccount.isPending}
+                >
+                  {createMcAccount.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
                   Create Account
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setMcStatusDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setMcStatusDialogOpen(false)}
+              >
                 Close
               </Button>
             </DialogFooter>
@@ -1516,7 +2195,9 @@ export default function ManageTraders() {
                       <TableRow key={copier.id}>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{copier.toAccountAlias}</div>
+                            <div className="font-medium">
+                              {copier.toAccountAlias}
+                            </div>
                             <div className="text-sm text-muted-foreground">
                               {copier.toAccountNumber}
                             </div>
@@ -1525,11 +2206,11 @@ export default function ManageTraders() {
                         <TableCell>
                           <span
                             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              copier.status === 'ACTIVE'
-                                ? 'bg-green-100 text-green-800'
-                                : copier.status === 'DISABLED'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
+                              copier.status === "ACTIVE"
+                                ? "bg-green-100 text-green-800"
+                                : copier.status === "DISABLED"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-yellow-100 text-yellow-800"
                             }`}
                           >
                             {copier.status}
@@ -1540,8 +2221,8 @@ export default function ManageTraders() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCopierAction(copier, 'D')}
-                              disabled={copier.status === 'DISABLED'}
+                              onClick={() => handleCopierAction(copier, "D")}
+                              disabled={copier.status === "DISABLED"}
                               title="Disable copier"
                             >
                               D
@@ -1549,8 +2230,8 @@ export default function ManageTraders() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCopierAction(copier, 'M')}
-                              disabled={copier.status === 'MANAGE'}
+                              onClick={() => handleCopierAction(copier, "M")}
+                              disabled={copier.status === "MANAGE"}
                               title="Manage mode (no new trades)"
                             >
                               M
@@ -1558,8 +2239,8 @@ export default function ManageTraders() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCopierAction(copier, 'A')}
-                              disabled={copier.status === 'ACTIVE'}
+                              onClick={() => handleCopierAction(copier, "A")}
+                              disabled={copier.status === "ACTIVE"}
                               title="Activate copier"
                             >
                               A
@@ -1567,7 +2248,7 @@ export default function ManageTraders() {
                             <Button
                               variant="destructive"
                               size="sm"
-                              onClick={() => handleCopierAction(copier, 'X')}
+                              onClick={() => handleCopierAction(copier, "X")}
                               title="Remove copier (checks for open positions)"
                             >
                               X
@@ -1585,7 +2266,10 @@ export default function ManageTraders() {
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCopiersDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setCopiersDialogOpen(false)}
+              >
                 Close
               </Button>
             </DialogFooter>

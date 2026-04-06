@@ -1,7 +1,24 @@
 import { eq, desc, isNull, sql, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, magicNumbers, tradingSessions, InsertMagicNumber, InsertTradingSession, copierTemplates, InsertCopierTemplate, payments, InsertPayment, notifications, InsertNotification, riskLimitBreaches, InsertRiskLimitBreach } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import {
+  InsertUser,
+  users,
+  magicNumbers,
+  tradingSessions,
+  InsertMagicNumber,
+  InsertTradingSession,
+  copierTemplates,
+  InsertCopierTemplate,
+  payments,
+  InsertPayment,
+  notifications,
+  InsertNotification,
+  riskLimitBreaches,
+  InsertRiskLimitBreach,
+  traderPreviousMagicNumbers,
+  traderPreviousMasterAccounts,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -55,8 +72,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -83,7 +100,11 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
@@ -107,7 +128,7 @@ export async function getMagicNumberByTelegramHandle(handle: string) {
   if (!db) return undefined;
 
   // Normalise: strip leading @ for comparison, store with or without
-  const normalised = handle.startsWith('@') ? handle.slice(1) : handle;
+  const normalised = handle.startsWith("@") ? handle.slice(1) : handle;
   const withAt = `@${normalised}`;
 
   const result = await db
@@ -173,7 +194,9 @@ export async function deleteTradingSession(sessionToken: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.delete(tradingSessions).where(eq(tradingSessions.sessionToken, sessionToken));
+  await db
+    .delete(tradingSessions)
+    .where(eq(tradingSessions.sessionToken, sessionToken));
 }
 
 export async function cleanupExpiredSessions() {
@@ -189,10 +212,7 @@ export async function getAllMagicNumbers() {
   const db = await getDb();
   if (!db) return [];
 
-  return db
-    .select()
-    .from(magicNumbers)
-    .orderBy(magicNumbers.name);
+  return db.select().from(magicNumbers).orderBy(magicNumbers.name);
 }
 
 export async function getMagicNumberById(id: number) {
@@ -208,7 +228,10 @@ export async function getMagicNumberById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function updateMagicNumber(id: number, data: Partial<InsertMagicNumber>) {
+export async function updateMagicNumber(
+  id: number,
+  data: Partial<InsertMagicNumber>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -230,10 +253,7 @@ export async function getAllCopierTemplates() {
   const db = await getDb();
   if (!db) return [];
 
-  return db
-    .select()
-    .from(copierTemplates)
-    .orderBy(copierTemplates.name);
+  return db.select().from(copierTemplates).orderBy(copierTemplates.name);
 }
 
 export async function getCopierTemplateById(id: number) {
@@ -257,7 +277,10 @@ export async function createCopierTemplate(data: InsertCopierTemplate) {
   return result;
 }
 
-export async function updateCopierTemplate(id: number, data: Partial<InsertCopierTemplate>) {
+export async function updateCopierTemplate(
+  id: number,
+  data: Partial<InsertCopierTemplate>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -295,20 +318,26 @@ export async function getAllPayments() {
   const db = await getDb();
   if (!db) return [];
 
-  return db
-    .select()
-    .from(payments)
-    .orderBy(desc(payments.paymentDate));
+  return db.select().from(payments).orderBy(desc(payments.paymentDate));
 }
 
-export async function updatePaymentNotificationStatus(id: number, sent: boolean) {
+export async function updatePaymentNotificationStatus(
+  id: number,
+  sent: boolean
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(payments).set({ notificationSent: sent }).where(eq(payments.id, id));
+  await db
+    .update(payments)
+    .set({ notificationSent: sent })
+    .where(eq(payments.id, id));
 }
 
-export async function updatePaymentTransactionHash(id: number, transactionHash: string) {
+export async function updatePaymentTransactionHash(
+  id: number,
+  transactionHash: string
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -339,14 +368,20 @@ export async function markNotificationAsRead(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  await db
+    .update(notifications)
+    .set({ isRead: true })
+    .where(eq(notifications.id, id));
 }
 
 export async function markAllNotificationsAsRead(magicNumberId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(notifications).set({ isRead: true }).where(eq(notifications.magicNumberId, magicNumberId));
+  await db
+    .update(notifications)
+    .set({ isRead: true })
+    .where(eq(notifications.magicNumberId, magicNumberId));
 }
 
 // Risk Limit Breach management functions
@@ -389,7 +424,10 @@ export async function resolveRiskLimitBreach(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(riskLimitBreaches).set({ resolvedAt: new Date() }).where(eq(riskLimitBreaches.id, id));
+  await db
+    .update(riskLimitBreaches)
+    .set({ resolvedAt: new Date() })
+    .where(eq(riskLimitBreaches.id, id));
 }
 
 export async function countActiveRiskLimitBreaches(): Promise<number> {
@@ -423,4 +461,78 @@ export async function bulkResolveRiskLimitBreaches(): Promise<number> {
     .where(isNull(riskLimitBreaches.resolvedAt));
 
   return active.length;
+}
+
+// Previous Magic Numbers CRUD
+export async function getPreviousMagicNumbers(magicNumberId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(traderPreviousMagicNumbers)
+    .where(eq(traderPreviousMagicNumbers.magicNumberId, magicNumberId))
+    .orderBy(desc(traderPreviousMagicNumbers.createdAt));
+}
+
+export async function addPreviousMagicNumber(
+  magicNumberId: number,
+  previousMagicNumber: string,
+  note?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(traderPreviousMagicNumbers).values({
+    magicNumberId,
+    previousMagicNumber,
+    note: note ?? null,
+  });
+  return result;
+}
+
+export async function removePreviousMagicNumber(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(traderPreviousMagicNumbers)
+    .where(eq(traderPreviousMagicNumbers.id, id));
+}
+
+// Previous Master Accounts CRUD
+export async function getPreviousMasterAccounts(magicNumberId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(traderPreviousMasterAccounts)
+    .where(eq(traderPreviousMasterAccounts.magicNumberId, magicNumberId))
+    .orderBy(desc(traderPreviousMasterAccounts.createdAt));
+}
+
+export async function addPreviousMasterAccount(
+  magicNumberId: number,
+  liveAccountNumber: string,
+  note?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(traderPreviousMasterAccounts).values({
+    magicNumberId,
+    liveAccountNumber,
+    note: note ?? null,
+  });
+  return result;
+}
+
+export async function removePreviousMasterAccount(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(traderPreviousMasterAccounts)
+    .where(eq(traderPreviousMasterAccounts.id, id));
 }

@@ -1,4 +1,13 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean } from "drizzle-orm/mysql-core";
+import {
+  int,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  decimal,
+  boolean,
+} from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -27,7 +36,9 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   magicNumber: varchar("magicNumber", { length: 20 }).notNull().unique(),
   name: varchar("name", { length: 100 }).notNull(),
   password: varchar("password", { length: 255 }).notNull(),
-  profitShare: decimal("profitShare", { precision: 5, scale: 4 }).notNull().default("0.3500"),
+  profitShare: decimal("profitShare", { precision: 5, scale: 4 })
+    .notNull()
+    .default("0.3500"),
   showAllData: boolean("showAllData").notNull().default(false),
   isActive: boolean("isActive").notNull().default(true),
   isAdmin: boolean("isAdmin").notNull().default(false),
@@ -44,9 +55,18 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   telegramHandle: varchar("telegramHandle", { length: 100 }),
   telegramChatId: varchar("telegramChatId", { length: 30 }),
   // Profit Tracking
-  lifetimeProfit: decimal("lifetimeProfit", { precision: 15, scale: 2 }).default("0.00"),
-  lifetimeProfitShare: decimal("lifetimeProfitShare", { precision: 15, scale: 2 }).default("0.00"),
-  lifetimeIncome: decimal("lifetimeIncome", { precision: 15, scale: 2 }).default("0.00"),
+  lifetimeProfit: decimal("lifetimeProfit", {
+    precision: 15,
+    scale: 2,
+  }).default("0.00"),
+  lifetimeProfitShare: decimal("lifetimeProfitShare", {
+    precision: 15,
+    scale: 2,
+  }).default("0.00"),
+  lifetimeIncome: decimal("lifetimeIncome", {
+    precision: 15,
+    scale: 2,
+  }).default("0.00"),
   // USDT Payment Information
   usdtAddress: varchar("usdtAddress", { length: 255 }),
   usdtNetwork: mysqlEnum("usdtNetwork", ["TRC20", "ERC20"]),
@@ -83,29 +103,53 @@ export const copierTemplates = mysqlTable("copier_templates", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   // Copier Settings
-  multiplier: decimal("multiplier", { precision: 10, scale: 4 }).notNull().default("1.0000"),
+  multiplier: decimal("multiplier", { precision: 10, scale: 4 })
+    .notNull()
+    .default("1.0000"),
   copyStopLoss: boolean("copyStopLoss").notNull().default(true),
   copyTakeProfit: boolean("copyTakeProfit").notNull().default(true),
   skipPendingOrders: boolean("skipPendingOrders").notNull().default(true),
   scaleTypeId: int("scaleTypeId").notNull().default(3), // 3 = Fixed lot size, 4 = No scaling
-  scaleTypeName: varchar("scaleTypeName", { length: 50 }).notNull().default("Fixed lot size"),
+  scaleTypeName: varchar("scaleTypeName", { length: 50 })
+    .notNull()
+    .default("Fixed lot size"),
   active: boolean("active").notNull().default(false),
   monitorOnly: boolean("monitorOnly").notNull().default(false),
   maxSlippage: int("maxSlippage").notNull().default(0),
   forceMinTrade: boolean("forceMinTrade").notNull().default(true),
-  fixMasterBalanceAndEquity: decimal("fixMasterBalanceAndEquity", { precision: 15, scale: 2 }).notNull().default("0.00"),
-  fixSlaveBalanceAndEquity: decimal("fixSlaveBalanceAndEquity", { precision: 15, scale: 2 }).notNull().default("0.00"),
-  fixedLotSize: decimal("fixedLotSize", { precision: 10, scale: 2 }).notNull().default("0.01"),
+  fixMasterBalanceAndEquity: decimal("fixMasterBalanceAndEquity", {
+    precision: 15,
+    scale: 2,
+  })
+    .notNull()
+    .default("0.00"),
+  fixSlaveBalanceAndEquity: decimal("fixSlaveBalanceAndEquity", {
+    precision: 15,
+    scale: 2,
+  })
+    .notNull()
+    .default("0.00"),
+  fixedLotSize: decimal("fixedLotSize", { precision: 10, scale: 2 })
+    .notNull()
+    .default("0.01"),
   martingaleStrategy: boolean("martingaleStrategy").notNull().default(false),
   openRetry: boolean("openRetry").notNull().default(true),
-  openRetryTimeoutInMinutes: int("openRetryTimeoutInMinutes").notNull().default(10),
+  openRetryTimeoutInMinutes: int("openRetryTimeoutInMinutes")
+    .notNull()
+    .default(10),
   reverse: boolean("reverse").notNull().default(false),
   copyOpenPositions: boolean("copyOpenPositions").notNull().default(false),
   maxOpenPositions: int("maxOpenPositions").notNull().default(0),
-  maxLotSize: decimal("maxLotSize", { precision: 10, scale: 2 }).notNull().default("0.00"),
-  maximumLot: decimal("maximumLot", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  maxLotSize: decimal("maxLotSize", { precision: 10, scale: 2 })
+    .notNull()
+    .default("0.00"),
+  maximumLot: decimal("maximumLot", { precision: 10, scale: 2 })
+    .notNull()
+    .default("0.00"),
   hideComment: boolean("hideComment").notNull().default(false),
-  forcePositionLotSize: boolean("forcePositionLotSize").notNull().default(false),
+  forcePositionLotSize: boolean("forcePositionLotSize")
+    .notNull()
+    .default(false),
   ignoreContractSize: boolean("ignoreContractSize").notNull().default(false),
   ignoreCurrency: boolean("ignoreCurrency").notNull().default(false),
   copyMagicNumber: boolean("copyMagicNumber").notNull().default(true),
@@ -127,7 +171,9 @@ export const payments = mysqlTable("payments", {
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
   transactionHash: varchar("transactionHash", { length: 255 }).notNull(),
   paymentDate: timestamp("paymentDate").notNull(),
-  networkFee: decimal("networkFee", { precision: 15, scale: 2 }).default("0.00"),
+  networkFee: decimal("networkFee", { precision: 15, scale: 2 }).default(
+    "0.00"
+  ),
   network: mysqlEnum("network", ["TRC20", "ERC20"]),
   notificationSent: boolean("notificationSent").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -146,7 +192,9 @@ export const notifications = mysqlTable("notifications", {
   magicNumberId: int("magicNumberId").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   message: text("message").notNull(),
-  type: mysqlEnum("type", ["payment", "info", "warning", "error"]).notNull().default("info"),
+  type: mysqlEnum("type", ["payment", "info", "warning", "error"])
+    .notNull()
+    .default("info"),
   isRead: boolean("isRead").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -161,8 +209,14 @@ export type InsertNotification = typeof notifications.$inferInsert;
 export const riskLimitBreaches = mysqlTable("risk_limit_breaches", {
   id: int("id").autoincrement().primaryKey(),
   magicNumberId: int("magicNumberId").notNull(),
-  equityAtBreach: decimal("equityAtBreach", { precision: 15, scale: 2 }).notNull(),
-  riskLimitAtBreach: decimal("riskLimitAtBreach", { precision: 15, scale: 2 }).notNull(),
+  equityAtBreach: decimal("equityAtBreach", {
+    precision: 15,
+    scale: 2,
+  }).notNull(),
+  riskLimitAtBreach: decimal("riskLimitAtBreach", {
+    precision: 15,
+    scale: 2,
+  }).notNull(),
   traderNotified: boolean("traderNotified").notNull().default(false),
   adminNotified: boolean("adminNotified").notNull().default(false),
   resolvedAt: timestamp("resolvedAt"),
@@ -171,3 +225,45 @@ export const riskLimitBreaches = mysqlTable("risk_limit_breaches", {
 
 export type RiskLimitBreach = typeof riskLimitBreaches.$inferSelect;
 export type InsertRiskLimitBreach = typeof riskLimitBreaches.$inferInsert;
+
+/**
+ * Previous magic numbers for a trader
+ * Tracks historical magic numbers that a trader used before their current one
+ */
+export const traderPreviousMagicNumbers = mysqlTable(
+  "trader_previous_magic_numbers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    magicNumberId: int("magicNumberId").notNull(),
+    previousMagicNumber: varchar("previousMagicNumber", {
+      length: 20,
+    }).notNull(),
+    note: varchar("note", { length: 255 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  }
+);
+
+export type TraderPreviousMagicNumber =
+  typeof traderPreviousMagicNumbers.$inferSelect;
+export type InsertTraderPreviousMagicNumber =
+  typeof traderPreviousMagicNumbers.$inferInsert;
+
+/**
+ * Previous master accounts for a trader
+ * Tracks historical live/master accounts that a trader was assigned to before their current one
+ */
+export const traderPreviousMasterAccounts = mysqlTable(
+  "trader_previous_master_accounts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    magicNumberId: int("magicNumberId").notNull(),
+    liveAccountNumber: varchar("liveAccountNumber", { length: 50 }).notNull(),
+    note: varchar("note", { length: 255 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  }
+);
+
+export type TraderPreviousMasterAccount =
+  typeof traderPreviousMasterAccounts.$inferSelect;
+export type InsertTraderPreviousMasterAccount =
+  typeof traderPreviousMasterAccounts.$inferInsert;
