@@ -5,10 +5,10 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { 
-  getMagicNumberByNumber, 
-  getAllActiveMagicNumbers, 
-  createTradingSession, 
+import {
+  getMagicNumberByNumber,
+  getAllActiveMagicNumbers,
+  createTradingSession,
   getTradingSessionByToken,
   deleteTradingSession,
   getAllMagicNumbers,
@@ -35,23 +35,47 @@ import {
   getAllRiskLimitBreaches,
   resolveRiskLimitBreach,
   countActiveRiskLimitBreaches,
-  bulkResolveRiskLimitBreaches
+  bulkResolveRiskLimitBreaches,
+  getPreviousMagicNumbers,
+  addPreviousMagicNumber,
+  removePreviousMagicNumber,
+  getPreviousMasterAccounts,
+  addPreviousMasterAccount,
+  removePreviousMasterAccount,
 } from "./db";
-import { 
-  metaCopierService, 
+import {
+  metaCopierService,
   calculatePnL,
   getStartOfToday,
   getEndOfToday,
   getStartOfWeek,
   getStartOfMonth,
-  getAllTimeStart
+  getAllTimeStart,
 } from "./metacopier";
 import { nanoid } from "nanoid";
-import { sendTelegramMessage, buildPaymentMessage, buildRiskLimitBreachMessage, buildAdminRiskLimitAlertMessage } from "./telegram";
+import {
+  sendTelegramMessage,
+  buildPaymentMessage,
+  buildRiskLimitBreachMessage,
+  buildAdminRiskLimitAlertMessage,
+} from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
-import { getWalletAddress as getTronWalletAddress, getUsdtBalance as getTronBalance, sendUsdt, isTronConfigured, isGasFreeConfigured, getGasFreeAccountInfo } from "./tron";
-import { getWalletAddress as getEvmWalletAddress, getUsdtBalance as getEvmBalance, sendUsdtErc20, getNativeBalance, isEvmConfigured } from "./erc20";
+import {
+  getWalletAddress as getTronWalletAddress,
+  getUsdtBalance as getTronBalance,
+  sendUsdt,
+  isTronConfigured,
+  isGasFreeConfigured,
+  getGasFreeAccountInfo,
+} from "./tron";
+import {
+  getWalletAddress as getEvmWalletAddress,
+  getUsdtBalance as getEvmBalance,
+  sendUsdtErc20,
+  getNativeBalance,
+  isEvmConfigured,
+} from "./erc20";
 import { ENV } from "./_core/env";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
@@ -59,15 +83,21 @@ const TRADING_SESSION_COOKIE = "rfx_trading_session";
 // Custom procedure for trading authentication
 const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const sessionToken = ctx.req.cookies?.[TRADING_SESSION_COOKIE];
-  
+
   if (!sessionToken) {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "No trading session found" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "No trading session found",
+    });
   }
 
   const sessionData = await getTradingSessionByToken(sessionToken);
-  
+
   if (!sessionData) {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired session" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Invalid or expired session",
+    });
   }
 
   // Check if session is expired
@@ -85,7 +115,9 @@ const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
 });
 
 /** Zod schema for optional admin view-as-trader input. */
-const viewAsInput = z.object({ viewAsTraderId: z.number().int().positive().optional() }).optional();
+const viewAsInput = z
+  .object({ viewAsTraderId: z.number().int().positive().optional() })
+  .optional();
 
 /**
  * Resolves the trader to use for a query. If viewAsTraderId is provided
@@ -94,12 +126,15 @@ const viewAsInput = z.object({ viewAsTraderId: z.number().int().positive().optio
  */
 async function resolveTrader(
   ctx: { tradingSession: { magicNumber: any } },
-  viewAsTraderId?: number,
+  viewAsTraderId?: number
 ) {
   if (!viewAsTraderId) return ctx.tradingSession.magicNumber;
 
   if (!ctx.tradingSession.magicNumber.isAdmin) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can view as another trader" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only admins can view as another trader",
+    });
   }
 
   const trader = await getMagicNumberById(viewAsTraderId);
@@ -107,6 +142,108 @@ async function resolveTrader(
     throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
   }
   return trader;
+}
+
+/**
+ * Fetches all-time positions for a trader, aggregating across current and
+ * historical magic numbers / master accounts. Deduplicates by position ID.
+ */
+async function fetchAggregatedLifetimePositions(trader: {
+  id: number;
+  magicNumber: string;
+  liveAccountNumber: string | null;
+  showAllData: boolean;
+}): Promise<import("./metacopier").Position[]> {
+  const { id, magicNumber, liveAccountNumber, showAllData } = trader;
+
+  // If showAllData, just return everything from the default account
+  if (showAllData) {
+    return metaCopierService.getHistoricalPositions(
+      getAllTimeStart(),
+      getEndOfToday(),
+      undefined,
+      true
+    );
+  }
+
+  // Fetch historical entries from DB
+  const [prevMagics, prevAccounts] = await Promise.all([
+    getPreviousMagicNumbers(id),
+    getPreviousMasterAccounts(id),
+  ]);
+
+  // If no historical entries, use the simple path
+  if (prevMagics.length === 0 && prevAccounts.length === 0) {
+    if (liveAccountNumber) {
+      const liveAccountId =
+        await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+      if (liveAccountId) {
+        return metaCopierService.getHistoricalPositionsFromAccount(
+          liveAccountId,
+          getAllTimeStart(),
+          getEndOfToday(),
+          magicNumber
+        );
+      }
+    }
+    return metaCopierService.getHistoricalPositions(
+      getAllTimeStart(),
+      getEndOfToday(),
+      magicNumber,
+      false
+    );
+  }
+
+  // Build full set of magic numbers and master accounts
+  const allMagicNumbers = new Set<string>([magicNumber]);
+  for (const pm of prevMagics) allMagicNumbers.add(pm.previousMagicNumber);
+
+  const allAccountNumbers = new Set<string>();
+  if (liveAccountNumber) allAccountNumbers.add(liveAccountNumber);
+  for (const pa of prevAccounts) allAccountNumbers.add(pa.liveAccountNumber);
+
+  // For each unique master account, resolve to MC accountId, then fetch positions
+  // filtered by ALL relevant magic numbers
+  const allPositions: import("./metacopier").Position[] = [];
+
+  if (allAccountNumbers.size > 0) {
+    const accountFetches = Array.from(allAccountNumbers).map(async accNum => {
+      const accountId =
+        await metaCopierService.getAccountIdByLoginNumber(accNum);
+      if (!accountId) return [];
+      // Fetch all positions from this account (no magic filter — we filter ourselves)
+      const positions =
+        await metaCopierService.getHistoricalPositionsFromAccount(
+          accountId,
+          getAllTimeStart(),
+          getEndOfToday()
+        );
+      // Filter to any of the trader's magic numbers
+      return positions.filter(p => allMagicNumbers.has(p.magicNumber));
+    });
+
+    const results = await Promise.all(accountFetches);
+    for (const positions of results) allPositions.push(...positions);
+  } else {
+    // No master accounts at all — use default account with all magic numbers
+    const positions = await metaCopierService.getHistoricalPositions(
+      getAllTimeStart(),
+      getEndOfToday(),
+      undefined,
+      false
+    );
+    allPositions.push(
+      ...positions.filter(p => allMagicNumbers.has(p.magicNumber))
+    );
+  }
+
+  // Deduplicate by position ID
+  const seen = new Set<string>();
+  return allPositions.filter(p => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
 }
 
 /** Shared helper: record a payment and send notifications. */
@@ -118,7 +255,14 @@ async function recordPaymentAndNotify(params: {
   network?: "TRC20" | "ERC20";
   paymentDate: Date;
 }) {
-  const { magicNumberId, amount, transactionHash, networkFee = 0, network, paymentDate } = params;
+  const {
+    magicNumberId,
+    amount,
+    transactionHash,
+    networkFee = 0,
+    network,
+    paymentDate,
+  } = params;
 
   await createPayment({
     magicNumberId,
@@ -145,7 +289,9 @@ async function recordPaymentAndNotify(params: {
       type: "payment",
       isRead: false,
     });
-    console.log(`[Payment] In-app notification sent to ${trader.name} for payment of $${amount}`);
+    console.log(
+      `[Payment] In-app notification sent to ${trader.name} for payment of $${amount}`
+    );
 
     if (trader.telegramHandle && trader.telegramChatId) {
       const telegramMsg = buildPaymentMessage({
@@ -156,18 +302,26 @@ async function recordPaymentAndNotify(params: {
         transactionHash,
         paymentDate,
       });
-      const sent = await sendTelegramMessage(trader.telegramHandle, telegramMsg, trader.telegramChatId);
+      const sent = await sendTelegramMessage(
+        trader.telegramHandle,
+        telegramMsg,
+        trader.telegramChatId
+      );
       if (sent) {
-        console.log(`[Payment] Telegram notification sent to ${trader.telegramHandle}`);
+        console.log(
+          `[Payment] Telegram notification sent to ${trader.telegramHandle}`
+        );
       } else {
-        console.warn(`[Payment] Telegram notification failed for ${trader.telegramHandle} — in-app notification still delivered`);
+        console.warn(
+          `[Payment] Telegram notification failed for ${trader.telegramHandle} — in-app notification still delivered`
+        );
       }
     }
   }
 }
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -192,25 +346,27 @@ export const appRouter = router({
 
     // Login with magic number and password
     login: publicProcedure
-      .input(z.object({
-        magicNumber: z.string(),
-        password: z.string(),
-        rememberMe: z.boolean().optional(),
-      }))
+      .input(
+        z.object({
+          magicNumber: z.string(),
+          password: z.string(),
+          rememberMe: z.boolean().optional(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         const magicNumberData = await getMagicNumberByNumber(input.magicNumber);
-        
+
         if (!magicNumberData) {
-          throw new TRPCError({ 
-            code: "NOT_FOUND", 
-            message: "Invalid magic number" 
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Invalid magic number",
           });
         }
 
         if (magicNumberData.password !== input.password) {
-          throw new TRPCError({ 
-            code: "UNAUTHORIZED", 
-            message: "Invalid password" 
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid password",
           });
         }
 
@@ -223,7 +379,7 @@ export const appRouter = router({
           sessionToken,
           magicNumberId: magicNumberData.id,
           ipAddress: ctx.req.ip || null,
-          userAgent: ctx.req.headers['user-agent'] || null,
+          userAgent: ctx.req.headers["user-agent"] || null,
           expiresAt,
         });
 
@@ -231,7 +387,9 @@ export const appRouter = router({
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(TRADING_SESSION_COOKIE, sessionToken, {
           ...cookieOptions,
-          maxAge: input.rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
+          maxAge: input.rememberMe
+            ? 30 * 24 * 60 * 60 * 1000
+            : 7 * 24 * 60 * 60 * 1000,
         });
 
         return {
@@ -245,13 +403,16 @@ export const appRouter = router({
     // Logout
     tradingLogout: publicProcedure.mutation(async ({ ctx }) => {
       const sessionToken = ctx.req.cookies?.[TRADING_SESSION_COOKIE];
-      
+
       if (sessionToken) {
         await deleteTradingSession(sessionToken);
       }
 
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(TRADING_SESSION_COOKIE, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(TRADING_SESSION_COOKIE, {
+        ...cookieOptions,
+        maxAge: -1,
+      });
 
       return { success: true };
     }),
@@ -268,9 +429,9 @@ export const appRouter = router({
           profitShare: parseFloat(trader.profitShare),
           showAllData: trader.showAllData,
           isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
-          lifetimeProfit: parseFloat(trader.lifetimeProfit || '0'),
-          lifetimeProfitShare: parseFloat(trader.lifetimeProfitShare || '0'),
-          lifetimeIncome: parseFloat(trader.lifetimeIncome || '0'),
+          lifetimeProfit: parseFloat(trader.lifetimeProfit || "0"),
+          lifetimeProfitShare: parseFloat(trader.lifetimeProfitShare || "0"),
+          lifetimeIncome: parseFloat(trader.lifetimeIncome || "0"),
           usdtAddress: trader.usdtAddress || null,
           usdtNetwork: trader.usdtNetwork || null,
           telegramHandle: trader.telegramHandle || null,
@@ -280,26 +441,30 @@ export const appRouter = router({
 
     // Update USDT payment information
     updateUsdtInfo: tradingProcedure
-      .input(z.object({
-        usdtAddress: z.string().optional(),
-        usdtNetwork: z.enum(['TRC20', 'ERC20']).optional(),
-      }))
+      .input(
+        z.object({
+          usdtAddress: z.string().optional(),
+          usdtNetwork: z.enum(["TRC20", "ERC20"]).optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const magicNumberId = ctx.tradingSession.magicNumber.id;
-        
+
         await updateMagicNumber(magicNumberId, {
           usdtAddress: input.usdtAddress,
           usdtNetwork: input.usdtNetwork,
         });
-        
+
         return { success: true };
       }),
 
     // Update Telegram handle for current trader
     updateTelegramHandle: tradingProcedure
-      .input(z.object({
-        telegramHandle: z.string().min(1).max(100),
-      }))
+      .input(
+        z.object({
+          telegramHandle: z.string().min(1).max(100),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const magicNumberId = ctx.tradingSession.magicNumber.id;
         await updateMagicNumber(magicNumberId, {
@@ -309,52 +474,70 @@ export const appRouter = router({
       }),
 
     // Send a test "Hello World" Telegram message to the trader's handle
-    testTelegramMessage: tradingProcedure
-      .mutation(async ({ ctx }) => {
-        const { telegramHandle, telegramChatId, name } = ctx.tradingSession.magicNumber;
-        if (!telegramHandle) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'No Telegram handle set. Save your handle first.' });
-        }
-        if (!telegramChatId) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Telegram not connected yet. Open Telegram, search for @RFXTraderBot and send /start, then try again.' });
-        }
-        const sent = await sendTelegramMessage(telegramHandle, `Hello World! 👋 This is a test message from RFX Trader Dashboard, ${name}. Your Telegram notifications are working correctly.`, telegramChatId);
-        if (!sent) {
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to send Telegram message. Please try again.' });
-        }
-        return { success: true };
-      }),
+    testTelegramMessage: tradingProcedure.mutation(async ({ ctx }) => {
+      const { telegramHandle, telegramChatId, name } =
+        ctx.tradingSession.magicNumber;
+      if (!telegramHandle) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No Telegram handle set. Save your handle first.",
+        });
+      }
+      if (!telegramChatId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Telegram not connected yet. Open Telegram, search for @RFXTraderBot and send /start, then try again.",
+        });
+      }
+      const sent = await sendTelegramMessage(
+        telegramHandle,
+        `Hello World! 👋 This is a test message from RFX Trader Dashboard, ${name}. Your Telegram notifications are working correctly.`,
+        telegramChatId
+      );
+      if (!sent) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to send Telegram message. Please try again.",
+        });
+      }
+      return { success: true };
+    }),
 
     // Get payment history for current trader (or viewed trader for admin)
-    getPayments: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const magicNumberId = trader.id;
-      const payments = await getPaymentsByMagicNumberId(magicNumberId);
-      
-      return payments.map(p => ({
-        id: p.id,
-        amount: parseFloat(p.amount),
-        transactionHash: p.transactionHash,
-        paymentDate: p.paymentDate,
-        createdAt: p.createdAt,
-      }));
-    }),
+    getPayments: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const magicNumberId = trader.id;
+        const payments = await getPaymentsByMagicNumberId(magicNumberId);
+
+        return payments.map(p => ({
+          id: p.id,
+          amount: parseFloat(p.amount),
+          transactionHash: p.transactionHash,
+          paymentDate: p.paymentDate,
+          createdAt: p.createdAt,
+        }));
+      }),
 
     // Get notifications for current trader (or viewed trader for admin)
-    getNotifications: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const magicNumberId = trader.id;
-      const notifs = await getNotificationsByMagicNumberId(magicNumberId);
-      
-      return notifs.map(n => ({
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        type: n.type,
-        isRead: n.isRead,
-        createdAt: n.createdAt,
-      }));
-    }),
+    getNotifications: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const magicNumberId = trader.id;
+        const notifs = await getNotificationsByMagicNumberId(magicNumberId);
+
+        return notifs.map(n => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type,
+          isRead: n.isRead,
+          createdAt: n.createdAt,
+        }));
+      }),
 
     // Mark notification as read
     markNotificationRead: tradingProcedure
@@ -372,158 +555,182 @@ export const appRouter = router({
     }),
 
     // Get copier configuration for trader's live account
-    getCopierInfo: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, liveAccountNumber } = trader;
-      
-      if (!liveAccountNumber) {
-        return null; // No live account assigned
-      }
-      
-      // Get the live account ID
-      const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-      if (!liveAccountId) {
-        return null;
-      }
-      
-      // Get all copiers for this live account
-      const copiers = await metaCopierService.getCopiersByAccount(liveAccountId);
-      
-      // Find the copier that matches this trader's magic number
-      const traderCopier = copiers.find((copier: any) => 
-        copier.fromAccountShortId === parseInt(magicNumber) || 
-        copier.fromAccountShortId === magicNumber ||
-        copier.customMagicNumber === parseInt(magicNumber) ||
-        copier.customMagicNumber === magicNumber
-      );
-      
-      if (!traderCopier) {
-        return null;
-      }
-      
-      return {
-        scaleType: traderCopier.scaleType?.id || traderCopier.scaleType,
-        multiplier: traderCopier.multiplier,
-        fixedLotSize: traderCopier.fixedLotSize,
-        isActive: traderCopier.active,
-        liveAccountNumber
-      };
-    }),
+    getCopierInfo: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { magicNumber, liveAccountNumber } = trader;
+
+        if (!liveAccountNumber) {
+          return null; // No live account assigned
+        }
+
+        // Get the live account ID
+        const liveAccountId =
+          await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+        if (!liveAccountId) {
+          return null;
+        }
+
+        // Get all copiers for this live account
+        const copiers =
+          await metaCopierService.getCopiersByAccount(liveAccountId);
+
+        // Find the copier that matches this trader's magic number
+        const traderCopier = copiers.find(
+          (copier: any) =>
+            copier.fromAccountShortId === parseInt(magicNumber) ||
+            copier.fromAccountShortId === magicNumber ||
+            copier.customMagicNumber === parseInt(magicNumber) ||
+            copier.customMagicNumber === magicNumber
+        );
+
+        if (!traderCopier) {
+          return null;
+        }
+
+        return {
+          scaleType: traderCopier.scaleType?.id || traderCopier.scaleType,
+          multiplier: traderCopier.multiplier,
+          fixedLotSize: traderCopier.fixedLotSize,
+          isActive: traderCopier.active,
+          liveAccountNumber,
+        };
+      }),
 
     // Get max open trades from trader's MC account features
-    getMaxOpenTrades: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { mcAccountId } = trader;
-      
-      if (!mcAccountId) {
-        return null; // No MC account
-      }
-      
-      try {
-        const features = await metaCopierService.getAccountFeatures(mcAccountId);
-        
-        // Find the max open positions feature (type 17)
-        const maxOpenPosFeature = features.find((f: any) => f.type?.id === 17);
-        
-        if (maxOpenPosFeature && maxOpenPosFeature.setting) {
-          return maxOpenPosFeature.setting.maxOpenPositions || null;
+    getMaxOpenTrades: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { mcAccountId } = trader;
+
+        if (!mcAccountId) {
+          return null; // No MC account
         }
-        
-        return null;
-      } catch (error) {
-        console.error('[Router] Error fetching max open trades:', error);
-        return null;
-      }
-    }),
+
+        try {
+          const features =
+            await metaCopierService.getAccountFeatures(mcAccountId);
+
+          // Find the max open positions feature (type 17)
+          const maxOpenPosFeature = features.find(
+            (f: any) => f.type?.id === 17
+          );
+
+          if (maxOpenPosFeature && maxOpenPosFeature.setting) {
+            return maxOpenPosFeature.setting.maxOpenPositions || null;
+          }
+
+          return null;
+        } catch (error) {
+          console.error("[Router] Error fetching max open trades:", error);
+          return null;
+        }
+      }),
 
     // Get max lot size per trade from Trade Guardrails feature (type 37)
-    getMaxLotSize: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { mcAccountId } = trader;
+    getMaxLotSize: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { mcAccountId } = trader;
 
-      if (!mcAccountId) {
-        return null;
-      }
-
-      try {
-        const features = await metaCopierService.getAccountFeatures(mcAccountId);
-
-        // Find the Trade Guardrails feature (type 37)
-        const guardrailFeature = features.find((f: any) => f.type?.id === 37);
-
-        if (guardrailFeature && guardrailFeature.setting?.enabled) {
-          return guardrailFeature.setting.maxLotSizeThreshold ?? null;
+        if (!mcAccountId) {
+          return null;
         }
 
-        return null;
-      } catch (error) {
-        console.error('[Router] Error fetching max lot size:', error);
-        return null;
-      }
-    }),
+        try {
+          const features =
+            await metaCopierService.getAccountFeatures(mcAccountId);
+
+          // Find the Trade Guardrails feature (type 37)
+          const guardrailFeature = features.find((f: any) => f.type?.id === 37);
+
+          if (guardrailFeature && guardrailFeature.setting?.enabled) {
+            return guardrailFeature.setting.maxLotSizeThreshold ?? null;
+          }
+
+          return null;
+        } catch (error) {
+          console.error("[Router] Error fetching max lot size:", error);
+          return null;
+        }
+      }),
 
     // Get account risk limit (absolute equity threshold before all trades close)
-    getRiskLimit: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { mcAccountId } = trader;
+    getRiskLimit: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { mcAccountId } = trader;
 
-      if (!mcAccountId) {
-        return null;
-      }
-
-      try {
-        const limits = await metaCopierService.getAccountRiskLimits(mcAccountId);
-        // Find the first active absolute risk limit
-        const activeLimit = limits.find((l: any) => l.active && l.absoluteRiskLimit != null);
-        if (activeLimit) {
-          return activeLimit.absoluteRiskLimit as number;
+        if (!mcAccountId) {
+          return null;
         }
-        return null;
-      } catch (error) {
-        console.error('[Router] Error fetching risk limit:', error);
-        return null;
-      }
-    }),
+
+        try {
+          const limits =
+            await metaCopierService.getAccountRiskLimits(mcAccountId);
+          // Find the first active absolute risk limit
+          const activeLimit = limits.find(
+            (l: any) => l.active && l.absoluteRiskLimit != null
+          );
+          if (activeLimit) {
+            return activeLimit.absoluteRiskLimit as number;
+          }
+          return null;
+        } catch (error) {
+          console.error("[Router] Error fetching risk limit:", error);
+          return null;
+        }
+      }),
 
     // Get current account equity for breach detection
-    getAccountEquity: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { mcAccountId } = trader;
+    getAccountEquity: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { mcAccountId } = trader;
 
-      // Always use the trader's own MC account for equity (breach detection must compare
-      // the trader's incubator account equity against their risk limit, not the master account)
-      if (!mcAccountId) return null;
+        // Always use the trader's own MC account for equity (breach detection must compare
+        // the trader's incubator account equity against their risk limit, not the master account)
+        if (!mcAccountId) return null;
 
-      try {
-        const info = await metaCopierService.getAccountInfoById(mcAccountId);
-        return info.equity ?? null;
-      } catch {
-        return null;
-      }
-    }),
+        try {
+          const info = await metaCopierService.getAccountInfoById(mcAccountId);
+          return info.equity ?? null;
+        } catch {
+          return null;
+        }
+      }),
 
     // Get both balance and equity for the trader's own incubator account
-    getAccountBalanceAndEquity: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { mcAccountId } = trader;
+    getAccountBalanceAndEquity: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { mcAccountId } = trader;
 
-      // Always use the trader's own MC account (mcAccountId), not the master/live account
-      if (!mcAccountId) return null;
+        // Always use the trader's own MC account (mcAccountId), not the master/live account
+        if (!mcAccountId) return null;
 
-      try {
-        const info = await metaCopierService.getAccountInfoById(mcAccountId);
-        return { balance: info.balance ?? null, equity: info.equity ?? null };
-      } catch {
-        return null;
-      }
-    }),
+        try {
+          const info = await metaCopierService.getAccountInfoById(mcAccountId);
+          return { balance: info.balance ?? null, equity: info.equity ?? null };
+        } catch {
+          return null;
+        }
+      }),
 
     // Report a risk limit breach (called by the trader's dashboard when equity drops below limit)
     reportRiskLimitBreach: tradingProcedure
-      .input(z.object({
-        equity: z.number(),
-        riskLimit: z.number(),
-      }))
+      .input(
+        z.object({
+          equity: z.number(),
+          riskLimit: z.number(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         const trader = ctx.tradingSession.magicNumber;
 
@@ -558,7 +765,11 @@ export const appRouter = router({
             equity: input.equity,
             riskLimit: input.riskLimit,
           });
-          traderTelegramSent = await sendTelegramMessage(trader.telegramHandle, msg, trader.telegramChatId);
+          traderTelegramSent = await sendTelegramMessage(
+            trader.telegramHandle,
+            msg,
+            trader.telegramChatId
+          );
         }
 
         // Owner in-app notification
@@ -575,137 +786,140 @@ export const appRouter = router({
       }),
 
     // Get open positions
-    getOpenPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, showAllData, liveAccountNumber } = trader;
-      
-      // If trader has a live account assigned, fetch from that account
-      if (liveAccountNumber && !showAllData) {
-        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-        if (liveAccountId) {
-          return await metaCopierService.getOpenPositionsFromAccount(liveAccountId, magicNumber);
+    getOpenPositions: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { magicNumber, showAllData, liveAccountNumber } = trader;
+
+        // If trader has a live account assigned, fetch from that account
+        if (liveAccountNumber && !showAllData) {
+          const liveAccountId =
+            await metaCopierService.getAccountIdByLoginNumber(
+              liveAccountNumber
+            );
+          if (liveAccountId) {
+            return await metaCopierService.getOpenPositionsFromAccount(
+              liveAccountId,
+              magicNumber
+            );
+          }
         }
-      }
-      
-      // Fallback to default account
-      const positions = await metaCopierService.getOpenPositions(
-        showAllData ? undefined : magicNumber,
-        showAllData
-      );
-      return positions;
-    }),
+
+        // Fallback to default account
+        const positions = await metaCopierService.getOpenPositions(
+          showAllData ? undefined : magicNumber,
+          showAllData
+        );
+        return positions;
+      }),
 
     // Get today's closed positions
-    getTodayPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, showAllData, liveAccountNumber } = trader;
-      
-      // If trader has a live account assigned, fetch from that account
-      if (liveAccountNumber && !showAllData) {
-        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-        if (liveAccountId) {
-          return await metaCopierService.getHistoricalPositionsFromAccount(
-            liveAccountId,
-            getStartOfToday(),
-            getEndOfToday(),
-            magicNumber
-          );
+    getTodayPositions: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { magicNumber, showAllData, liveAccountNumber } = trader;
+
+        // If trader has a live account assigned, fetch from that account
+        if (liveAccountNumber && !showAllData) {
+          const liveAccountId =
+            await metaCopierService.getAccountIdByLoginNumber(
+              liveAccountNumber
+            );
+          if (liveAccountId) {
+            return await metaCopierService.getHistoricalPositionsFromAccount(
+              liveAccountId,
+              getStartOfToday(),
+              getEndOfToday(),
+              magicNumber
+            );
+          }
         }
-      }
-      
-      // Fallback to default account
-      const positions = await metaCopierService.getHistoricalPositions(
-        getStartOfToday(),
-        getEndOfToday(),
-        showAllData ? undefined : magicNumber,
-        showAllData
-      );
-      return positions;
-    }),
+
+        // Fallback to default account
+        const positions = await metaCopierService.getHistoricalPositions(
+          getStartOfToday(),
+          getEndOfToday(),
+          showAllData ? undefined : magicNumber,
+          showAllData
+        );
+        return positions;
+      }),
 
     // Get week's positions
-    getWeekPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, showAllData, liveAccountNumber } = trader;
-      
-      // If trader has a live account assigned, fetch from that account
-      if (liveAccountNumber && !showAllData) {
-        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-        if (liveAccountId) {
-          return await metaCopierService.getHistoricalPositionsFromAccount(
-            liveAccountId,
-            getStartOfWeek(),
-            getEndOfToday(),
-            magicNumber
-          );
+    getWeekPositions: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { magicNumber, showAllData, liveAccountNumber } = trader;
+
+        // If trader has a live account assigned, fetch from that account
+        if (liveAccountNumber && !showAllData) {
+          const liveAccountId =
+            await metaCopierService.getAccountIdByLoginNumber(
+              liveAccountNumber
+            );
+          if (liveAccountId) {
+            return await metaCopierService.getHistoricalPositionsFromAccount(
+              liveAccountId,
+              getStartOfWeek(),
+              getEndOfToday(),
+              magicNumber
+            );
+          }
         }
-      }
-      
-      // Fallback to default account
-      const positions = await metaCopierService.getHistoricalPositions(
-        getStartOfWeek(),
-        getEndOfToday(),
-        showAllData ? undefined : magicNumber,
-        showAllData
-      );
-      return positions;
-    }),
+
+        // Fallback to default account
+        const positions = await metaCopierService.getHistoricalPositions(
+          getStartOfWeek(),
+          getEndOfToday(),
+          showAllData ? undefined : magicNumber,
+          showAllData
+        );
+        return positions;
+      }),
 
     // Get month's positions
-    getMonthPositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, showAllData, liveAccountNumber } = trader;
-      
-      // If trader has a live account assigned, fetch from that account
-      if (liveAccountNumber && !showAllData) {
-        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-        if (liveAccountId) {
-          return await metaCopierService.getHistoricalPositionsFromAccount(
-            liveAccountId,
-            getStartOfMonth(),
-            getEndOfToday(),
-            magicNumber
-          );
-        }
-      }
-      
-      // Fallback to default account
-      const positions = await metaCopierService.getHistoricalPositions(
-        getStartOfMonth(),
-        getEndOfToday(),
-        showAllData ? undefined : magicNumber,
-        showAllData
-      );
-      return positions;
-    }),
+    getMonthPositions: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { magicNumber, showAllData, liveAccountNumber } = trader;
 
-    // Get all-time positions
-    getAllTimePositions: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, showAllData, liveAccountNumber } = trader;
-      
-      // If trader has a live account assigned, fetch from that account
-      if (liveAccountNumber && !showAllData) {
-        const liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-        if (liveAccountId) {
-          return await metaCopierService.getHistoricalPositionsFromAccount(
-            liveAccountId,
-            getAllTimeStart(),
-            getEndOfToday(),
-            magicNumber
-          );
+        // If trader has a live account assigned, fetch from that account
+        if (liveAccountNumber && !showAllData) {
+          const liveAccountId =
+            await metaCopierService.getAccountIdByLoginNumber(
+              liveAccountNumber
+            );
+          if (liveAccountId) {
+            return await metaCopierService.getHistoricalPositionsFromAccount(
+              liveAccountId,
+              getStartOfMonth(),
+              getEndOfToday(),
+              magicNumber
+            );
+          }
         }
-      }
-      
-      // Fallback to default account
-      const positions = await metaCopierService.getHistoricalPositions(
-        getAllTimeStart(),
-        getEndOfToday(),
-        showAllData ? undefined : magicNumber,
-        showAllData
-      );
-      return positions;
-    }),
+
+        // Fallback to default account
+        const positions = await metaCopierService.getHistoricalPositions(
+          getStartOfMonth(),
+          getEndOfToday(),
+          showAllData ? undefined : magicNumber,
+          showAllData
+        );
+        return positions;
+      }),
+
+    // Get all-time positions (aggregated across historical magic numbers & master accounts)
+    getAllTimePositions: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        return fetchAggregatedLifetimePositions(trader);
+      }),
 
     // Get account info
     getAccountInfo: tradingProcedure.query(async () => {
@@ -713,55 +927,103 @@ export const appRouter = router({
     }),
 
     // Calculate P&L summary
-    getPnLSummary: tradingProcedure.input(viewAsInput).query(async ({ ctx, input }) => {
-      const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-      const { magicNumber, showAllData, profitShare, liveAccountNumber } = trader;
-      
-      // If trader has a live account assigned, fetch from that account
-      let liveAccountId: string | null = null;
-      if (liveAccountNumber && !showAllData) {
-        liveAccountId = await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
-      }
-      
-      const [openPositions, todayPositions, weekPositions, monthPositions, allTimePositions] = await Promise.all([
-        liveAccountId 
-          ? metaCopierService.getOpenPositionsFromAccount(liveAccountId, magicNumber)
-          : metaCopierService.getOpenPositions(showAllData ? undefined : magicNumber, showAllData),
-        liveAccountId
-          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getStartOfToday(), getEndOfToday(), magicNumber)
-          : metaCopierService.getHistoricalPositions(getStartOfToday(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-        liveAccountId
-          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getStartOfWeek(), getEndOfToday(), magicNumber)
-          : metaCopierService.getHistoricalPositions(getStartOfWeek(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-        liveAccountId
-          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getStartOfMonth(), getEndOfToday(), magicNumber)
-          : metaCopierService.getHistoricalPositions(getStartOfMonth(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-        liveAccountId
-          ? metaCopierService.getHistoricalPositionsFromAccount(liveAccountId, getAllTimeStart(), getEndOfToday(), magicNumber)
-          : metaCopierService.getHistoricalPositions(getAllTimeStart(), getEndOfToday(), showAllData ? undefined : magicNumber, showAllData),
-      ]);
+    getPnLSummary: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { magicNumber, showAllData, profitShare, liveAccountNumber } =
+          trader;
 
-      const floatingPnL = calculatePnL(openPositions);
-      const todayRealizedPnL = calculatePnL(todayPositions);
-      const todayTotalPnL = floatingPnL + todayRealizedPnL;
-      const weekPnL = calculatePnL(weekPositions) + floatingPnL;
-      const monthPnL = calculatePnL(monthPositions) + floatingPnL;
-      const allTimePnL = calculatePnL(allTimePositions) + floatingPnL;
+        // If trader has a live account assigned, fetch from that account
+        let liveAccountId: string | null = null;
+        if (liveAccountNumber && !showAllData) {
+          liveAccountId =
+            await metaCopierService.getAccountIdByLoginNumber(
+              liveAccountNumber
+            );
+        }
 
-      const profitShareValue = parseFloat(profitShare);
-      const weeklyProfitShare = weekPnL > 0 ? weekPnL * profitShareValue : 0;
+        // Day/week/month use current magic + current account only.
+        // All-time aggregates across historical magic numbers & master accounts.
+        const [
+          openPositions,
+          todayPositions,
+          weekPositions,
+          monthPositions,
+          allTimePositions,
+        ] = await Promise.all([
+          liveAccountId
+            ? metaCopierService.getOpenPositionsFromAccount(
+                liveAccountId,
+                magicNumber
+              )
+            : metaCopierService.getOpenPositions(
+                showAllData ? undefined : magicNumber,
+                showAllData
+              ),
+          liveAccountId
+            ? metaCopierService.getHistoricalPositionsFromAccount(
+                liveAccountId,
+                getStartOfToday(),
+                getEndOfToday(),
+                magicNumber
+              )
+            : metaCopierService.getHistoricalPositions(
+                getStartOfToday(),
+                getEndOfToday(),
+                showAllData ? undefined : magicNumber,
+                showAllData
+              ),
+          liveAccountId
+            ? metaCopierService.getHistoricalPositionsFromAccount(
+                liveAccountId,
+                getStartOfWeek(),
+                getEndOfToday(),
+                magicNumber
+              )
+            : metaCopierService.getHistoricalPositions(
+                getStartOfWeek(),
+                getEndOfToday(),
+                showAllData ? undefined : magicNumber,
+                showAllData
+              ),
+          liveAccountId
+            ? metaCopierService.getHistoricalPositionsFromAccount(
+                liveAccountId,
+                getStartOfMonth(),
+                getEndOfToday(),
+                magicNumber
+              )
+            : metaCopierService.getHistoricalPositions(
+                getStartOfMonth(),
+                getEndOfToday(),
+                showAllData ? undefined : magicNumber,
+                showAllData
+              ),
+          fetchAggregatedLifetimePositions(trader),
+        ]);
 
-      return {
-        floatingPnL,
-        todayRealizedPnL,
-        todayTotalPnL,
-        weekPnL,
-        monthPnL,
-        allTimePnL,
-        weeklyProfitShare,
-        profitSharePercent: profitShareValue,
-      };
-    }),
+        const floatingPnL = calculatePnL(openPositions);
+        const todayRealizedPnL = calculatePnL(todayPositions);
+        const todayTotalPnL = floatingPnL + todayRealizedPnL;
+        const weekPnL = calculatePnL(weekPositions) + floatingPnL;
+        const monthPnL = calculatePnL(monthPositions) + floatingPnL;
+        const allTimePnL = calculatePnL(allTimePositions) + floatingPnL;
+
+        const profitShareValue = parseFloat(profitShare);
+        const weeklyProfitShare = weekPnL > 0 ? weekPnL * profitShareValue : 0;
+
+        return {
+          floatingPnL,
+          todayRealizedPnL,
+          todayTotalPnL,
+          weekPnL,
+          monthPnL,
+          allTimePnL,
+          weeklyProfitShare,
+          profitSharePercent: profitShareValue,
+        };
+      }),
   }),
 
   admin: router({
@@ -769,41 +1031,53 @@ export const appRouter = router({
     listTraders: tradingProcedure.query(async ({ ctx }) => {
       // Check if user is admin
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
 
       const traders = await getAllMagicNumbers();
-      
+
       // Fetch copier info for all traders with live accounts
       const copierInfoMap = new Map();
       for (const trader of traders) {
         if (trader.liveAccountNumber) {
           try {
-            const accountId = await metaCopierService.getAccountIdByLoginNumber(trader.liveAccountNumber);
+            const accountId = await metaCopierService.getAccountIdByLoginNumber(
+              trader.liveAccountNumber
+            );
             const liveAccount = accountId ? { id: accountId } : null;
             if (liveAccount) {
-              const copiers = await metaCopierService.getCopiersByAccount(liveAccount.id);
-              const traderCopier = copiers.find((c: any) => 
-                c.fromAccountShortId === parseInt(trader.magicNumber) || 
-                c.fromAccountShortId === trader.magicNumber ||
-                c.customMagicNumber === parseInt(trader.magicNumber) ||
-                c.customMagicNumber === trader.magicNumber
+              const copiers = await metaCopierService.getCopiersByAccount(
+                liveAccount.id
+              );
+              const traderCopier = copiers.find(
+                (c: any) =>
+                  c.fromAccountShortId === parseInt(trader.magicNumber) ||
+                  c.fromAccountShortId === trader.magicNumber ||
+                  c.customMagicNumber === parseInt(trader.magicNumber) ||
+                  c.customMagicNumber === trader.magicNumber
               );
               if (traderCopier) {
                 copierInfoMap.set(trader.magicNumber, {
-                  scaleType: traderCopier.scaleType?.id || traderCopier.scaleType,
+                  scaleType:
+                    traderCopier.scaleType?.id || traderCopier.scaleType,
                   multiplier: traderCopier.multiplier,
                   fixedLotSize: traderCopier.fixedLotSize,
-                  isActive: traderCopier.active
+                  isActive: traderCopier.active,
                 });
               }
             }
           } catch (error) {
-            console.error(`Failed to fetch copier for trader ${trader.magicNumber}:`, error);
+            console.error(
+              `Failed to fetch copier for trader ${trader.magicNumber}:`,
+              error
+            );
           }
         }
       }
-      
+
       return traders.map(t => ({
         id: t.id,
         magicNumber: t.magicNumber,
@@ -822,7 +1096,9 @@ export const appRouter = router({
         telegramHandle: t.telegramHandle,
         telegramConnected: !!t.telegramChatId,
         lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
-        lifetimeProfitShare: t.lifetimeProfitShare ? parseFloat(t.lifetimeProfitShare) : 0,
+        lifetimeProfitShare: t.lifetimeProfitShare
+          ? parseFloat(t.lifetimeProfitShare)
+          : 0,
         lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
@@ -832,20 +1108,25 @@ export const appRouter = router({
 
     // Create new trader
     createTrader: tradingProcedure
-      .input(z.object({
-        magicNumber: z.string(),
-        name: z.string(),
-        password: z.string(),
-        profitShare: z.number().min(0).max(1),
-        mtAccount: z.string().optional(),
-        mtServer: z.string().optional(),
-        mtPassword: z.string().optional(),
-        mtVersion: z.string().optional(),
-        mcLocation: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          magicNumber: z.string(),
+          name: z.string(),
+          password: z.string(),
+          profitShare: z.number().min(0).max(1),
+          mtAccount: z.string().optional(),
+          mtServer: z.string().optional(),
+          mtPassword: z.string().optional(),
+          mtVersion: z.string().optional(),
+          mcLocation: z.string().optional(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         await createMagicNumber({
@@ -865,26 +1146,31 @@ export const appRouter = router({
 
     // Update trader
     updateTrader: tradingProcedure
-      .input(z.object({
-        id: z.number(),
-        name: z.string().optional(),
-        password: z.string().optional(),
-        profitShare: z.number().min(0).max(1).optional(),
-        isActive: z.boolean().optional(),
-        mtAccount: z.string().optional(),
-        mtServer: z.string().optional(),
-        mtPassword: z.string().optional(),
-        mtVersion: z.string().optional(),
-        mcLocation: z.string().optional(),
-        liveAccountNumber: z.string().optional(),
-        telegramHandle: z.string().optional(),
-        lifetimeProfit: z.number().optional(),
-        lifetimeProfitShare: z.number().optional(),
-        lifetimeIncome: z.number().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.number(),
+          name: z.string().optional(),
+          password: z.string().optional(),
+          profitShare: z.number().min(0).max(1).optional(),
+          isActive: z.boolean().optional(),
+          mtAccount: z.string().optional(),
+          mtServer: z.string().optional(),
+          mtPassword: z.string().optional(),
+          mtVersion: z.string().optional(),
+          mcLocation: z.string().optional(),
+          liveAccountNumber: z.string().optional(),
+          telegramHandle: z.string().optional(),
+          lifetimeProfit: z.number().optional(),
+          lifetimeProfitShare: z.number().optional(),
+          lifetimeIncome: z.number().optional(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const { id, ...data } = input;
@@ -892,18 +1178,26 @@ export const appRouter = router({
 
         if (data.name !== undefined) updateData.name = data.name;
         if (data.password !== undefined) updateData.password = data.password;
-        if (data.profitShare !== undefined) updateData.profitShare = data.profitShare.toString();
+        if (data.profitShare !== undefined)
+          updateData.profitShare = data.profitShare.toString();
         if (data.isActive !== undefined) updateData.isActive = data.isActive;
         if (data.mtAccount !== undefined) updateData.mtAccount = data.mtAccount;
         if (data.mtServer !== undefined) updateData.mtServer = data.mtServer;
-        if (data.mtPassword !== undefined) updateData.mtPassword = data.mtPassword;
+        if (data.mtPassword !== undefined)
+          updateData.mtPassword = data.mtPassword;
         if (data.mtVersion !== undefined) updateData.mtVersion = data.mtVersion;
-        if (data.mcLocation !== undefined) updateData.mcLocation = data.mcLocation;
-        if (data.liveAccountNumber !== undefined) updateData.liveAccountNumber = data.liveAccountNumber;
-        if (data.telegramHandle !== undefined) updateData.telegramHandle = data.telegramHandle;
-        if (data.lifetimeProfit !== undefined) updateData.lifetimeProfit = data.lifetimeProfit.toString();
-        if (data.lifetimeProfitShare !== undefined) updateData.lifetimeProfitShare = data.lifetimeProfitShare.toString();
-        if (data.lifetimeIncome !== undefined) updateData.lifetimeIncome = data.lifetimeIncome.toString();
+        if (data.mcLocation !== undefined)
+          updateData.mcLocation = data.mcLocation;
+        if (data.liveAccountNumber !== undefined)
+          updateData.liveAccountNumber = data.liveAccountNumber;
+        if (data.telegramHandle !== undefined)
+          updateData.telegramHandle = data.telegramHandle;
+        if (data.lifetimeProfit !== undefined)
+          updateData.lifetimeProfit = data.lifetimeProfit.toString();
+        if (data.lifetimeProfitShare !== undefined)
+          updateData.lifetimeProfitShare = data.lifetimeProfitShare.toString();
+        if (data.lifetimeIncome !== undefined)
+          updateData.lifetimeIncome = data.lifetimeIncome.toString();
 
         await updateMagicNumber(id, updateData);
 
@@ -915,7 +1209,10 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         await deleteMagicNumber(input.id);
@@ -928,14 +1225,17 @@ export const appRouter = router({
       .input(z.object({ traderId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const trader = await getMagicNumberById(input.traderId);
         if (!trader || !trader.mtAccount) {
-          throw new TRPCError({ 
-            code: "BAD_REQUEST", 
-            message: "Trader MT account not configured" 
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Trader MT account not configured",
           });
         }
 
@@ -943,10 +1243,14 @@ export const appRouter = router({
         if (trader.mcAccountId) {
           // Verify the account still exists in MetaCopier
           try {
-            const accountDetails = await metaCopierService.getAccountById(trader.mcAccountId);
+            const accountDetails = await metaCopierService.getAccountById(
+              trader.mcAccountId
+            );
             // Check if account is deleted (status.name === "Deleted")
-            if (accountDetails?.status?.name === 'Deleted') {
-              console.warn(`[checkMetaCopierStatus] Account ${trader.mcAccountId} is deleted in MetaCopier`);
+            if (accountDetails?.status?.name === "Deleted") {
+              console.warn(
+                `[checkMetaCopierStatus] Account ${trader.mcAccountId} is deleted in MetaCopier`
+              );
               // Clear the deleted account ID from database
               await updateMagicNumber(trader.id, { mcAccountId: null });
               return {
@@ -962,7 +1266,9 @@ export const appRouter = router({
             };
           } catch (error: any) {
             // Account ID stored but account doesn't exist anymore
-            console.warn(`[checkMetaCopierStatus] Stored account ID ${trader.mcAccountId} not found in MetaCopier`);
+            console.warn(
+              `[checkMetaCopierStatus] Stored account ID ${trader.mcAccountId} not found in MetaCopier`
+            );
             // Clear the invalid mcAccountId from database
             await updateMagicNumber(trader.id, { mcAccountId: null });
             // Return not found immediately - don't search by MT account
@@ -975,7 +1281,9 @@ export const appRouter = router({
         }
 
         // Fallback: search by MT account number (only if no mcAccountId was stored)
-        const status = await metaCopierService.checkAccountExists(trader.mtAccount);
+        const status = await metaCopierService.checkAccountExists(
+          trader.mtAccount
+        );
 
         return {
           exists: status.exists,
@@ -988,24 +1296,48 @@ export const appRouter = router({
     createMetaCopierAccount: tradingProcedure
       .input(z.object({ traderId: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        console.log(`[createMetaCopierAccount] Called for traderId: ${input.traderId}`);
-        
+        console.log(
+          `[createMetaCopierAccount] Called for traderId: ${input.traderId}`
+        );
+
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          console.log('[createMetaCopierAccount] Admin check failed');
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          console.log("[createMetaCopierAccount] Admin check failed");
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const trader = await getMagicNumberById(input.traderId);
-        console.log(`[createMetaCopierAccount] Trader data:`, trader ? { id: trader.id, name: trader.name, mtAccount: trader.mtAccount, hasPassword: !!trader.mtPassword } : 'NOT FOUND');
-        if (!trader || !trader.mtAccount || !trader.mtPassword || !trader.mtServer || !trader.mtVersion || !trader.mcLocation) {
-          throw new TRPCError({ 
-            code: "BAD_REQUEST", 
-            message: "Trader MT account details incomplete" 
+        console.log(
+          `[createMetaCopierAccount] Trader data:`,
+          trader
+            ? {
+                id: trader.id,
+                name: trader.name,
+                mtAccount: trader.mtAccount,
+                hasPassword: !!trader.mtPassword,
+              }
+            : "NOT FOUND"
+        );
+        if (
+          !trader ||
+          !trader.mtAccount ||
+          !trader.mtPassword ||
+          !trader.mtServer ||
+          !trader.mtVersion ||
+          !trader.mcLocation
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Trader MT account details incomplete",
           });
         }
 
         // Step 1: Create MC account
-        console.log(`[createMetaCopierAccount] Calling metaCopierService.createAccount...`);
+        console.log(
+          `[createMetaCopierAccount] Calling metaCopierService.createAccount...`
+        );
         const result = await metaCopierService.createAccount({
           accountNumber: trader.mtAccount,
           password: trader.mtPassword,
@@ -1017,7 +1349,10 @@ export const appRouter = router({
         console.log(`[createMetaCopierAccount] MetaCopier API result:`, result);
 
         if (!result.success || !result.accountId) {
-          console.log(`[createMetaCopierAccount] Account creation failed:`, result.message);
+          console.log(
+            `[createMetaCopierAccount] Account creation failed:`,
+            result.message
+          );
           return result;
         }
 
@@ -1025,14 +1360,16 @@ export const appRouter = router({
 
         try {
           // Step 2: Create copier on slave account to get real magic number
-          const SLAVE_ACCOUNT_ID = 'b94cabc8-946d-4a99-9b81-286f8553cc63';
+          const SLAVE_ACCOUNT_ID = "b94cabc8-946d-4a99-9b81-286f8553cc63";
           const copierResult = await metaCopierService.createCopier({
             fromAccountId: mcAccountId,
             toAccountId: SLAVE_ACCOUNT_ID,
           });
 
           if (!copierResult.success || !copierResult.fromAccountShortId) {
-            console.warn('[MC Account Creation] Failed to create copier, magic number not updated');
+            console.warn(
+              "[MC Account Creation] Failed to create copier, magic number not updated"
+            );
             return {
               ...result,
               message: `${result.message} (Warning: Could not retrieve magic number)`,
@@ -1053,19 +1390,27 @@ export const appRouter = router({
           if (copierId) {
             try {
               await metaCopierService.removeCopier(SLAVE_ACCOUNT_ID, copierId);
-              console.log(`[MC Account Creation] Deleted temporary copier ${copierId}`);
+              console.log(
+                `[MC Account Creation] Deleted temporary copier ${copierId}`
+              );
             } catch (error) {
-              console.warn(`[MC Account Creation] Failed to delete copier ${copierId}:`, error);
+              console.warn(
+                `[MC Account Creation] Failed to delete copier ${copierId}:`,
+                error
+              );
               // Don't fail the whole process if copier deletion fails
             }
           }
 
           // Step 5: Rename MC account to "RFX - <name> - <magic>"
           const newAccountName = `RFX - ${trader.name} - ${realMagic}`;
-          await metaCopierService.updateAccountName(mcAccountId, newAccountName);
+          await metaCopierService.updateAccountName(
+            mcAccountId,
+            newAccountName
+          );
 
           // Step 6: Add "RFX Trader" label
-          await metaCopierService.addAccountLabel(mcAccountId, 'RFX Trader');
+          await metaCopierService.addAccountLabel(mcAccountId, "RFX Trader");
 
           return {
             success: true,
@@ -1074,7 +1419,10 @@ export const appRouter = router({
             message: `Account created successfully with magic number ${realMagic}`,
           };
         } catch (error: any) {
-          console.error('[MC Account Creation] Error in post-creation steps:', error);
+          console.error(
+            "[MC Account Creation] Error in post-creation steps:",
+            error
+          );
           return {
             success: true,
             accountId: mcAccountId,
@@ -1088,35 +1436,50 @@ export const appRouter = router({
       .input(z.object({ traderId: z.number() }))
       .query(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const trader = await getMagicNumberById(input.traderId);
         if (!trader) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Trader not found",
+          });
         }
 
         // Check if trader has MC account
-        const mcStatus = await metaCopierService.checkAccountExists(trader.mtAccount || '');
+        const mcStatus = await metaCopierService.checkAccountExists(
+          trader.mtAccount || ""
+        );
         if (!mcStatus.exists || !mcStatus.accountId) {
           return [];
         }
 
-        const copiers = await metaCopierService.getCopiersBySourceAccount(mcStatus.accountId);
+        const copiers = await metaCopierService.getCopiersBySourceAccount(
+          mcStatus.accountId
+        );
         return copiers;
       }),
 
     // Update copier status (Disable, Manage, Activate)
     updateCopierStatus: tradingProcedure
-      .input(z.object({
-        traderId: z.number(),
-        toAccountId: z.string(),
-        copierId: z.string(),
-        status: z.enum(['ACTIVE', 'DISABLED', 'MANAGE']),
-      }))
+      .input(
+        z.object({
+          traderId: z.number(),
+          toAccountId: z.string(),
+          copierId: z.string(),
+          status: z.enum(["ACTIVE", "DISABLED", "MANAGE"]),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         await metaCopierService.updateCopierStatus(
@@ -1130,22 +1493,29 @@ export const appRouter = router({
 
     // Remove copier
     removeCopier: tradingProcedure
-      .input(z.object({
-        traderId: z.number(),
-        toAccountId: z.string(),
-        copierId: z.string(),
-      }))
+      .input(
+        z.object({
+          traderId: z.number(),
+          toAccountId: z.string(),
+          copierId: z.string(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         // Check for open positions
-        const hasOpenPositions = await metaCopierService.copierHasOpenPositions(input.toAccountId);
+        const hasOpenPositions = await metaCopierService.copierHasOpenPositions(
+          input.toAccountId
+        );
         if (hasOpenPositions) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Cannot remove copier with open positions"
+            message: "Cannot remove copier with open positions",
           });
         }
 
@@ -1155,41 +1525,50 @@ export const appRouter = router({
       }),
 
     // Get all accounts with "RFX Master" label
-    getRfxMasterAccounts: tradingProcedure
-      .query(async ({ ctx }) => {
-        if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
-        }
-        const accounts = await metaCopierService.getAccountsByLabel('RFX Master');
-        return accounts;
-      }),
+    getRfxMasterAccounts: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
+      }
+      const accounts = await metaCopierService.getAccountsByLabel("RFX Master");
+      return accounts;
+    }),
 
     // Get all traders with their current liveAccountNumber for master assignment UI
-    getTradersForMasterAssignment: tradingProcedure
-      .query(async ({ ctx }) => {
-        if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
-        }
-        const traders = await getAllMagicNumbers();
-        return traders
-          .filter(t => !t.isAdmin)
-          .map(t => ({
-            id: t.id,
-            name: t.name,
-            magicNumber: t.magicNumber,
-            liveAccountNumber: t.liveAccountNumber || null,
-          }));
-      }),
+    getTradersForMasterAssignment: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
+      }
+      const traders = await getAllMagicNumbers();
+      return traders
+        .filter(t => !t.isAdmin)
+        .map(t => ({
+          id: t.id,
+          name: t.name,
+          magicNumber: t.magicNumber,
+          liveAccountNumber: t.liveAccountNumber || null,
+        }));
+    }),
 
     // Assign traders to a master account (sets liveAccountNumber)
     assignTradersToMaster: tradingProcedure
-      .input(z.object({
-        masterLoginAccountNumber: z.string(),
-        traderIds: z.array(z.number()),
-      }))
+      .input(
+        z.object({
+          masterLoginAccountNumber: z.string(),
+          traderIds: z.array(z.number()),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
         // Update each selected trader's liveAccountNumber
         for (const traderId of input.traderIds) {
@@ -1202,12 +1581,17 @@ export const appRouter = router({
 
     // Unassign a trader from their current master account (clears liveAccountNumber)
     unassignTraderFromMaster: tradingProcedure
-      .input(z.object({
-        traderId: z.number(),
-      }))
+      .input(
+        z.object({
+          traderId: z.number(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
         await updateMagicNumber(input.traderId, { liveAccountNumber: null });
         return { success: true };
@@ -1218,27 +1602,44 @@ export const appRouter = router({
       .input(z.object({ mcAccountId: z.string() }))
       .query(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
-        const limits = await metaCopierService.getAccountRiskLimits(input.mcAccountId);
-        const activeLimit = limits.find((l: any) => l.active && l.absoluteRiskLimit != null);
+        const limits = await metaCopierService.getAccountRiskLimits(
+          input.mcAccountId
+        );
+        const activeLimit = limits.find(
+          (l: any) => l.active && l.absoluteRiskLimit != null
+        );
         return activeLimit
-          ? { id: activeLimit.id, absoluteRiskLimit: activeLimit.absoluteRiskLimit as number }
+          ? {
+              id: activeLimit.id,
+              absoluteRiskLimit: activeLimit.absoluteRiskLimit as number,
+            }
           : null;
       }),
 
     // Update risk limit for a specific trader (admin use)
     updateTraderRiskLimit: tradingProcedure
-      .input(z.object({
-        mcAccountId: z.string(),
-        absoluteRiskLimit: z.number().positive(),
-      }))
+      .input(
+        z.object({
+          mcAccountId: z.string(),
+          absoluteRiskLimit: z.number().positive(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
         // Fetch existing limits to find the limit ID to update
-        const limits = await metaCopierService.getAccountRiskLimits(input.mcAccountId);
+        const limits = await metaCopierService.getAccountRiskLimits(
+          input.mcAccountId
+        );
         const activeLimit = limits.find((l: any) => l.active);
 
         if (activeLimit?.id) {
@@ -1261,7 +1662,10 @@ export const appRouter = router({
     // Get all risk limit breach records (admin)
     getRiskLimitBreaches: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
       const breaches = await getAllRiskLimitBreaches();
       const traders = await getAllMagicNumbers();
@@ -1270,8 +1674,8 @@ export const appRouter = router({
         return {
           id: b.id,
           magicNumberId: b.magicNumberId,
-          traderName: trader?.name || 'Unknown',
-          magicNumber: trader?.magicNumber || 'N/A',
+          traderName: trader?.name || "Unknown",
+          magicNumber: trader?.magicNumber || "N/A",
           equityAtBreach: parseFloat(b.equityAtBreach),
           riskLimitAtBreach: parseFloat(b.riskLimitAtBreach),
           traderNotified: b.traderNotified,
@@ -1287,7 +1691,10 @@ export const appRouter = router({
       .input(z.object({ breachId: z.number(), magicNumberId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
         await resolveRiskLimitBreach(input.breachId);
         // Re-enable trading by setting isActive = true on the magic number
@@ -1296,7 +1703,8 @@ export const appRouter = router({
         await createNotification({
           magicNumberId: input.magicNumberId,
           title: "Trading Re-enabled",
-          message: "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
+          message:
+            "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
           type: "info",
         });
         return { success: true };
@@ -1305,7 +1713,10 @@ export const appRouter = router({
     // Count active (unresolved) risk limit breaches — used for sidebar badge
     countActiveBreaches: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
       const count = await countActiveRiskLimitBreaches();
       return { count };
@@ -1314,7 +1725,10 @@ export const appRouter = router({
     // Get breach monitor status (last checked timestamp)
     getBreachMonitorStatus: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
       return { lastCheckedAt: getLastCheckedAt() };
     }),
@@ -1322,7 +1736,10 @@ export const appRouter = router({
     // Bulk resolve all active breaches and re-enable trading for each affected trader
     bulkResolveBreaches: tradingProcedure.mutation(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
       // Fetch active breaches before resolving so we can re-enable each trader
       const allBreaches = await getAllRiskLimitBreaches();
@@ -1336,7 +1753,8 @@ export const appRouter = router({
         await createNotification({
           magicNumberId: breach.magicNumberId,
           title: "Trading Re-enabled",
-          message: "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
+          message:
+            "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
           type: "info",
         });
       }
@@ -1347,7 +1765,10 @@ export const appRouter = router({
     // Get all traders for payment dropdown
     getAllTraders: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
 
       const traders = await getAllMagicNumbers();
@@ -1363,12 +1784,15 @@ export const appRouter = router({
     // Get all payments with trader info
     getAllPayments: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
 
       const payments = await getAllPayments();
       const traders = await getAllMagicNumbers();
-      
+
       return payments.map(p => {
         const trader = traders.find(t => t.id === p.magicNumberId);
         return {
@@ -1377,10 +1801,10 @@ export const appRouter = router({
           transactionHash: p.transactionHash,
           paymentDate: p.paymentDate,
           notificationSent: p.notificationSent,
-          traderName: trader?.name || 'Unknown',
-          magicNumber: trader?.magicNumber || 'N/A',
-          network: p.network || trader?.usdtNetwork || 'TRC20',
-          networkFee: parseFloat(p.networkFee || '0'),
+          traderName: trader?.name || "Unknown",
+          magicNumber: trader?.magicNumber || "N/A",
+          network: p.network || trader?.usdtNetwork || "TRC20",
+          networkFee: parseFloat(p.networkFee || "0"),
           usdtAddress: trader?.usdtAddress || null,
         };
       });
@@ -1388,16 +1812,21 @@ export const appRouter = router({
 
     // Make a payment
     makePayment: tradingProcedure
-      .input(z.object({
-        magicNumberId: z.number(),
-        amount: z.number(),
-        networkFee: z.number().optional(),
-        transactionHash: z.string(),
-        paymentDate: z.date(),
-      }))
+      .input(
+        z.object({
+          magicNumberId: z.number(),
+          amount: z.number(),
+          networkFee: z.number().optional(),
+          transactionHash: z.string(),
+          paymentDate: z.date(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const trader = await getMagicNumberById(input.magicNumberId);
@@ -1415,31 +1844,46 @@ export const appRouter = router({
 
     // Update transaction hash on a pending payment
     updatePaymentHash: tradingProcedure
-      .input(z.object({
-        paymentId: z.number().int().positive(),
-        transactionHash: z.string().min(1),
-      }))
+      .input(
+        z.object({
+          paymentId: z.number().int().positive(),
+          transactionHash: z.string().min(1),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
-        await updatePaymentTransactionHash(input.paymentId, input.transactionHash);
-        console.log(`[Payment] Updated tx hash for payment #${input.paymentId}: ${input.transactionHash}`);
+        await updatePaymentTransactionHash(
+          input.paymentId,
+          input.transactionHash
+        );
+        console.log(
+          `[Payment] Updated tx hash for payment #${input.paymentId}: ${input.transactionHash}`
+        );
         return { success: true };
       }),
 
     // Broadcast a message to all connected traders (Telegram + In-App)
     broadcastMessage: tradingProcedure
-      .input(z.object({
-        title: z.string().min(1).max(200),
-        message: z.string().min(1).max(2000),
-        sendTelegram: z.boolean().default(true),
-        sendInApp: z.boolean().default(true),
-      }))
+      .input(
+        z.object({
+          title: z.string().min(1).max(200),
+          message: z.string().min(1).max(2000),
+          sendTelegram: z.boolean().default(true),
+          sendInApp: z.boolean().default(true),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const allTraders = await getAllMagicNumbers();
@@ -1460,7 +1904,11 @@ export const appRouter = router({
           }
 
           // Telegram notification (only if trader has a connected chat ID)
-          if (input.sendTelegram && trader.telegramHandle && trader.telegramChatId) {
+          if (
+            input.sendTelegram &&
+            trader.telegramHandle &&
+            trader.telegramChatId
+          ) {
             const sent = await sendTelegramMessage(
               trader.telegramHandle,
               `<b>${input.title}</b>\n\n${input.message}`,
@@ -1475,21 +1923,29 @@ export const appRouter = router({
 
     // Send a direct message to a single trader (Telegram + In-App)
     sendDirectMessage: tradingProcedure
-      .input(z.object({
-        traderId: z.number(),
-        title: z.string().min(1).max(200),
-        message: z.string().min(1).max(2000),
-        sendTelegram: z.boolean().default(true),
-        sendInApp: z.boolean().default(true),
-      }))
+      .input(
+        z.object({
+          traderId: z.number(),
+          title: z.string().min(1).max(200),
+          message: z.string().min(1).max(2000),
+          sendTelegram: z.boolean().default(true),
+          sendInApp: z.boolean().default(true),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const trader = await getMagicNumberById(input.traderId);
         if (!trader) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Trader not found",
+          });
         }
 
         let telegramSent = false;
@@ -1506,7 +1962,11 @@ export const appRouter = router({
           inAppSent = true;
         }
 
-        if (input.sendTelegram && trader.telegramHandle && trader.telegramChatId) {
+        if (
+          input.sendTelegram &&
+          trader.telegramHandle &&
+          trader.telegramChatId
+        ) {
           telegramSent = await sendTelegramMessage(
             trader.telegramHandle,
             `<b>${input.title}</b>\n\n${input.message}`,
@@ -1520,7 +1980,10 @@ export const appRouter = router({
     // Get wallet addresses and balances for configured chains
     getWalletInfo: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
       }
 
       let trc20: {
@@ -1530,7 +1993,12 @@ export const appRouter = router({
         gasFreeAddress?: string;
         gasFreeBalance?: string;
       } | null = null;
-      let erc20: { address: string; usdtBalance: string; nativeBalance: string; chainName: string } | null = null;
+      let erc20: {
+        address: string;
+        usdtBalance: string;
+        nativeBalance: string;
+        chainName: string;
+      } | null = null;
 
       if (isTronConfigured()) {
         try {
@@ -1538,7 +2006,11 @@ export const appRouter = router({
             getTronWalletAddress(),
             getTronBalance(),
           ]);
-          trc20 = { address, usdtBalance, gasFreeEnabled: isGasFreeConfigured() };
+          trc20 = {
+            address,
+            usdtBalance,
+            gasFreeEnabled: isGasFreeConfigured(),
+          };
 
           // Fetch GasFree address and balance if configured
           if (isGasFreeConfigured()) {
@@ -1547,7 +2019,10 @@ export const appRouter = router({
               trc20.gasFreeAddress = gfInfo.gasFreeAddress;
               trc20.gasFreeBalance = gfInfo.usdtBalance;
             } catch (err) {
-              console.error("[Wallet] Failed to fetch GasFree account info:", err);
+              console.error(
+                "[Wallet] Failed to fetch GasFree account info:",
+                err
+              );
             }
           }
         } catch (err) {
@@ -1562,7 +2037,12 @@ export const appRouter = router({
             getEvmBalance(),
             getNativeBalance(),
           ]);
-          erc20 = { address, usdtBalance, nativeBalance, chainName: ENV.evmChainName };
+          erc20 = {
+            address,
+            usdtBalance,
+            nativeBalance,
+            chainName: ENV.evmChainName,
+          };
         } catch (err) {
           console.error("[Wallet] Failed to fetch ERC-20 wallet info:", err);
         }
@@ -1573,21 +2053,32 @@ export const appRouter = router({
 
     // Send USDT from the configured wallet to a trader's address
     sendWalletPayment: tradingProcedure
-      .input(z.object({
-        magicNumberId: z.number().int().positive(),
-        amount: z.number().positive().max(10_000),
-      }))
+      .input(
+        z.object({
+          magicNumberId: z.number().int().positive(),
+          amount: z.number().positive().max(10_000),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
         }
 
         const trader = await getMagicNumberById(input.magicNumberId);
         if (!trader) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Trader not found",
+          });
         }
         if (!trader.usdtAddress || !trader.usdtNetwork) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Trader has no USDT address or network configured" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Trader has no USDT address or network configured",
+          });
         }
 
         const network = trader.usdtNetwork as "TRC20" | "ERC20";
@@ -1619,7 +2110,9 @@ export const appRouter = router({
               network,
               paymentDate: new Date(),
             });
-            console.warn(`[Payment] Recorded pending payment ${pendingHash} for ${trader.name} — GasFree confirmation timed out`);
+            console.warn(
+              `[Payment] Recorded pending payment ${pendingHash} for ${trader.name} — GasFree confirmation timed out`
+            );
             throw new TRPCError({
               code: "INTERNAL_SERVER_ERROR",
               message: `Payment was sent but confirmation timed out. It has been recorded as pending — check TronScan to verify and update the transaction hash.`,
@@ -1642,15 +2135,114 @@ export const appRouter = router({
 
         return { success: true, txHash, network };
       }),
+
+    // --- Previous Magic Numbers ---
+
+    getPreviousMagicNumbers: tradingProcedure
+      .input(z.object({ traderId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        return await getPreviousMagicNumbers(input.traderId);
+      }),
+
+    addPreviousMagicNumber: tradingProcedure
+      .input(
+        z.object({
+          traderId: z.number(),
+          magicNumber: z.string().min(1).max(20),
+          note: z.string().max(255).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        await addPreviousMagicNumber(
+          input.traderId,
+          input.magicNumber,
+          input.note
+        );
+        return { success: true };
+      }),
+
+    removePreviousMagicNumber: tradingProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        await removePreviousMagicNumber(input.id);
+        return { success: true };
+      }),
+
+    // --- Previous Master Accounts ---
+
+    getPreviousMasterAccounts: tradingProcedure
+      .input(z.object({ traderId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        return await getPreviousMasterAccounts(input.traderId);
+      }),
+
+    addPreviousMasterAccount: tradingProcedure
+      .input(
+        z.object({
+          traderId: z.number(),
+          liveAccountNumber: z.string().min(1).max(50),
+          note: z.string().max(255).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        await addPreviousMasterAccount(
+          input.traderId,
+          input.liveAccountNumber,
+          input.note
+        );
+        return { success: true };
+      }),
+
+    removePreviousMasterAccount: tradingProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        await removePreviousMasterAccount(input.id);
+        return { success: true };
+      }),
   }),
 
   // Copier Templates
   copierTemplates: router({
     // Get all copier templates
-    list: tradingProcedure
-      .query(async () => {
-        return await getAllCopierTemplates();
-      }),
+    list: tradingProcedure.query(async () => {
+      return await getAllCopierTemplates();
+    }),
 
     // Get a single copier template by ID
     getById: tradingProcedure
@@ -1661,37 +2253,39 @@ export const appRouter = router({
 
     // Create a new copier template
     create: tradingProcedure
-      .input(z.object({
-        name: z.string(),
-        description: z.string().optional(),
-        multiplier: z.string().default("1.0000"),
-        copyStopLoss: z.boolean().default(true),
-        copyTakeProfit: z.boolean().default(true),
-        skipPendingOrders: z.boolean().default(true),
-        scaleTypeId: z.number().default(3),
-        scaleTypeName: z.string().default("Fixed lot size"),
-        active: z.boolean().default(false),
-        monitorOnly: z.boolean().default(false),
-        maxSlippage: z.number().default(0),
-        forceMinTrade: z.boolean().default(true),
-        fixMasterBalanceAndEquity: z.string().default("0.00"),
-        fixSlaveBalanceAndEquity: z.string().default("0.00"),
-        fixedLotSize: z.string().default("0.01"),
-        martingaleStrategy: z.boolean().default(false),
-        openRetry: z.boolean().default(true),
-        openRetryTimeoutInMinutes: z.number().default(10),
-        reverse: z.boolean().default(false),
-        copyOpenPositions: z.boolean().default(false),
-        maxOpenPositions: z.number().default(0),
-        maxLotSize: z.string().default("0.00"),
-        maximumLot: z.string().default("0.00"),
-        hideComment: z.boolean().default(false),
-        forcePositionLotSize: z.boolean().default(false),
-        ignoreContractSize: z.boolean().default(false),
-        ignoreCurrency: z.boolean().default(false),
-        copyMagicNumber: z.boolean().default(true),
-        copyOriginalComment: z.boolean().default(false),
-      }))
+      .input(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          multiplier: z.string().default("1.0000"),
+          copyStopLoss: z.boolean().default(true),
+          copyTakeProfit: z.boolean().default(true),
+          skipPendingOrders: z.boolean().default(true),
+          scaleTypeId: z.number().default(3),
+          scaleTypeName: z.string().default("Fixed lot size"),
+          active: z.boolean().default(false),
+          monitorOnly: z.boolean().default(false),
+          maxSlippage: z.number().default(0),
+          forceMinTrade: z.boolean().default(true),
+          fixMasterBalanceAndEquity: z.string().default("0.00"),
+          fixSlaveBalanceAndEquity: z.string().default("0.00"),
+          fixedLotSize: z.string().default("0.01"),
+          martingaleStrategy: z.boolean().default(false),
+          openRetry: z.boolean().default(true),
+          openRetryTimeoutInMinutes: z.number().default(10),
+          reverse: z.boolean().default(false),
+          copyOpenPositions: z.boolean().default(false),
+          maxOpenPositions: z.number().default(0),
+          maxLotSize: z.string().default("0.00"),
+          maximumLot: z.string().default("0.00"),
+          hideComment: z.boolean().default(false),
+          forcePositionLotSize: z.boolean().default(false),
+          ignoreContractSize: z.boolean().default(false),
+          ignoreCurrency: z.boolean().default(false),
+          copyMagicNumber: z.boolean().default(true),
+          copyOriginalComment: z.boolean().default(false),
+        })
+      )
       .mutation(async ({ input }) => {
         await createCopierTemplate(input);
         return { success: true };
@@ -1699,38 +2293,40 @@ export const appRouter = router({
 
     // Update a copier template
     update: tradingProcedure
-      .input(z.object({
-        id: z.number(),
-        name: z.string().optional(),
-        description: z.string().optional(),
-        multiplier: z.string().optional(),
-        copyStopLoss: z.boolean().optional(),
-        copyTakeProfit: z.boolean().optional(),
-        skipPendingOrders: z.boolean().optional(),
-        scaleTypeId: z.number().optional(),
-        scaleTypeName: z.string().optional(),
-        active: z.boolean().optional(),
-        monitorOnly: z.boolean().optional(),
-        maxSlippage: z.number().optional(),
-        forceMinTrade: z.boolean().optional(),
-        fixMasterBalanceAndEquity: z.string().optional(),
-        fixSlaveBalanceAndEquity: z.string().optional(),
-        fixedLotSize: z.string().optional(),
-        martingaleStrategy: z.boolean().optional(),
-        openRetry: z.boolean().optional(),
-        openRetryTimeoutInMinutes: z.number().optional(),
-        reverse: z.boolean().optional(),
-        copyOpenPositions: z.boolean().optional(),
-        maxOpenPositions: z.number().optional(),
-        maxLotSize: z.string().optional(),
-        maximumLot: z.string().optional(),
-        hideComment: z.boolean().optional(),
-        forcePositionLotSize: z.boolean().optional(),
-        ignoreContractSize: z.boolean().optional(),
-        ignoreCurrency: z.boolean().optional(),
-        copyMagicNumber: z.boolean().optional(),
-        copyOriginalComment: z.boolean().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.number(),
+          name: z.string().optional(),
+          description: z.string().optional(),
+          multiplier: z.string().optional(),
+          copyStopLoss: z.boolean().optional(),
+          copyTakeProfit: z.boolean().optional(),
+          skipPendingOrders: z.boolean().optional(),
+          scaleTypeId: z.number().optional(),
+          scaleTypeName: z.string().optional(),
+          active: z.boolean().optional(),
+          monitorOnly: z.boolean().optional(),
+          maxSlippage: z.number().optional(),
+          forceMinTrade: z.boolean().optional(),
+          fixMasterBalanceAndEquity: z.string().optional(),
+          fixSlaveBalanceAndEquity: z.string().optional(),
+          fixedLotSize: z.string().optional(),
+          martingaleStrategy: z.boolean().optional(),
+          openRetry: z.boolean().optional(),
+          openRetryTimeoutInMinutes: z.number().optional(),
+          reverse: z.boolean().optional(),
+          copyOpenPositions: z.boolean().optional(),
+          maxOpenPositions: z.number().optional(),
+          maxLotSize: z.string().optional(),
+          maximumLot: z.string().optional(),
+          hideComment: z.boolean().optional(),
+          forcePositionLotSize: z.boolean().optional(),
+          ignoreContractSize: z.boolean().optional(),
+          ignoreCurrency: z.boolean().optional(),
+          copyMagicNumber: z.boolean().optional(),
+          copyOriginalComment: z.boolean().optional(),
+        })
+      )
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await updateCopierTemplate(id, data);
