@@ -76,6 +76,7 @@ interface Trader {
   telegramHandle: string | null;
   telegramConnected: boolean;
   copierInfo: {
+    scaleType: number;
     multiplier: number;
     fixedLotSize: number;
     isActive: boolean;

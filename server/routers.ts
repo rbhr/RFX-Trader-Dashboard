@@ -42,6 +42,9 @@ import {
   getPreviousMasterAccounts,
   addPreviousMasterAccount,
   removePreviousMasterAccount,
+  createTwoFactorCode,
+  verifyTwoFactorCode,
+  hasSeenDevice,
 } from "./db";
 import {
   metaCopierService,
@@ -53,6 +56,7 @@ import {
   getAllTimeStart,
 } from "./metacopier";
 import { nanoid } from "nanoid";
+import bcrypt from "bcrypt";
 import {
   sendTelegramMessage,
   buildPaymentMessage,
@@ -79,6 +83,50 @@ import {
 import { ENV } from "./_core/env";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
+const BCRYPT_ROUNDS = 12;
+
+async function generateAndSend2FACode(
+  magicNumberId: number,
+  telegramHandle: string | null,
+  telegramChatId: string | null,
+  traderName: string,
+  purpose: "login_2fa" | "password_reset" | "password_change"
+): Promise<boolean> {
+  if (!telegramHandle || !telegramChatId) return false;
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  await createTwoFactorCode(magicNumberId, code, purpose);
+
+  const purposeLabel =
+    purpose === "login_2fa"
+      ? "login from a new device"
+      : purpose === "password_reset"
+        ? "password reset"
+        : "password change";
+
+  const message =
+    `🔐 <b>Verification Code</b>\n\n` +
+    `Hi ${traderName},\n\n` +
+    `Your verification code for <b>${purposeLabel}</b> is:\n\n` +
+    `<code>${code}</code>\n\n` +
+    `This code expires in 5 minutes. If you didn't request this, ignore this message.`;
+
+  return sendTelegramMessage(telegramHandle, message, telegramChatId);
+}
+
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+async function verifyPassword(
+  password: string,
+  hash: string
+): Promise<boolean> {
+  if (hash.startsWith("$2b$") || hash.startsWith("$2a$")) {
+    return bcrypt.compare(password, hash);
+  }
+  return password === hash;
+}
 
 // Custom procedure for trading authentication
 const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
@@ -395,13 +443,13 @@ export const appRouter = router({
       }));
     }),
 
-    // Login with magic number and password
     login: publicProcedure
       .input(
         z.object({
           magicNumber: z.string(),
           password: z.string(),
           rememberMe: z.boolean().optional(),
+          twoFactorCode: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -414,14 +462,67 @@ export const appRouter = router({
           });
         }
 
-        if (magicNumberData.password !== input.password) {
+        const passwordValid = await verifyPassword(
+          input.password,
+          magicNumberData.password
+        );
+        if (!passwordValid) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Invalid password",
           });
         }
 
-        // Create session
+        const clientIp =
+          ctx.req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
+          ctx.req.ip ||
+          null;
+        const knownDevice = await hasSeenDevice(magicNumberData.id, clientIp);
+
+        if (
+          !knownDevice &&
+          magicNumberData.telegramChatId &&
+          !magicNumberData.isAdmin
+        ) {
+          if (!input.twoFactorCode) {
+            await generateAndSend2FACode(
+              magicNumberData.id,
+              magicNumberData.telegramHandle,
+              magicNumberData.telegramChatId,
+              magicNumberData.name,
+              "login_2fa"
+            );
+            return {
+              success: false,
+              requires2FA: true,
+              magicNumber: magicNumberData.magicNumber,
+              name: magicNumberData.name,
+              isAdmin: false,
+            };
+          }
+
+          const codeValid = await verifyTwoFactorCode(
+            magicNumberData.id,
+            input.twoFactorCode,
+            "login_2fa"
+          );
+          if (!codeValid) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid or expired verification code",
+            });
+          }
+        }
+
+        // Hash plaintext password on first successful login (migration)
+        if (
+          !magicNumberData.password.startsWith("$2b$") &&
+          !magicNumberData.password.startsWith("$2a$")
+        ) {
+          const hashed = await hashPassword(input.password);
+          await updateMagicNumber(magicNumberData.id, { password: hashed });
+        }
+
         const sessionToken = nanoid(32);
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + (input.rememberMe ? 30 : 7));
@@ -429,12 +530,11 @@ export const appRouter = router({
         await createTradingSession({
           sessionToken,
           magicNumberId: magicNumberData.id,
-          ipAddress: ctx.req.ip || null,
+          ipAddress: clientIp,
           userAgent: ctx.req.headers["user-agent"] || null,
           expiresAt,
         });
 
-        // Set cookie
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(TRADING_SESSION_COOKIE, sessionToken, {
           ...cookieOptions,
@@ -445,6 +545,7 @@ export const appRouter = router({
 
         return {
           success: true,
+          requires2FA: false,
           magicNumber: magicNumberData.magicNumber,
           name: magicNumberData.name,
           isAdmin: magicNumberData.isAdmin || false,
@@ -468,7 +569,131 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    // Get current session info (or viewed trader info for admin)
+    requestPasswordReset: publicProcedure
+      .input(z.object({ magicNumber: z.string() }))
+      .mutation(async ({ input }) => {
+        const trader = await getMagicNumberByNumber(input.magicNumber);
+        if (!trader) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Magic number not found",
+          });
+        }
+
+        if (!trader.telegramChatId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "No Telegram linked to this account. Contact an admin to reset your password.",
+          });
+        }
+
+        const sent = await generateAndSend2FACode(
+          trader.id,
+          trader.telegramHandle,
+          trader.telegramChatId,
+          trader.name,
+          "password_reset"
+        );
+
+        if (!sent) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to send verification code. Try again later.",
+          });
+        }
+
+        return { success: true };
+      }),
+
+    resetPassword: publicProcedure
+      .input(
+        z.object({
+          magicNumber: z.string(),
+          code: z.string().length(6),
+          newPassword: z.string().min(6),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const trader = await getMagicNumberByNumber(input.magicNumber);
+        if (!trader) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Magic number not found",
+          });
+        }
+
+        const codeValid = await verifyTwoFactorCode(
+          trader.id,
+          input.code,
+          "password_reset"
+        );
+        if (!codeValid) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid or expired verification code",
+          });
+        }
+
+        const hashed = await hashPassword(input.newPassword);
+        await updateMagicNumber(trader.id, { password: hashed });
+
+        return { success: true };
+      }),
+
+    changePassword: tradingProcedure
+      .input(
+        z.object({
+          currentPassword: z.string(),
+          newPassword: z.string().min(6),
+          twoFactorCode: z.string().length(6).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const trader = ctx.tradingSession.magicNumber;
+
+        const passwordValid = await verifyPassword(
+          input.currentPassword,
+          trader.password
+        );
+        if (!passwordValid) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Current password is incorrect",
+          });
+        }
+
+        if (trader.telegramChatId) {
+          if (!input.twoFactorCode) {
+            await generateAndSend2FACode(
+              trader.id,
+              trader.telegramHandle,
+              trader.telegramChatId,
+              trader.name,
+              "password_change"
+            );
+            return { success: false, requires2FA: true };
+          }
+
+          const codeValid = await verifyTwoFactorCode(
+            trader.id,
+            input.twoFactorCode,
+            "password_change"
+          );
+          if (!codeValid) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid or expired verification code",
+            });
+          }
+        }
+
+        const hashed = await hashPassword(input.newPassword);
+        await updateMagicNumber(trader.id, { password: hashed });
+
+        return { success: true, requires2FA: false };
+      }),
+
     getSession: tradingProcedure
       .input(viewAsInput)
       .query(async ({ ctx, input }) => {
@@ -1213,10 +1438,11 @@ export const appRouter = router({
           });
         }
 
+        const hashedPassword = await hashPassword(input.password);
         await createMagicNumber({
           magicNumber: input.magicNumber,
           name: input.name,
-          password: input.password,
+          password: hashedPassword,
           profitShare: input.profitShare.toString(),
           mtAccount: input.mtAccount || null,
           mtServer: input.mtServer || null,
@@ -1261,7 +1487,8 @@ export const appRouter = router({
         const updateData: any = {};
 
         if (data.name !== undefined) updateData.name = data.name;
-        if (data.password !== undefined) updateData.password = data.password;
+        if (data.password !== undefined)
+          updateData.password = await hashPassword(data.password);
         if (data.profitShare !== undefined)
           updateData.profitShare = data.profitShare.toString();
         if (data.isActive !== undefined) updateData.isActive = data.isActive;
