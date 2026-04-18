@@ -1317,9 +1317,11 @@ export const appRouter = router({
 
       const traders = await getAllMagicNumbers();
 
-      // Fetch copier info + profit summary for all traders in parallel
-      const enriched = await Promise.all(
-        traders.map(async t => {
+      // Process traders with concurrency limit to avoid 429 rate limits
+      const CONCURRENCY = 3;
+      const enriched: Awaited<ReturnType<typeof enrichTrader>>[] = [];
+
+      async function enrichTrader(t: (typeof traders)[number]) {
           const profitSummary: {
             weekPnL: number | null;
             monthPnL: number | null;
@@ -1420,8 +1422,13 @@ export const appRouter = router({
             updatedAt: t.updatedAt,
             copierInfo: copierInfo as CopierInfo | null,
           };
-        })
-      );
+      }
+
+      for (let i = 0; i < traders.length; i += CONCURRENCY) {
+        const batch = traders.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(batch.map(enrichTrader));
+        enriched.push(...results);
+      }
 
       return enriched;
     }),

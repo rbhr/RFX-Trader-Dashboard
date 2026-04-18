@@ -76,24 +76,33 @@ class MetaCopierService {
   }
 
   private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET', data?: any): Promise<T> {
-    try {
-      const response = await axios({
-        method,
-        url: `${API_BASE}${endpoint}`,
-        headers: {
-          'X-API-KEY': this.apiKey,
-          'Content-Type': 'application/json',
-        },
-        data,
-        timeout: 300000, // 5 minute timeout for account creation
-      });
-      return response.data;
-    } catch (error: any) {
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        throw new Error(`MetaCopier API timeout after 30 seconds for ${method} ${endpoint}`);
+    const maxRetries = 4;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await axios({
+          method,
+          url: `${API_BASE}${endpoint}`,
+          headers: {
+            'X-API-KEY': this.apiKey,
+            'Content-Type': 'application/json',
+          },
+          data,
+          timeout: 300000,
+        });
+        return response.data;
+      } catch (error: any) {
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+          throw new Error(`MetaCopier API timeout for ${method} ${endpoint}`);
+        }
+        if (error.response?.status === 429 && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000;
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
+    throw new Error(`MetaCopier API failed after ${maxRetries} retries for ${method} ${endpoint}`);
   }
 
   async getOpenPositions(magicNumber?: string, showAll = false): Promise<Position[]> {
