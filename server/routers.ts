@@ -242,9 +242,10 @@ async function fetchAggregatedLifetimePositions(trader: {
     );
   }
 
-  // Build full set of magic numbers and master accounts
-  const allMagicNumbers = new Set<string>([magicNumber]);
-  for (const pm of prevMagics) allMagicNumbers.add(pm.previousMagicNumber);
+  // Build full set of magic numbers (normalized to string) and master accounts
+  const allMagicNumbers = new Set<string>([String(magicNumber)]);
+  for (const pm of prevMagics)
+    allMagicNumbers.add(String(pm.previousMagicNumber));
 
   const allAccountNumbers = new Set<string>();
   if (liveAccountNumber) allAccountNumbers.add(liveAccountNumber);
@@ -267,7 +268,7 @@ async function fetchAggregatedLifetimePositions(trader: {
           getEndOfToday()
         );
       // Filter to any of the trader's magic numbers
-      return positions.filter(p => allMagicNumbers.has(p.magicNumber));
+      return positions.filter(p => allMagicNumbers.has(String(p.magicNumber)));
     });
 
     const results = await Promise.all(accountFetches);
@@ -281,7 +282,7 @@ async function fetchAggregatedLifetimePositions(trader: {
       false
     );
     allPositions.push(
-      ...positions.filter(p => allMagicNumbers.has(p.magicNumber))
+      ...positions.filter(p => allMagicNumbers.has(String(p.magicNumber)))
     );
   }
 
@@ -1319,13 +1320,18 @@ export const appRouter = router({
       // Fetch copier info + profit summary for all traders in parallel
       const enriched = await Promise.all(
         traders.map(async t => {
-          const profitSummary = { weekPnL: 0, monthPnL: 0, lifetimePnL: 0 };
-          let copierInfo: {
-            scaleType: any;
-            multiplier: any;
-            fixedLotSize: any;
-            isActive: any;
-          } | null = null;
+          const profitSummary: {
+            weekPnL: number | null;
+            monthPnL: number | null;
+            lifetimePnL: number | null;
+          } = { weekPnL: null, monthPnL: null, lifetimePnL: null };
+          type CopierInfo = {
+            scaleType: number;
+            multiplier: number;
+            fixedLotSize: number;
+            isActive: boolean;
+          };
+          let copierInfo: CopierInfo | null = null;
 
           const profitPromise = computeTraderProfitSummary({
             id: t.id,
@@ -1343,6 +1349,7 @@ export const appRouter = router({
                 `Failed to compute profit summary for ${t.magicNumber}:`,
                 error
               );
+              // Leave profit fields null to signal API unavailable (vs actual $0)
             });
 
           const copierPromise = (async () => {
@@ -1403,13 +1410,16 @@ export const appRouter = router({
             monthPnL: profitSummary.monthPnL,
             lifetimeProfit: profitSummary.lifetimePnL,
             lifetimeProfitShare:
+              profitSummary.lifetimePnL !== null &&
               profitSummary.lifetimePnL > 0
                 ? profitSummary.lifetimePnL * parseFloat(t.profitShare)
-                : 0,
+                : profitSummary.lifetimePnL === null
+                  ? null
+                  : 0,
             lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
             createdAt: t.createdAt,
             updatedAt: t.updatedAt,
-            copierInfo,
+            copierInfo: copierInfo as CopierInfo | null,
           };
         })
       );

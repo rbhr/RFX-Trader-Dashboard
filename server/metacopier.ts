@@ -72,24 +72,24 @@ class MetaCopierService {
     const positions = await this.fetchWithAuth<Position[]>(
       `/accounts/${this.accountId}/positions`
     );
-    
+
     if (showAll || !magicNumber) {
       return positions;
     }
-    
-    return positions.filter(p => p.magicNumber === magicNumber);
+
+    return positions.filter(p => String(p.magicNumber) === String(magicNumber));
   }
 
   async getOpenPositionsFromAccount(accountId: string, magicNumber?: string): Promise<Position[]> {
     const positions = await this.fetchWithAuth<Position[]>(
       `/accounts/${accountId}/positions`
     );
-    
+
     if (!magicNumber) {
       return positions;
     }
-    
-    return positions.filter(p => p.magicNumber === magicNumber);
+
+    return positions.filter(p => String(p.magicNumber) === String(magicNumber));
   }
 
   async getHistoricalPositions(
@@ -101,12 +101,12 @@ class MetaCopierService {
     const positions = await this.fetchWithAuth<Position[]>(
       `/accounts/${this.accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
     );
-    
+
     if (showAll || !magicNumber) {
       return positions;
     }
-    
-    return positions.filter(p => p.magicNumber === magicNumber);
+
+    return positions.filter(p => String(p.magicNumber) === String(magicNumber));
   }
 
   async getHistoricalPositionsFromAccount(
@@ -122,8 +122,8 @@ class MetaCopierService {
     if (!magicNumber) {
       return positions;
     }
-    
-    return positions.filter(p => p.magicNumber === magicNumber);
+
+    return positions.filter(p => String(p.magicNumber) === String(magicNumber));
   }
 
   async getAccountInfo(): Promise<AccountInfo> {
