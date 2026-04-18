@@ -246,6 +246,57 @@ async function fetchAggregatedLifetimePositions(trader: {
   });
 }
 
+/**
+ * Compute week / month / lifetime PnL for a trader, aggregating across
+ * previous magic numbers and previous master accounts. Includes floating
+ * PnL from current open positions to match Dashboard semantics.
+ */
+async function computeTraderProfitSummary(trader: {
+  id: number;
+  magicNumber: string;
+  liveAccountNumber: string | null;
+  showAllData: boolean;
+}): Promise<{ weekPnL: number; monthPnL: number; lifetimePnL: number }> {
+  // One call for all closed positions (across history), one for open (current only)
+  let liveAccountId: string | null = null;
+  if (trader.liveAccountNumber && !trader.showAllData) {
+    liveAccountId = await metaCopierService.getAccountIdByLoginNumber(
+      trader.liveAccountNumber
+    );
+  }
+
+  const [closed, open] = await Promise.all([
+    fetchAggregatedLifetimePositions(trader),
+    liveAccountId
+      ? metaCopierService.getOpenPositionsFromAccount(
+          liveAccountId,
+          trader.magicNumber
+        )
+      : metaCopierService.getOpenPositions(
+          trader.showAllData ? undefined : trader.magicNumber,
+          trader.showAllData
+        ),
+  ]);
+
+  const floating = calculatePnL(open);
+
+  const weekStart = new Date(getStartOfWeek()).getTime();
+  const monthStart = new Date(getStartOfMonth()).getTime();
+
+  const weekClosed = closed.filter(
+    p => p.closeTime && new Date(p.closeTime).getTime() >= weekStart
+  );
+  const monthClosed = closed.filter(
+    p => p.closeTime && new Date(p.closeTime).getTime() >= monthStart
+  );
+
+  return {
+    weekPnL: calculatePnL(weekClosed) + floating,
+    monthPnL: calculatePnL(monthClosed) + floating,
+    lifetimePnL: calculatePnL(closed) + floating,
+  };
+}
+
 /** Shared helper: record a payment and send notifications. */
 async function recordPaymentAndNotify(params: {
   magicNumberId: number;
@@ -1039,71 +1090,104 @@ export const appRouter = router({
 
       const traders = await getAllMagicNumbers();
 
-      // Fetch copier info for all traders with live accounts
-      const copierInfoMap = new Map();
-      for (const trader of traders) {
-        if (trader.liveAccountNumber) {
-          try {
-            const accountId = await metaCopierService.getAccountIdByLoginNumber(
-              trader.liveAccountNumber
-            );
-            const liveAccount = accountId ? { id: accountId } : null;
-            if (liveAccount) {
-              const copiers = await metaCopierService.getCopiersByAccount(
-                liveAccount.id
+      // Fetch copier info + profit summary for all traders in parallel
+      const enriched = await Promise.all(
+        traders.map(async t => {
+          const profitSummary = { weekPnL: 0, monthPnL: 0, lifetimePnL: 0 };
+          let copierInfo: {
+            scaleType: any;
+            multiplier: any;
+            fixedLotSize: any;
+            isActive: any;
+          } | null = null;
+
+          const profitPromise = computeTraderProfitSummary({
+            id: t.id,
+            magicNumber: t.magicNumber,
+            liveAccountNumber: t.liveAccountNumber,
+            showAllData: t.showAllData,
+          })
+            .then(s => {
+              profitSummary.weekPnL = s.weekPnL;
+              profitSummary.monthPnL = s.monthPnL;
+              profitSummary.lifetimePnL = s.lifetimePnL;
+            })
+            .catch(error => {
+              console.error(
+                `Failed to compute profit summary for ${t.magicNumber}:`,
+                error
               );
+            });
+
+          const copierPromise = (async () => {
+            if (!t.liveAccountNumber) return;
+            try {
+              const accountId =
+                await metaCopierService.getAccountIdByLoginNumber(
+                  t.liveAccountNumber
+                );
+              if (!accountId) return;
+              const copiers =
+                await metaCopierService.getCopiersByAccount(accountId);
               const traderCopier = copiers.find(
                 (c: any) =>
-                  c.fromAccountShortId === parseInt(trader.magicNumber) ||
-                  c.fromAccountShortId === trader.magicNumber ||
-                  c.customMagicNumber === parseInt(trader.magicNumber) ||
-                  c.customMagicNumber === trader.magicNumber
+                  c.fromAccountShortId === parseInt(t.magicNumber) ||
+                  c.fromAccountShortId === t.magicNumber ||
+                  c.customMagicNumber === parseInt(t.magicNumber) ||
+                  c.customMagicNumber === t.magicNumber
               );
               if (traderCopier) {
-                copierInfoMap.set(trader.magicNumber, {
+                copierInfo = {
                   scaleType:
                     traderCopier.scaleType?.id || traderCopier.scaleType,
                   multiplier: traderCopier.multiplier,
                   fixedLotSize: traderCopier.fixedLotSize,
                   isActive: traderCopier.active,
-                });
+                };
               }
+            } catch (error) {
+              console.error(
+                `Failed to fetch copier for trader ${t.magicNumber}:`,
+                error
+              );
             }
-          } catch (error) {
-            console.error(
-              `Failed to fetch copier for trader ${trader.magicNumber}:`,
-              error
-            );
-          }
-        }
-      }
+          })();
 
-      return traders.map(t => ({
-        id: t.id,
-        magicNumber: t.magicNumber,
-        name: t.name,
-        profitShare: parseFloat(t.profitShare),
-        isActive: t.isActive,
-        isAdmin: t.isAdmin,
-        mtAccount: t.mtAccount,
-        mtServer: t.mtServer,
-        mtPassword: t.mtPassword,
-        mtVersion: t.mtVersion,
-        mcLocation: t.mcLocation,
-        mcAccountId: t.mcAccountId,
-        liveAccountNumber: t.liveAccountNumber,
-        manager: t.manager,
-        telegramHandle: t.telegramHandle,
-        telegramConnected: !!t.telegramChatId,
-        lifetimeProfit: t.lifetimeProfit ? parseFloat(t.lifetimeProfit) : 0,
-        lifetimeProfitShare: t.lifetimeProfitShare
-          ? parseFloat(t.lifetimeProfitShare)
-          : 0,
-        lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-        copierInfo: copierInfoMap.get(t.magicNumber) || null,
-      }));
+          await Promise.all([profitPromise, copierPromise]);
+
+          return {
+            id: t.id,
+            magicNumber: t.magicNumber,
+            name: t.name,
+            profitShare: parseFloat(t.profitShare),
+            isActive: t.isActive,
+            isAdmin: t.isAdmin,
+            mtAccount: t.mtAccount,
+            mtServer: t.mtServer,
+            mtPassword: t.mtPassword,
+            mtVersion: t.mtVersion,
+            mcLocation: t.mcLocation,
+            mcAccountId: t.mcAccountId,
+            liveAccountNumber: t.liveAccountNumber,
+            manager: t.manager,
+            telegramHandle: t.telegramHandle,
+            telegramConnected: !!t.telegramChatId,
+            weekPnL: profitSummary.weekPnL,
+            monthPnL: profitSummary.monthPnL,
+            lifetimeProfit: profitSummary.lifetimePnL,
+            lifetimeProfitShare:
+              profitSummary.lifetimePnL > 0
+                ? profitSummary.lifetimePnL * parseFloat(t.profitShare)
+                : 0,
+            lifetimeIncome: t.lifetimeIncome ? parseFloat(t.lifetimeIncome) : 0,
+            createdAt: t.createdAt,
+            updatedAt: t.updatedAt,
+            copierInfo,
+          };
+        })
+      );
+
+      return enriched;
     }),
 
     // Create new trader
