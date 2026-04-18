@@ -157,6 +157,11 @@ export default function Dashboard(props: {
   const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("")
   const [usdtAddressError, setUsdtAddressError] = useState<string | null>(null);
   const [telegramHandle, setTelegramHandle] = useState<string>("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordChangeStep, setPasswordChangeStep] = useState<"form" | "2fa">("form");
+  const [passwordChangeCode, setPasswordChangeCode] = useState("");
 
   // View-as-trader: use external prop (from AdminDashboard) or internal state
   const [internalViewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
@@ -198,6 +203,24 @@ export default function Dashboard(props: {
   const updateUsdtMutation = trpc.trading.updateUsdtInfo.useMutation();
   const updateTelegramMutation = trpc.trading.updateTelegramHandle.useMutation();
   const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
+  const changePasswordMutation = trpc.trading.changePassword.useMutation({
+    onSuccess: (data) => {
+      if (data.requires2FA) {
+        setPasswordChangeStep("2fa");
+        toast.info("A verification code has been sent to your Telegram.");
+        return;
+      }
+      toast.success("Password changed successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPasswordChangeCode("");
+      setPasswordChangeStep("form");
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
   const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
   const markAllReadMutation = trpc.trading.markAllNotificationsRead.useMutation();
 
@@ -377,6 +400,18 @@ export default function Dashboard(props: {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {session?.showMyTradesUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    window.open(session.showMyTradesUrl!, "_blank", "noopener")
+                  }
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  ShowMyTrades
+                </Button>
+              )}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="relative">
@@ -712,9 +747,10 @@ export default function Dashboard(props: {
           </DialogHeader>
           
           <Tabs defaultValue="account" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="account">Account</TabsTrigger>
               <TabsTrigger value="payments">Payments</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
 
             <TabsContent value="account" className="space-y-4 mt-4">
@@ -934,6 +970,129 @@ export default function Dashboard(props: {
                     <div className="text-center py-8 text-muted-foreground">
                       <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No payment history available</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="security" className="space-y-4 mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Change Password</CardTitle>
+                  <CardDescription>
+                    Update your account password
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {passwordChangeStep === "form" ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="currentPassword">Current Password</Label>
+                        <Input
+                          id="currentPassword"
+                          type="password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="Enter current password"
+                          disabled={changePasswordMutation.isPending}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="newPassword">New Password</Label>
+                        <Input
+                          id="newPassword"
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="At least 6 characters"
+                          disabled={changePasswordMutation.isPending}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+                        <Input
+                          id="confirmNewPassword"
+                          type="password"
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          placeholder="Confirm new password"
+                          disabled={changePasswordMutation.isPending}
+                        />
+                      </div>
+                      {newPassword && confirmNewPassword && newPassword !== confirmNewPassword && (
+                        <p className="text-xs text-red-500">Passwords do not match</p>
+                      )}
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          if (newPassword !== confirmNewPassword) {
+                            toast.error("Passwords do not match");
+                            return;
+                          }
+                          if (newPassword.length < 6) {
+                            toast.error("Password must be at least 6 characters");
+                            return;
+                          }
+                          changePasswordMutation.mutate({
+                            currentPassword,
+                            newPassword,
+                          });
+                        }}
+                        disabled={
+                          changePasswordMutation.isPending ||
+                          !currentPassword ||
+                          !newPassword ||
+                          !confirmNewPassword ||
+                          newPassword !== confirmNewPassword
+                        }
+                      >
+                        {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        A verification code has been sent to your Telegram. Enter it below to confirm the password change.
+                      </p>
+                      <div className="space-y-2">
+                        <Label htmlFor="passwordChangeCode">Verification Code</Label>
+                        <Input
+                          id="passwordChangeCode"
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={passwordChangeCode}
+                          onChange={(e) => setPasswordChangeCode(e.target.value.replace(/\D/g, ""))}
+                          placeholder="Enter 6-digit code"
+                          disabled={changePasswordMutation.isPending}
+                          autoFocus
+                          className="text-center text-2xl tracking-widest font-mono"
+                        />
+                      </div>
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          changePasswordMutation.mutate({
+                            currentPassword,
+                            newPassword,
+                            twoFactorCode: passwordChangeCode,
+                          });
+                        }}
+                        disabled={changePasswordMutation.isPending || passwordChangeCode.length !== 6}
+                      >
+                        {changePasswordMutation.isPending ? "Verifying..." : "Verify & Change Password"}
+                      </Button>
+                      <button
+                        type="button"
+                        className="w-full text-sm text-muted-foreground hover:text-primary"
+                        onClick={() => {
+                          setPasswordChangeStep("form");
+                          setPasswordChangeCode("");
+                        }}
+                      >
+                        Cancel
+                      </button>
                     </div>
                   )}
                 </CardContent>

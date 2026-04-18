@@ -40,6 +40,19 @@ drizzle/          Database schema (schema.ts) and migration files
 - `server/telegram.ts` — Telegram bot integration
 - `drizzle/schema.ts` — All table definitions
 
+## Deployment
+
+- **Runtime**: Docker Compose (rfx-app, mysql, caddy) on Oracle Cloud
+- **Domain**: tradersdash.rftrust.co (Caddy auto-HTTPS)
+- **DB migrations**: `docker exec -it rfx-app pnpm db:push`
+- **Rebuild app**: `docker compose up -d --build rfx-app`
+- **View logs**: `docker logs rfx-app --tail 50 -f`
+
+## User Preferences
+
+- Always provide full Docker commands for any server/DB operations — never assume the user will translate `pnpm db:push` into the Docker equivalent
+- When making schema changes, include the Docker migration command in the summary
+
 ## Conventions
 
 - TypeScript strict mode — avoid `any`

@@ -68,6 +68,7 @@ export const magicNumbers = mysqlTable("magic_numbers", {
     scale: 2,
   }).default("0.00"),
   // USDT Payment Information
+  showMyTradesUrl: varchar("showMyTradesUrl", { length: 500 }),
   usdtAddress: varchar("usdtAddress", { length: 255 }),
   usdtNetwork: mysqlEnum("usdtNetwork", ["TRC20", "ERC20"]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -267,3 +268,24 @@ export type TraderPreviousMasterAccount =
   typeof traderPreviousMasterAccounts.$inferSelect;
 export type InsertTraderPreviousMasterAccount =
   typeof traderPreviousMasterAccounts.$inferInsert;
+
+/**
+ * Two-factor authentication codes
+ * Short-lived codes sent via Telegram for login verification and password changes
+ */
+export const twoFactorCodes = mysqlTable("two_factor_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  magicNumberId: int("magicNumberId").notNull(),
+  code: varchar("code", { length: 6 }).notNull(),
+  purpose: mysqlEnum("purpose", [
+    "login_2fa",
+    "password_reset",
+    "password_change",
+  ]).notNull(),
+  used: boolean("used").notNull().default(false),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TwoFactorCode = typeof twoFactorCodes.$inferSelect;
+export type InsertTwoFactorCode = typeof twoFactorCodes.$inferInsert;

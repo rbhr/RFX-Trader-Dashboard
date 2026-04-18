@@ -1,4 +1,4 @@
-import { eq, desc, isNull, sql, or } from "drizzle-orm";
+import { eq, desc, isNull, sql, or, and, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -17,6 +17,7 @@ import {
   InsertRiskLimitBreach,
   traderPreviousMagicNumbers,
   traderPreviousMasterAccounts,
+  twoFactorCodes,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -535,4 +536,87 @@ export async function removePreviousMasterAccount(id: number) {
   await db
     .delete(traderPreviousMasterAccounts)
     .where(eq(traderPreviousMasterAccounts.id, id));
+}
+
+// Two-Factor Authentication functions
+export async function createTwoFactorCode(
+  magicNumberId: number,
+  code: string,
+  purpose: "login_2fa" | "password_reset" | "password_change"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const expiresAt = new Date();
+  expiresAt.setMinutes(expiresAt.getMinutes() + 5);
+
+  await db.insert(twoFactorCodes).values({
+    magicNumberId,
+    code,
+    purpose,
+    expiresAt,
+  });
+}
+
+export async function verifyTwoFactorCode(
+  magicNumberId: number,
+  code: string,
+  purpose: "login_2fa" | "password_reset" | "password_change"
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(twoFactorCodes)
+    .where(
+      and(
+        eq(twoFactorCodes.magicNumberId, magicNumberId),
+        eq(twoFactorCodes.code, code),
+        eq(twoFactorCodes.purpose, purpose),
+        eq(twoFactorCodes.used, false),
+        gt(twoFactorCodes.expiresAt, new Date())
+      )
+    )
+    .limit(1);
+
+  if (result.length === 0) return false;
+
+  await db
+    .update(twoFactorCodes)
+    .set({ used: true })
+    .where(eq(twoFactorCodes.id, result[0].id));
+
+  return true;
+}
+
+export async function cleanupExpiredTwoFactorCodes() {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .delete(twoFactorCodes)
+    .where(lt(twoFactorCodes.expiresAt, new Date()));
+}
+
+export async function hasSeenDevice(
+  magicNumberId: number,
+  ipAddress: string | null
+): Promise<boolean> {
+  if (!ipAddress) return false;
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select({ id: tradingSessions.id })
+    .from(tradingSessions)
+    .where(
+      and(
+        eq(tradingSessions.magicNumberId, magicNumberId),
+        eq(tradingSessions.ipAddress, ipAddress)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
 }

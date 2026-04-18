@@ -75,11 +75,15 @@ interface Trader {
   manager: string | null;
   telegramHandle: string | null;
   telegramConnected: boolean;
+  showMyTradesUrl: string | null;
   copierInfo: {
+    scaleType: number;
     multiplier: number;
     fixedLotSize: number;
     isActive: boolean;
   } | null;
+  weekPnL: number;
+  monthPnL: number;
   lifetimeProfit: number;
   lifetimeProfitShare: number;
   lifetimeIncome: number;
@@ -204,6 +208,8 @@ export default function ManageTraders() {
     mtServer: true,
     mtVersion: true,
     mcLocation: true,
+    weekPnL: true,
+    monthPnL: true,
     lifetimeProfit: true,
     lifetimeShare: true,
     lifetimeIncome: true,
@@ -252,6 +258,7 @@ export default function ManageTraders() {
     mcLocation: "London",
     liveAccountNumber: "",
     telegramHandle: "",
+    showMyTradesUrl: "",
     lifetimeProfit: 0,
     lifetimeProfitShare: 0,
     lifetimeIncome: 0,
@@ -452,6 +459,7 @@ export default function ManageTraders() {
       mcLocation: trader.mcLocation || "London",
       liveAccountNumber: trader.liveAccountNumber || "",
       telegramHandle: trader.telegramHandle || "",
+      showMyTradesUrl: trader.showMyTradesUrl || "",
       lifetimeProfit: trader.lifetimeProfit,
       lifetimeProfitShare: trader.lifetimeProfitShare,
       lifetimeIncome: trader.lifetimeIncome,
@@ -569,6 +577,7 @@ export default function ManageTraders() {
       mcLocation: formData.mcLocation || undefined,
       liveAccountNumber: formData.liveAccountNumber || undefined,
       telegramHandle: formData.telegramHandle || undefined,
+      showMyTradesUrl: formData.showMyTradesUrl || "",
       lifetimeProfit: formData.lifetimeProfit,
       lifetimeProfitShare: formData.lifetimeProfitShare,
       lifetimeIncome: formData.lifetimeIncome,
@@ -737,6 +746,8 @@ export default function ManageTraders() {
                     ["mtServer", "MT Server"],
                     ["mtVersion", "MT Version"],
                     ["mcLocation", "MC Location"],
+                    ["weekPnL", "Profit This Week"],
+                    ["monthPnL", "Profit This Month"],
                     ["lifetimeProfit", "Lifetime Profit"],
                     ["lifetimeShare", "Lifetime Share"],
                     ["lifetimeIncome", "Lifetime Income"],
@@ -927,6 +938,44 @@ export default function ManageTraders() {
                       <div className="flex items-center gap-1">
                         MC Location
                         {sortField === "mcLocation" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.weekPnL && (
+                    <TableHead
+                      className="text-right cursor-pointer select-none"
+                      onClick={() => handleSort("weekPnL")}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Profit This Week
+                        {sortField === "weekPnL" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-30" />
+                        )}
+                      </div>
+                    </TableHead>
+                  )}
+                  {visibleColumns.monthPnL && (
+                    <TableHead
+                      className="text-right cursor-pointer select-none"
+                      onClick={() => handleSort("monthPnL")}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Profit This Month
+                        {sortField === "monthPnL" ? (
                           sortDirection === "asc" ? (
                             <ArrowUp className="h-4 w-4" />
                           ) : (
@@ -1133,6 +1182,32 @@ export default function ManageTraders() {
                       {visibleColumns.mcLocation && (
                         <TableCell className="text-sm">
                           {trader.mcLocation || "-"}
+                        </TableCell>
+                      )}
+                      {visibleColumns.weekPnL && (
+                        <TableCell className="text-right">
+                          <span
+                            className={
+                              trader.weekPnL >= 0
+                                ? "text-success"
+                                : "text-destructive"
+                            }
+                          >
+                            ${trader.weekPnL.toFixed(2)}
+                          </span>
+                        </TableCell>
+                      )}
+                      {visibleColumns.monthPnL && (
+                        <TableCell className="text-right">
+                          <span
+                            className={
+                              trader.monthPnL >= 0
+                                ? "text-success"
+                                : "text-destructive"
+                            }
+                          >
+                            ${trader.monthPnL.toFixed(2)}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.lifetimeProfit && (
@@ -2043,6 +2118,25 @@ export default function ManageTraders() {
                   >
                     <Plus className="h-4 w-4 mr-1" /> Add
                   </Button>
+                </div>
+              </div>
+
+              {/* ShowMyTrades URL */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold mb-3">ShowMyTrades</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="showMyTradesUrl">ShowMyTrades URL</Label>
+                  <Input
+                    id="showMyTradesUrl"
+                    value={formData.showMyTradesUrl || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        showMyTradesUrl: e.target.value,
+                      })
+                    }
+                    placeholder="https://www.showmytrades.com/..."
+                  />
                 </div>
               </div>
             </div>
