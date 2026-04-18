@@ -37,6 +37,12 @@ export interface AccountInfo {
 class MetaCopierService {
   private apiKey: string;
   private accountId: string;
+  private accountsCache: { data: any[] | null; fetchedAt: number } = {
+    data: null,
+    fetchedAt: 0,
+  };
+  private accountsCachePromise: Promise<any[]> | null = null;
+  private static ACCOUNTS_CACHE_TTL = 30_000; // 30 seconds
 
   constructor() {
     this.apiKey = process.env.METACOPIER_API_KEY || '';
@@ -45,6 +51,28 @@ class MetaCopierService {
     if (!this.apiKey || !this.accountId) {
       console.warn('[MetaCopier] API credentials not configured');
     }
+  }
+
+  private async getCachedAccounts(): Promise<any[]> {
+    const now = Date.now();
+    if (
+      this.accountsCache.data &&
+      now - this.accountsCache.fetchedAt < MetaCopierService.ACCOUNTS_CACHE_TTL
+    ) {
+      return this.accountsCache.data;
+    }
+    if (this.accountsCachePromise) return this.accountsCachePromise;
+    this.accountsCachePromise = this.fetchWithAuth<any[]>('/accounts', 'GET')
+      .then(accounts => {
+        this.accountsCache = { data: accounts, fetchedAt: Date.now() };
+        this.accountsCachePromise = null;
+        return accounts;
+      })
+      .catch(err => {
+        this.accountsCachePromise = null;
+        throw err;
+      });
+    return this.accountsCachePromise;
   }
 
   private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET', data?: any): Promise<T> {
@@ -73,6 +101,8 @@ class MetaCopierService {
       `/accounts/${this.accountId}/positions`
     );
 
+    if (!Array.isArray(positions)) return [];
+
     if (showAll || !magicNumber) {
       return positions;
     }
@@ -84,6 +114,8 @@ class MetaCopierService {
     const positions = await this.fetchWithAuth<Position[]>(
       `/accounts/${accountId}/positions`
     );
+
+    if (!Array.isArray(positions)) return [];
 
     if (!magicNumber) {
       return positions;
@@ -102,6 +134,8 @@ class MetaCopierService {
       `/accounts/${this.accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
     );
 
+    if (!Array.isArray(positions)) return [];
+
     if (showAll || !magicNumber) {
       return positions;
     }
@@ -118,7 +152,9 @@ class MetaCopierService {
     const positions = await this.fetchWithAuth<Position[]>(
       `/accounts/${accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
     );
-    
+
+    if (!Array.isArray(positions)) return [];
+
     if (!magicNumber) {
       return positions;
     }
@@ -143,8 +179,7 @@ class MetaCopierService {
    */
   async checkAccountExists(accountNumber: string): Promise<{ exists: boolean; accountId?: string }> {
     try {
-      // List all accounts and check if the account number exists
-      const accounts = await this.fetchWithAuth<any[]>('/accounts');
+      const accounts = await this.getCachedAccounts();
       const account = accounts.find(acc => acc.login === accountNumber || acc.accountNumber === accountNumber);
       
       if (account) {
@@ -322,11 +357,8 @@ class MetaCopierService {
    */
   async getCopiersBySourceAccount(sourceAccountId: string): Promise<any[]> {
     try {
-      // Get all accounts
-      const accounts = await this.fetchWithAuth<any[]>('/accounts');
+      const accounts = await this.getCachedAccounts();
       const copiers: any[] = [];
-      
-      // Check each account for copiers that use sourceAccountId as the source
       for (const account of accounts) {
         if (account.countCopier && account.countCopier > 0) {
           const accountCopiers = await this.fetchWithAuth<any[]>(
@@ -608,7 +640,7 @@ class MetaCopierService {
    */
   async getAccountsByLabel(label: string): Promise<any[]> {
     try {
-      const accounts = await this.fetchWithAuth<any[]>('/accounts', 'GET');
+      const accounts = await this.getCachedAccounts();
       
       // Filter accounts that have the specified label
       const filteredAccounts = accounts.filter((account: any) => {
@@ -694,7 +726,7 @@ class MetaCopierService {
    */
   async getAccountIdByLoginNumber(loginAccountNumber: string): Promise<string | null> {
     try {
-      const accounts = await this.fetchWithAuth<any[]>('/accounts', 'GET');
+      const accounts = await this.getCachedAccounts();
       const account = accounts.find((acc: any) => acc.loginAccountNumber === loginAccountNumber);
       return account?.id || null;
     } catch (error) {

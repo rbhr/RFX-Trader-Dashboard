@@ -1346,10 +1346,9 @@ export const appRouter = router({
             })
             .catch(error => {
               console.error(
-                `Failed to compute profit summary for ${t.magicNumber}:`,
-                error
+                `Failed to compute profit summary for ${t.name} (${t.magicNumber}):`,
+                error?.message || error
               );
-              // Leave profit fields null to signal API unavailable (vs actual $0)
             });
 
           const copierPromise = (async () => {
