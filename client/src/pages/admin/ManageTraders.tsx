@@ -82,10 +82,10 @@ interface Trader {
     fixedLotSize: number;
     isActive: boolean;
   } | null;
-  weekPnL: number;
-  monthPnL: number;
-  lifetimeProfit: number;
-  lifetimeProfitShare: number;
+  weekPnL: number | null;
+  monthPnL: number | null;
+  lifetimeProfit: number | null;
+  lifetimeProfitShare: number | null;
   lifetimeIncome: number;
   createdAt: Date;
   updatedAt: Date;
@@ -437,6 +437,7 @@ export default function ManageTraders() {
       mcLocation: "London",
       liveAccountNumber: "",
       telegramHandle: "",
+      showMyTradesUrl: "",
       lifetimeProfit: 0,
       lifetimeProfitShare: 0,
       lifetimeIncome: 0,
@@ -460,8 +461,8 @@ export default function ManageTraders() {
       liveAccountNumber: trader.liveAccountNumber || "",
       telegramHandle: trader.telegramHandle || "",
       showMyTradesUrl: trader.showMyTradesUrl || "",
-      lifetimeProfit: trader.lifetimeProfit,
-      lifetimeProfitShare: trader.lifetimeProfitShare,
+      lifetimeProfit: trader.lifetimeProfit ?? 0,
+      lifetimeProfitShare: trader.lifetimeProfitShare ?? 0,
       lifetimeIncome: trader.lifetimeIncome,
     });
     setEditDialogOpen(true);
@@ -1186,48 +1187,84 @@ export default function ManageTraders() {
                       )}
                       {visibleColumns.weekPnL && (
                         <TableCell className="text-right">
-                          <span
-                            className={
-                              trader.weekPnL >= 0
-                                ? "text-success"
-                                : "text-destructive"
-                            }
-                          >
-                            ${trader.weekPnL.toFixed(2)}
-                          </span>
+                          {trader.weekPnL === null ? (
+                            <span
+                              className="italic opacity-50"
+                              title="Data unavailable"
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <span
+                              className={
+                                trader.weekPnL >= 0
+                                  ? "text-success"
+                                  : "text-destructive"
+                              }
+                            >
+                              ${trader.weekPnL.toFixed(2)}
+                            </span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.monthPnL && (
                         <TableCell className="text-right">
-                          <span
-                            className={
-                              trader.monthPnL >= 0
-                                ? "text-success"
-                                : "text-destructive"
-                            }
-                          >
-                            ${trader.monthPnL.toFixed(2)}
-                          </span>
+                          {trader.monthPnL === null ? (
+                            <span
+                              className="italic opacity-50"
+                              title="Data unavailable"
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <span
+                              className={
+                                trader.monthPnL >= 0
+                                  ? "text-success"
+                                  : "text-destructive"
+                              }
+                            >
+                              ${trader.monthPnL.toFixed(2)}
+                            </span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.lifetimeProfit && (
                         <TableCell className="text-right">
-                          <span
-                            className={
-                              trader.lifetimeProfit >= 0
-                                ? "text-success"
-                                : "text-destructive"
-                            }
-                          >
-                            ${trader.lifetimeProfit.toFixed(2)}
-                          </span>
+                          {trader.lifetimeProfit === null ? (
+                            <span
+                              className="italic opacity-50"
+                              title="Data unavailable"
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <span
+                              className={
+                                trader.lifetimeProfit >= 0
+                                  ? "text-success"
+                                  : "text-destructive"
+                              }
+                            >
+                              ${trader.lifetimeProfit.toFixed(2)}
+                            </span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.lifetimeShare && (
                         <TableCell className="text-right">
-                          <span className="text-success">
-                            ${trader.lifetimeProfitShare.toFixed(2)}
-                          </span>
+                          {trader.lifetimeProfitShare === null ? (
+                            <span
+                              className="italic opacity-50"
+                              title="Data unavailable"
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <span className="text-success">
+                              ${trader.lifetimeProfitShare.toFixed(2)}
+                            </span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.lifetimeIncome && (

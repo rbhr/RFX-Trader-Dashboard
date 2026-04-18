@@ -44,8 +44,11 @@ drizzle/          Database schema (schema.ts) and migration files
 
 - **Runtime**: Docker Compose (rfx-app, mysql, caddy) on Oracle Cloud
 - **Domain**: tradersdash.rftrust.co (Caddy auto-HTTPS)
+- **Pull + rebuild app** (full deploy command — injects git short hash as BUILD_HASH for the version footer):
+  ```bash
+  git pull origin main && BUILD_HASH=$(git rev-parse --short HEAD) docker compose up -d --build rfx-app
+  ```
 - **DB migrations**: `docker exec -it rfx-app pnpm db:push`
-- **Rebuild app**: `docker compose up -d --build rfx-app`
 - **View logs**: `docker logs rfx-app --tail 50 -f`
 
 ## User Preferences
