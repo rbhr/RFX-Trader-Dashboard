@@ -712,6 +712,7 @@ export const appRouter = router({
           usdtNetwork: trader.usdtNetwork || null,
           telegramHandle: trader.telegramHandle || null,
           telegramConnected: !!trader.telegramChatId,
+          showMyTradesUrl: trader.showMyTradesUrl || null,
         };
       }),
 
@@ -1397,6 +1398,7 @@ export const appRouter = router({
             manager: t.manager,
             telegramHandle: t.telegramHandle,
             telegramConnected: !!t.telegramChatId,
+            showMyTradesUrl: t.showMyTradesUrl || null,
             weekPnL: profitSummary.weekPnL,
             monthPnL: profitSummary.monthPnL,
             lifetimeProfit: profitSummary.lifetimePnL,
@@ -1470,6 +1472,7 @@ export const appRouter = router({
           mcLocation: z.string().optional(),
           liveAccountNumber: z.string().optional(),
           telegramHandle: z.string().optional(),
+          showMyTradesUrl: z.string().optional(),
           lifetimeProfit: z.number().optional(),
           lifetimeProfitShare: z.number().optional(),
           lifetimeIncome: z.number().optional(),
@@ -1503,6 +1506,8 @@ export const appRouter = router({
           updateData.liveAccountNumber = data.liveAccountNumber;
         if (data.telegramHandle !== undefined)
           updateData.telegramHandle = data.telegramHandle;
+        if (data.showMyTradesUrl !== undefined)
+          updateData.showMyTradesUrl = data.showMyTradesUrl || null;
         if (data.lifetimeProfit !== undefined)
           updateData.lifetimeProfit = data.lifetimeProfit.toString();
         if (data.lifetimeProfitShare !== undefined)

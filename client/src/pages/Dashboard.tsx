@@ -400,6 +400,18 @@ export default function Dashboard(props: {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {session?.showMyTradesUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    window.open(session.showMyTradesUrl!, "_blank", "noopener")
+                  }
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  ShowMyTrades
+                </Button>
+              )}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="relative">

@@ -75,6 +75,7 @@ interface Trader {
   manager: string | null;
   telegramHandle: string | null;
   telegramConnected: boolean;
+  showMyTradesUrl: string | null;
   copierInfo: {
     scaleType: number;
     multiplier: number;
@@ -257,6 +258,7 @@ export default function ManageTraders() {
     mcLocation: "London",
     liveAccountNumber: "",
     telegramHandle: "",
+    showMyTradesUrl: "",
     lifetimeProfit: 0,
     lifetimeProfitShare: 0,
     lifetimeIncome: 0,
@@ -457,6 +459,7 @@ export default function ManageTraders() {
       mcLocation: trader.mcLocation || "London",
       liveAccountNumber: trader.liveAccountNumber || "",
       telegramHandle: trader.telegramHandle || "",
+      showMyTradesUrl: trader.showMyTradesUrl || "",
       lifetimeProfit: trader.lifetimeProfit,
       lifetimeProfitShare: trader.lifetimeProfitShare,
       lifetimeIncome: trader.lifetimeIncome,
@@ -574,6 +577,7 @@ export default function ManageTraders() {
       mcLocation: formData.mcLocation || undefined,
       liveAccountNumber: formData.liveAccountNumber || undefined,
       telegramHandle: formData.telegramHandle || undefined,
+      showMyTradesUrl: formData.showMyTradesUrl || "",
       lifetimeProfit: formData.lifetimeProfit,
       lifetimeProfitShare: formData.lifetimeProfitShare,
       lifetimeIncome: formData.lifetimeIncome,
@@ -2114,6 +2118,25 @@ export default function ManageTraders() {
                   >
                     <Plus className="h-4 w-4 mr-1" /> Add
                   </Button>
+                </div>
+              </div>
+
+              {/* ShowMyTrades URL */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold mb-3">ShowMyTrades</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="showMyTradesUrl">ShowMyTrades URL</Label>
+                  <Input
+                    id="showMyTradesUrl"
+                    value={formData.showMyTradesUrl || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        showMyTradesUrl: e.target.value,
+                      })
+                    }
+                    placeholder="https://www.showmytrades.com/..."
+                  />
                 </div>
               </div>
             </div>

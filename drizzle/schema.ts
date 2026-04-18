@@ -68,6 +68,7 @@ export const magicNumbers = mysqlTable("magic_numbers", {
     scale: 2,
   }).default("0.00"),
   // USDT Payment Information
+  showMyTradesUrl: varchar("showMyTradesUrl", { length: 500 }),
   usdtAddress: varchar("usdtAddress", { length: 255 }),
   usdtNetwork: mysqlEnum("usdtNetwork", ["TRC20", "ERC20"]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
