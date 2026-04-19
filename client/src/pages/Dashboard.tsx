@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   TrendingUp, 
-  TrendingDown, 
   DollarSign, 
   RefreshCw, 
   LogOut,
@@ -46,6 +45,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 function formatCurrency(value: number, showSign = false): string {
   const formatted = Math.abs(value).toLocaleString("en-US", {
@@ -104,43 +111,35 @@ function PnLCard({
   );
 }
 
-function PositionCard({ position, index }: { position: any; index: number }) {
-  const isPositive = (position.profit ?? 0) >= 0;
-  const isBuy = position.type === "BUY";
+function formatPrice(price: number | undefined | null): string {
+  if (price == null) return "—";
+  if (Math.abs(price) >= 100) return price.toFixed(2);
+  return price.toFixed(5);
+}
 
-  return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              isBuy ? "bg-primary/10" : "bg-destructive/10"
-            }`}>
-              {isBuy ? (
-                <TrendingUp className="h-5 w-5 text-primary" />
-              ) : (
-                <TrendingDown className="h-5 w-5 text-destructive" />
-              )}
-            </div>
-            <div>
-              <div className="font-semibold">{position.symbol}</div>
-              <div className="text-xs text-muted-foreground">
-                {position.type} • {position.volume} lots
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className={`font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
-              {formatCurrency(position.profit ?? 0, true)}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              @ {position.openPrice?.toFixed(5) ?? "N/A"}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function formatDateTime(dateString: string | undefined | null): string {
+  if (!dateString) return "—";
+  const d = new Date(dateString);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function wasTPHit(position: any): boolean {
+  if (!position.closePrice || !position.takeProfit) return false;
+  const diff = Math.abs(position.closePrice - position.takeProfit);
+  const scale = Math.max(Math.abs(position.takeProfit), 1);
+  return diff / scale < 0.0001;
+}
+
+function wasSLHit(position: any): boolean {
+  if (!position.closePrice || !position.stopLoss) return false;
+  const diff = Math.abs(position.closePrice - position.stopLoss);
+  const scale = Math.max(Math.abs(position.stopLoss), 1);
+  return diff / scale < 0.0001;
 }
 
 export default function Dashboard(props: {
@@ -665,29 +664,58 @@ export default function Dashboard(props: {
               {[1, 2, 3].map((i) => (
                 <Card key={i}>
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Skeleton className="w-10 h-10 rounded-full" />
-                        <div>
-                          <Skeleton className="h-4 w-20 mb-2" />
-                          <Skeleton className="h-3 w-32" />
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <Skeleton className="h-5 w-24 mb-2" />
-                        <Skeleton className="h-3 w-20" />
-                      </div>
-                    </div>
+                    <Skeleton className="h-6 w-full" />
                   </CardContent>
                 </Card>
               ))}
             </div>
           ) : openPositions && openPositions.length > 0 ? (
-            <div className="space-y-3">
-              {openPositions.map((position, index) => (
-                <PositionCard key={position.id} position={position} index={index} />
-              ))}
-            </div>
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ticket</TableHead>
+                    <TableHead>Symbol</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Volume</TableHead>
+                    <TableHead>Open Date</TableHead>
+                    <TableHead className="text-right">Open Price</TableHead>
+                    <TableHead className="text-right">TP</TableHead>
+                    <TableHead className="text-right">SL</TableHead>
+                    <TableHead className="text-right">P&L</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {openPositions.map((position) => {
+                    const totalPnL = (position.profit ?? 0) + (position.swap ?? 0) + (position.commission ?? 0);
+                    const isPositive = totalPnL >= 0;
+                    return (
+                      <TableRow key={position.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
+                        <TableCell className="font-semibold">{position.symbol}</TableCell>
+                        <TableCell>
+                          <Badge variant={position.type === "BUY" ? "default" : "destructive"} className="text-xs">
+                            {position.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{position.volume}</TableCell>
+                        <TableCell className="text-xs">{formatDateTime(position.openTime)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatPrice(position.openPrice)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {position.takeProfit ? formatPrice(position.takeProfit) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {position.stopLoss ? formatPrice(position.stopLoss) : "—"}
+                        </TableCell>
+                        <TableCell className={`text-right font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
+                          {formatCurrency(totalPnL, true)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
           ) : (
             <Card>
               <CardContent className="p-8 text-center">
@@ -714,11 +742,60 @@ export default function Dashboard(props: {
                 ))}
               </div>
             ) : allTimePositions && allTimePositions.length > 0 ? (
-              <div className="space-y-3">
-                {allTimePositions.map((position: any, index: number) => (
-                  <PositionCard key={position.id ?? index} position={position} index={index} />
-                ))}
-              </div>
+              <Card>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ticket</TableHead>
+                      <TableHead>Symbol</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Volume</TableHead>
+                      <TableHead>Open Date</TableHead>
+                      <TableHead>Close Date</TableHead>
+                      <TableHead className="text-right">Open Price</TableHead>
+                      <TableHead className="text-right">Close Price</TableHead>
+                      <TableHead className="text-right">TP</TableHead>
+                      <TableHead className="text-right">SL</TableHead>
+                      <TableHead className="text-right">P&L</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allTimePositions.map((position: any, index: number) => {
+                      const totalPnL = (position.profit ?? 0) + (position.swap ?? 0) + (position.commission ?? 0);
+                      const isPositive = totalPnL >= 0;
+                      const tpHit = wasTPHit(position);
+                      const slHit = wasSLHit(position);
+                      return (
+                        <TableRow key={position.id ?? index}>
+                          <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
+                          <TableCell className="font-semibold">{position.symbol}</TableCell>
+                          <TableCell>
+                            <Badge variant={position.type === "BUY" ? "default" : "destructive"} className="text-xs">
+                              {position.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{position.volume}</TableCell>
+                          <TableCell className="text-xs">{formatDateTime(position.openTime)}</TableCell>
+                          <TableCell className="text-xs">{formatDateTime(position.closeTime)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{formatPrice(position.openPrice)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{formatPrice(position.closePrice)}</TableCell>
+                          <TableCell className={`text-right font-mono text-xs ${tpHit ? "text-green-600 font-bold" : ""}`}>
+                            {position.takeProfit ? formatPrice(position.takeProfit) : "—"}
+                            {tpHit && <span className="ml-1 text-[10px]">HIT</span>}
+                          </TableCell>
+                          <TableCell className={`text-right font-mono text-xs ${slHit ? "text-destructive font-bold" : ""}`}>
+                            {position.stopLoss ? formatPrice(position.stopLoss) : "—"}
+                            {slHit && <span className="ml-1 text-[10px]">HIT</span>}
+                          </TableCell>
+                          <TableCell className={`text-right font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
+                            {formatCurrency(totalPnL, true)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">

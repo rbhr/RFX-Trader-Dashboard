@@ -4,11 +4,18 @@ import { trpc } from "@/lib/trpc";
 import { useTradingSession } from "@/hooks/useTradingSession";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
@@ -37,12 +44,34 @@ function formatDate(dateString: string): string {
   });
 }
 
-function formatTime(dateString: string): string {
+function formatDateTime(dateString: string): string {
   const date = new Date(dateString);
-  return date.toLocaleTimeString("en-US", { 
-    hour: "2-digit", 
-    minute: "2-digit"
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
+}
+
+function formatPrice(price: number | undefined | null): string {
+  if (price == null) return "—";
+  if (Math.abs(price) >= 100) return price.toFixed(2);
+  return price.toFixed(5);
+}
+
+function wasTPHit(position: any): boolean {
+  if (!position.closePrice || !position.takeProfit) return false;
+  const diff = Math.abs(position.closePrice - position.takeProfit);
+  const scale = Math.max(Math.abs(position.takeProfit), 1);
+  return diff / scale < 0.0001;
+}
+
+function wasSLHit(position: any): boolean {
+  if (!position.closePrice || !position.stopLoss) return false;
+  const diff = Math.abs(position.closePrice - position.stopLoss);
+  const scale = Math.max(Math.abs(position.stopLoss), 1);
+  return diff / scale < 0.0001;
 }
 
 function groupPositionsByDate(positions: any[]) {
@@ -63,45 +92,6 @@ function groupPositionsByDate(positions: any[]) {
     totalPnL: positions.reduce((sum, p) => sum + (p.profit ?? 0) + (p.swap ?? 0) + (p.commission ?? 0), 0),
     count: positions.length,
   }));
-}
-
-function TradeItem({ position }: { position: any }) {
-  const isPositive = (position.profit ?? 0) >= 0;
-  const isBuy = position.type === "BUY";
-  const totalPnL = (position.profit ?? 0) + (position.swap ?? 0) + (position.commission ?? 0);
-
-  return (
-    <div className="flex items-center justify-between py-3 px-4 hover:bg-muted/50 rounded-lg transition-colors">
-      <div className="flex items-center gap-3 flex-1">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-          isBuy ? "bg-primary/10" : "bg-destructive/10"
-        }`}>
-          {isBuy ? (
-            <TrendingUp className="h-4 w-4 text-primary" />
-          ) : (
-            <TrendingDown className="h-4 w-4 text-destructive" />
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold">{position.symbol}</span>
-            <span className="text-xs text-muted-foreground">{position.type}</span>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {position.volume} lots • {formatTime(position.closeTime)}
-          </div>
-        </div>
-      </div>
-      <div className="text-right flex-shrink-0">
-        <div className={`font-bold ${isPositive ? "text-primary" : "text-destructive"}`}>
-          {formatCurrency(totalPnL, true)}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {position.openPrice?.toFixed(5)} → {position.closePrice?.toFixed(5)}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function DayGroup({ group }: { group: { date: string; positions: any[]; totalPnL: number; count: number } }) {
@@ -137,9 +127,58 @@ function DayGroup({ group }: { group: { date: string; positions: any[]; totalPnL
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t">
-            {group.positions.map((position) => (
-              <TradeItem key={position.id} position={position} />
-            ))}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ticket</TableHead>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Volume</TableHead>
+                  <TableHead>Open Date</TableHead>
+                  <TableHead>Close Date</TableHead>
+                  <TableHead className="text-right">Open Price</TableHead>
+                  <TableHead className="text-right">Close Price</TableHead>
+                  <TableHead className="text-right">TP</TableHead>
+                  <TableHead className="text-right">SL</TableHead>
+                  <TableHead className="text-right">P&L</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {group.positions.map((position) => {
+                  const totalPnL = (position.profit ?? 0) + (position.swap ?? 0) + (position.commission ?? 0);
+                  const isPositive = totalPnL >= 0;
+                  const tpHit = wasTPHit(position);
+                  const slHit = wasSLHit(position);
+                  return (
+                    <TableRow key={position.id}>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
+                      <TableCell className="font-semibold">{position.symbol}</TableCell>
+                      <TableCell>
+                        <Badge variant={position.type === "BUY" ? "default" : "destructive"} className="text-xs">
+                          {position.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{position.volume}</TableCell>
+                      <TableCell className="text-xs">{formatDateTime(position.openTime)}</TableCell>
+                      <TableCell className="text-xs">{formatDateTime(position.closeTime)}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{formatPrice(position.openPrice)}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{formatPrice(position.closePrice)}</TableCell>
+                      <TableCell className={`text-right font-mono text-xs ${tpHit ? "text-green-600 font-bold" : ""}`}>
+                        {position.takeProfit ? formatPrice(position.takeProfit) : "—"}
+                        {tpHit && <span className="ml-1 text-[10px]">HIT</span>}
+                      </TableCell>
+                      <TableCell className={`text-right font-mono text-xs ${slHit ? "text-destructive font-bold" : ""}`}>
+                        {position.stopLoss ? formatPrice(position.stopLoss) : "—"}
+                        {slHit && <span className="ml-1 text-[10px]">HIT</span>}
+                      </TableCell>
+                      <TableCell className={`text-right font-bold ${isPositive ? "text-primary" : "text-destructive"}`}>
+                        {formatCurrency(totalPnL, true)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         </CollapsibleContent>
       </Card>
