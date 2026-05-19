@@ -18,6 +18,7 @@ import {
   traderPreviousMagicNumbers,
   traderPreviousMasterAccounts,
   twoFactorCodes,
+  adminSettings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -619,4 +620,56 @@ export async function hasSeenDevice(
     .limit(1);
 
   return result.length > 0;
+}
+
+// Admin settings helpers
+
+export async function getAdminSetting(
+  key: string
+): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(adminSettings)
+    .where(eq(adminSettings.key, key))
+    .limit(1);
+  return result.length > 0 ? result[0].value : null;
+}
+
+export async function setAdminSetting(
+  key: string,
+  value: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select()
+    .from(adminSettings)
+    .where(eq(adminSettings.key, key))
+    .limit(1);
+  if (existing.length > 0) {
+    await db
+      .update(adminSettings)
+      .set({ value })
+      .where(eq(adminSettings.key, key));
+  } else {
+    await db.insert(adminSettings).values({ key, value });
+  }
+}
+
+export async function getTrailingRiskLimitTraders() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(magicNumbers)
+    .where(
+      and(
+        eq(magicNumbers.isActive, true),
+        eq(magicNumbers.trailingRiskLimitEnabled, true),
+        sql`${magicNumbers.mcAccountId} IS NOT NULL`,
+        sql`${magicNumbers.trailingRiskLimit} IS NOT NULL`
+      )
+    );
 }

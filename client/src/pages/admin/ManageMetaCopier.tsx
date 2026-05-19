@@ -10,8 +10,81 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo } from "react";
-import { Plus, Pencil, Trash2, Users, Check, X, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Check, X, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
+
+function TrailingRiskLimitConfig() {
+  const { data: config, isLoading } =
+    trpc.admin.getTrailingRiskLimitConfig.useQuery(undefined, {
+      refetchInterval: 60000,
+    });
+  const updateConfig = trpc.admin.updateTrailingRiskLimitConfig.useMutation();
+  const [interval, setInterval] = useState("");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Trailing Risk Limit</CardTitle>
+        <CardDescription>
+          Configure how often the trailing risk limit monitor runs
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Label htmlFor="trailing-interval" className="whitespace-nowrap">
+            Check every
+          </Label>
+          <Input
+            id="trailing-interval"
+            type="number"
+            min="1"
+            max="1440"
+            className="w-24"
+            placeholder={isLoading ? "..." : String(config?.intervalMinutes ?? 5)}
+            value={interval}
+            onChange={e => setInterval(e.target.value)}
+          />
+          <span className="text-sm text-muted-foreground">minutes</span>
+          <Button
+            size="sm"
+            disabled={updateConfig.isPending || !interval}
+            onClick={() => {
+              const mins = parseInt(interval, 10);
+              if (isNaN(mins) || mins < 1) {
+                toast.error("Interval must be at least 1 minute");
+                return;
+              }
+              updateConfig.mutate(
+                { intervalMinutes: mins },
+                {
+                  onSuccess: () => {
+                    toast.success(`Interval set to ${mins} minute(s)`);
+                    setInterval("");
+                  },
+                  onError: e => toast.error(e.message),
+                }
+              );
+            }}
+          >
+            {updateConfig.isPending ? "Saving..." : "Save"}
+          </Button>
+        </div>
+        {config?.lastCheckedAt && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            Last checked:{" "}
+            {new Date(config.lastCheckedAt).toLocaleString()}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          When enabled on a trader, the monitor raises their MC risk limit to
+          (balance − buffer) whenever they have no open trades and the new level
+          would be higher than the current one.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ManageMetaCopier() {
   const utils = trpc.useUtils();
@@ -458,19 +531,7 @@ export default function ManageMetaCopier() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>API Configuration</CardTitle>
-              <CardDescription>
-                MetaCopier API credentials and settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12 text-muted-foreground">
-                API configuration interface coming soon...
-              </div>
-            </CardContent>
-          </Card>
+          <TrailingRiskLimitConfig />
         </div>
       </div>
 

@@ -45,6 +45,8 @@ import {
   createTwoFactorCode,
   verifyTwoFactorCode,
   hasSeenDevice,
+  getAdminSetting,
+  setAdminSetting,
 } from "./db";
 import {
   metaCopierService,
@@ -65,6 +67,7 @@ import {
 } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
+import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
 import {
   getWalletAddress as getTronWalletAddress,
   getUsdtBalance as getTronBalance,
@@ -1407,6 +1410,10 @@ export const appRouter = router({
             telegramHandle: t.telegramHandle,
             telegramConnected: !!t.telegramChatId,
             showMyTradesUrl: t.showMyTradesUrl || null,
+            trailingRiskLimit: t.trailingRiskLimit
+              ? parseFloat(t.trailingRiskLimit)
+              : null,
+            trailingRiskLimitEnabled: t.trailingRiskLimitEnabled,
             weekPnL: profitSummary.weekPnL,
             monthPnL: profitSummary.monthPnL,
             lifetimeProfit: profitSummary.lifetimePnL,
@@ -1489,6 +1496,8 @@ export const appRouter = router({
           liveAccountNumber: z.string().optional(),
           telegramHandle: z.string().optional(),
           showMyTradesUrl: z.string().optional(),
+          trailingRiskLimit: z.number().nullable().optional(),
+          trailingRiskLimitEnabled: z.boolean().optional(),
           lifetimeProfit: z.number().optional(),
           lifetimeProfitShare: z.number().optional(),
           lifetimeIncome: z.number().optional(),
@@ -1524,6 +1533,13 @@ export const appRouter = router({
           updateData.telegramHandle = data.telegramHandle;
         if (data.showMyTradesUrl !== undefined)
           updateData.showMyTradesUrl = data.showMyTradesUrl || null;
+        if (data.trailingRiskLimit !== undefined)
+          updateData.trailingRiskLimit =
+            data.trailingRiskLimit != null
+              ? data.trailingRiskLimit.toString()
+              : null;
+        if (data.trailingRiskLimitEnabled !== undefined)
+          updateData.trailingRiskLimitEnabled = data.trailingRiskLimitEnabled;
         if (data.lifetimeProfit !== undefined)
           updateData.lifetimeProfit = data.lifetimeProfit.toString();
         if (data.lifetimeProfitShare !== undefined)
@@ -2064,6 +2080,38 @@ export const appRouter = router({
       }
       return { lastCheckedAt: getLastCheckedAt() };
     }),
+
+    getTrailingRiskLimitConfig: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
+      }
+      const val = await getAdminSetting(
+        "trailing_risk_limit_interval_minutes"
+      );
+      return {
+        intervalMinutes: val ? parseInt(val, 10) : 5,
+        lastCheckedAt: getTrailingLastCheckedAt(),
+      };
+    }),
+
+    updateTrailingRiskLimitConfig: tradingProcedure
+      .input(z.object({ intervalMinutes: z.number().min(1).max(1440) }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        await setAdminSetting(
+          "trailing_risk_limit_interval_minutes",
+          String(input.intervalMinutes)
+        );
+        return { success: true };
+      }),
 
     // Bulk resolve all active breaches and re-enable trading for each affected trader
     bulkResolveBreaches: tradingProcedure.mutation(async ({ ctx }) => {

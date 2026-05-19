@@ -76,6 +76,8 @@ interface Trader {
   telegramHandle: string | null;
   telegramConnected: boolean;
   showMyTradesUrl: string | null;
+  trailingRiskLimit: number | null;
+  trailingRiskLimitEnabled: boolean;
   copierInfo: {
     scaleType: number;
     multiplier: number;
@@ -259,6 +261,8 @@ export default function ManageTraders() {
     liveAccountNumber: "",
     telegramHandle: "",
     showMyTradesUrl: "",
+    trailingRiskLimit: "",
+    trailingRiskLimitEnabled: false,
     lifetimeProfit: 0,
     lifetimeProfitShare: 0,
     lifetimeIncome: 0,
@@ -438,6 +442,8 @@ export default function ManageTraders() {
       liveAccountNumber: "",
       telegramHandle: "",
       showMyTradesUrl: "",
+      trailingRiskLimit: "",
+      trailingRiskLimitEnabled: false,
       lifetimeProfit: 0,
       lifetimeProfitShare: 0,
       lifetimeIncome: 0,
@@ -461,6 +467,11 @@ export default function ManageTraders() {
       liveAccountNumber: trader.liveAccountNumber || "",
       telegramHandle: trader.telegramHandle || "",
       showMyTradesUrl: trader.showMyTradesUrl || "",
+      trailingRiskLimit:
+        trader.trailingRiskLimit != null
+          ? String(trader.trailingRiskLimit)
+          : "",
+      trailingRiskLimitEnabled: trader.trailingRiskLimitEnabled,
       lifetimeProfit: trader.lifetimeProfit ?? 0,
       lifetimeProfitShare: trader.lifetimeProfitShare ?? 0,
       lifetimeIncome: trader.lifetimeIncome,
@@ -579,6 +590,10 @@ export default function ManageTraders() {
       liveAccountNumber: formData.liveAccountNumber || undefined,
       telegramHandle: formData.telegramHandle || undefined,
       showMyTradesUrl: formData.showMyTradesUrl || "",
+      trailingRiskLimit: formData.trailingRiskLimit
+        ? parseFloat(formData.trailingRiskLimit)
+        : null,
+      trailingRiskLimitEnabled: formData.trailingRiskLimitEnabled,
       lifetimeProfit: formData.lifetimeProfit,
       lifetimeProfitShare: formData.lifetimeProfitShare,
       lifetimeIncome: formData.lifetimeIncome,
@@ -1922,20 +1937,62 @@ export default function ManageTraders() {
                   />
                 </div>
                 {selectedTrader?.mcAccountId && (
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-riskLimit">Risk Limit ($)</Label>
-                    <RiskLimitField
-                      mcAccountId={selectedTrader.mcAccountId}
-                      value={riskLimitValue}
-                      onChange={setRiskLimitValue}
-                      loading={riskLimitLoading}
-                      setLoading={setRiskLimitLoading}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Absolute equity risk limit. If equity drops below this
-                      value, all trades are closed.
-                    </p>
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-riskLimit">Risk Limit ($)</Label>
+                      <RiskLimitField
+                        mcAccountId={selectedTrader.mcAccountId}
+                        value={riskLimitValue}
+                        onChange={setRiskLimitValue}
+                        loading={riskLimitLoading}
+                        setLoading={setRiskLimitLoading}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Absolute equity risk limit. If equity drops below this
+                        value, all trades are closed.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-trailingRiskLimit">
+                        Trailing Risk Limit ($)
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="edit-trailingRiskLimit"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="e.g. 300"
+                          value={formData.trailingRiskLimit}
+                          onChange={e =>
+                            setFormData({
+                              ...formData,
+                              trailingRiskLimit: e.target.value,
+                            })
+                          }
+                          className="flex-1"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={formData.trailingRiskLimitEnabled}
+                            onCheckedChange={checked =>
+                              setFormData({
+                                ...formData,
+                                trailingRiskLimitEnabled: checked,
+                              })
+                            }
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            Trailing
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Buffer below balance. When enabled, risk limit trails
+                        upward as balance grows (only when no open trades).
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="border-t pt-4 mt-2">

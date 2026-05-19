@@ -144,6 +144,21 @@ export function buildRiskLimitBreachMessage(params: {
 }
 
 /**
+ * Build a trailing risk limit update notification for a trader.
+ */
+export function buildTrailingRiskLimitMessage(params: {
+  traderName: string;
+  newStopout: number;
+}): string {
+  const { traderName, newStopout } = params;
+  return (
+    `📈 <b>Risk Limit Updated</b>\n\n` +
+    `Hi ${traderName},\n\n` +
+    `New Stopout <b>$${newStopout.toFixed(2)}</b>. Manage risk and lot size accordingly.`
+  );
+}
+
+/**
  * Build a risk limit breach alert message for the admin.
  */
 export function buildAdminRiskLimitAlertMessage(params: {
