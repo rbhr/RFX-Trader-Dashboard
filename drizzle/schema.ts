@@ -67,6 +67,14 @@ export const magicNumbers = mysqlTable("magic_numbers", {
     precision: 15,
     scale: 2,
   }).default("0.00"),
+  // Trailing Risk Limit
+  trailingRiskLimit: decimal("trailingRiskLimit", {
+    precision: 15,
+    scale: 2,
+  }),
+  trailingRiskLimitEnabled: boolean("trailingRiskLimitEnabled")
+    .notNull()
+    .default(false),
   // USDT Payment Information
   showMyTradesUrl: varchar("showMyTradesUrl", { length: 500 }),
   usdtAddress: varchar("usdtAddress", { length: 255 }),
@@ -289,3 +297,12 @@ export const twoFactorCodes = mysqlTable("two_factor_codes", {
 
 export type TwoFactorCode = typeof twoFactorCodes.$inferSelect;
 export type InsertTwoFactorCode = typeof twoFactorCodes.$inferInsert;
+
+/**
+ * Admin settings key-value store
+ */
+export const adminSettings = mysqlTable("admin_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: varchar("value", { length: 500 }).notNull(),
+});

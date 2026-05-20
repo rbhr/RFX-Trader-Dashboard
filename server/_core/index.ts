@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startTelegramPolling } from "../telegram";
 import { startBreachMonitor } from "../breachMonitor";
+import { startTrailingRiskLimitMonitor } from "../trailingRiskLimit";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -69,8 +70,11 @@ async function startServer() {
   // Start Telegram bot polling to capture /start chat IDs
   startTelegramPolling();
 
-  // Start server-side risk limit breach monitor (runs every 5 minutes)
+  // Start server-side risk limit breach monitor (runs every 1 minute)
   startBreachMonitor();
+
+  // Start trailing risk limit monitor (interval configurable via admin UI)
+  startTrailingRiskLimitMonitor();
 }
 
 startServer().catch(console.error);
