@@ -27,9 +27,13 @@ export function getTrailingLastCheckedAt(): Date | null {
 }
 
 async function getIntervalMs(): Promise<number> {
-  const val = await getAdminSetting("trailing_risk_limit_interval_minutes");
-  const minutes = val ? parseInt(val, 10) : DEFAULT_INTERVAL_MINUTES;
-  return (isNaN(minutes) || minutes < 1 ? DEFAULT_INTERVAL_MINUTES : minutes) * 60 * 1000;
+  try {
+    const val = await getAdminSetting("trailing_risk_limit_interval_minutes");
+    const minutes = val ? parseInt(val, 10) : DEFAULT_INTERVAL_MINUTES;
+    return (isNaN(minutes) || minutes < 1 ? DEFAULT_INTERVAL_MINUTES : minutes) * 60 * 1000;
+  } catch {
+    return DEFAULT_INTERVAL_MINUTES * 60 * 1000;
+  }
 }
 
 async function checkTrailingRiskLimits(): Promise<void> {

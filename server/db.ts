@@ -629,12 +629,16 @@ export async function getAdminSetting(
 ): Promise<string | null> {
   const db = await getDb();
   if (!db) return null;
-  const result = await db
-    .select()
-    .from(adminSettings)
-    .where(eq(adminSettings.key, key))
-    .limit(1);
-  return result.length > 0 ? result[0].value : null;
+  try {
+    const result = await db
+      .select()
+      .from(adminSettings)
+      .where(eq(adminSettings.key, key))
+      .limit(1);
+    return result.length > 0 ? result[0].value : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function setAdminSetting(
@@ -661,15 +665,19 @@ export async function setAdminSetting(
 export async function getTrailingRiskLimitTraders() {
   const db = await getDb();
   if (!db) return [];
-  return db
-    .select()
-    .from(magicNumbers)
-    .where(
-      and(
-        eq(magicNumbers.isActive, true),
-        eq(magicNumbers.trailingRiskLimitEnabled, true),
-        sql`${magicNumbers.mcAccountId} IS NOT NULL`,
-        sql`${magicNumbers.trailingRiskLimit} IS NOT NULL`
-      )
-    );
+  try {
+    return await db
+      .select()
+      .from(magicNumbers)
+      .where(
+        and(
+          eq(magicNumbers.isActive, true),
+          eq(magicNumbers.trailingRiskLimitEnabled, true),
+          sql`${magicNumbers.mcAccountId} IS NOT NULL`,
+          sql`${magicNumbers.trailingRiskLimit} IS NOT NULL`
+        )
+      );
+  } catch {
+    return [];
+  }
 }
