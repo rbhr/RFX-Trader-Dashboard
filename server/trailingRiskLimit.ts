@@ -82,7 +82,7 @@ async function checkTrailingRiskLimits(): Promise<void> {
 
           await createNotification({
             magicNumberId: trader.id,
-            title: "Risk Limit Updated",
+            title: `[Magic ${trader.magicNumber}] Risk Limit Updated`,
             message: `New Stopout $${newLimit.toFixed(2)}. Manage risk and lot size accordingly.`,
             type: "info",
           });
@@ -90,6 +90,7 @@ async function checkTrailingRiskLimits(): Promise<void> {
           if (trader.telegramChatId) {
             const msg = buildTrailingRiskLimitMessage({
               traderName: trader.name,
+              magicNumber: trader.magicNumber,
               newStopout: newLimit,
             });
             await sendTelegramMessage(
