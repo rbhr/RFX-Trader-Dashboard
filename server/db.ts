@@ -125,15 +125,14 @@ export async function getMagicNumberByNumber(magicNumber: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getMagicNumberByTelegramHandle(handle: string) {
+export async function getMagicNumbersByTelegramHandle(handle: string) {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) return [];
 
-  // Normalise: strip leading @ for comparison, store with or without
   const normalised = handle.startsWith("@") ? handle.slice(1) : handle;
   const withAt = `@${normalised}`;
 
-  const result = await db
+  return db
     .select()
     .from(magicNumbers)
     .where(
@@ -141,10 +140,7 @@ export async function getMagicNumberByTelegramHandle(handle: string) {
         eq(magicNumbers.telegramHandle, normalised),
         eq(magicNumbers.telegramHandle, withAt)
       )
-    )
-    .limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+    );
 }
 
 export async function getAllActiveMagicNumbers() {

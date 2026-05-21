@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { getMagicNumberByTelegramHandle, updateMagicNumber } from "./db";
+import { getMagicNumbersByTelegramHandle, updateMagicNumber } from "./db";
 
 let bot: TelegramBot | null = null;
 let pollingStarted = false;
@@ -47,29 +47,34 @@ export function startTelegramPolling(): void {
 
     if (text === "/start" && username) {
       try {
-        const trader = await getMagicNumberByTelegramHandle(username);
-        if (trader) {
-          const isFirstLink = !trader.telegramChatId;
-          await updateMagicNumber(trader.id, { telegramChatId: String(chatId) });
+        const traders = await getMagicNumbersByTelegramHandle(username);
+        if (traders.length > 0) {
+          const anyFirstLink = traders.some((t) => !t.telegramChatId);
 
-          // Build personalised welcome message
-          const profitSharePct = (parseFloat(trader.profitShare ?? "0.35") * 100).toFixed(0);
+          for (const t of traders) {
+            await updateMagicNumber(t.id, { telegramChatId: String(chatId) });
+          }
+
           const dashboardUrl = "https://rfxtrader.manus.space";
-          const welcomeMsg = isFirstLink
+          const accountList = traders
+            .map((t) => `• [Magic ${t.magicNumber}] ${t.name}`)
+            .join("\n");
+
+          const welcomeMsg = anyFirstLink
             ? (
-                `✅ <b>Welcome to RFX Trader Dashboard, ${trader.name}!</b>\n\n` +
-                `Your Telegram is now linked. Here's a quick summary of your account:\n\n` +
-                `• 💼 <b>Profit Share Rate:</b> ${profitSharePct}%\n` +
+                `✅ <b>Welcome to RFX Trader Dashboard!</b>\n\n` +
+                `Your Telegram is now linked to ${traders.length} account(s):\n${accountList}\n\n` +
                 `• 📊 <b>Dashboard:</b> <a href="${dashboardUrl}">${dashboardUrl}</a>\n\n` +
                 `You'll receive payment confirmations, risk limit alerts, and important updates here. Welcome aboard! 🚀`
               )
             : (
                 `✅ <b>Re-linked!</b>\n\n` +
-                `Hi ${trader.name}, your Telegram is still connected to RFX Trader Dashboard. Notifications will continue to be delivered here.`
+                `Your Telegram is connected to ${traders.length} account(s):\n${accountList}\n\n` +
+                `Notifications will continue to be delivered here.`
               );
 
           await pollingBot.sendMessage(chatId, welcomeMsg, { parse_mode: "HTML", disable_web_page_preview: true } as any);
-          console.log(`[Telegram] ${isFirstLink ? 'Linked' : 'Re-linked'} chat ID ${chatId} to trader ${trader.name} (@${username})`);
+          console.log(`[Telegram] ${anyFirstLink ? 'Linked' : 'Re-linked'} chat ID ${chatId} to ${traders.length} trader(s) (@${username})`);
         } else {
           await pollingBot.sendMessage(
             chatId,
@@ -129,12 +134,13 @@ export async function sendTelegramMessage(
  */
 export function buildRiskLimitBreachMessage(params: {
   traderName: string;
+  magicNumber: string;
   equity: number;
   riskLimit: number;
 }): string {
-  const { traderName, equity, riskLimit } = params;
+  const { traderName, magicNumber, equity, riskLimit } = params;
   return (
-    `🚨 <b>Risk Limit Breached</b>\n\n` +
+    `[Magic ${magicNumber}] 🚨 <b>Risk Limit Breached</b>\n\n` +
     `Hi ${traderName},\n\n` +
     `Your incubator account equity has dropped to <b>$${equity.toFixed(2)}</b>, ` +
     `which is below your risk limit of <b>$${riskLimit.toFixed(2)}</b>.\n\n` +
@@ -148,11 +154,12 @@ export function buildRiskLimitBreachMessage(params: {
  */
 export function buildTrailingRiskLimitMessage(params: {
   traderName: string;
+  magicNumber: string;
   newStopout: number;
 }): string {
-  const { traderName, newStopout } = params;
+  const { traderName, magicNumber, newStopout } = params;
   return (
-    `📈 <b>Risk Limit Updated</b>\n\n` +
+    `[Magic ${magicNumber}] 📈 <b>Risk Limit Updated</b>\n\n` +
     `Hi ${traderName},\n\n` +
     `New Stopout <b>$${newStopout.toFixed(2)}</b>. Manage risk and lot size accordingly.`
   );
@@ -182,13 +189,14 @@ export function buildAdminRiskLimitAlertMessage(params: {
  */
 export function buildPaymentMessage(params: {
   traderName: string;
+  magicNumber: string;
   amount: number;
   network: string;
   networkFee: number;
   transactionHash: string;
   paymentDate: Date;
 }): string {
-  const { traderName, amount, network, networkFee, transactionHash, paymentDate } = params;
+  const { traderName, magicNumber, amount, network, networkFee, transactionHash, paymentDate } = params;
   const dateStr = paymentDate.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
@@ -202,7 +210,7 @@ export function buildPaymentMessage(params: {
       ? `https://etherscan.io/tx/${transactionHash}`
       : `https://tronscan.org/#/transaction/${transactionHash}`;
   return (
-    `💰 <b>Payment Received</b>\n\n` +
+    `[Magic ${magicNumber}] 💰 <b>Payment Received</b>\n\n` +
     `Hi ${traderName},\n\n` +
     `A payment of <b>${amount.toFixed(2)} USDT</b> has been sent to your wallet.\n\n` +
     `📋 <b>Details</b>\n` +

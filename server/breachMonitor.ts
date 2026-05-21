@@ -76,14 +76,14 @@ async function checkAllTraders(): Promise<void> {
           // In-app notification for the trader
           await createNotification({
             magicNumberId: trader.id,
-            title: "⚠️ Risk Limit Breached",
+            title: `[Magic ${trader.magicNumber}] ⚠️ Risk Limit Breached`,
             message: `Your incubator account equity dropped to $${equity.toFixed(2)}, below your risk limit of $${riskLimit.toFixed(2)}. All trades have been closed. Please contact an admin to re-enable trading.`,
             type: "warning",
           });
 
           // Telegram notification to the trader (if connected)
           if (trader.telegramChatId) {
-            const msg = buildRiskLimitBreachMessage({ traderName: trader.name, equity, riskLimit });
+            const msg = buildRiskLimitBreachMessage({ traderName: trader.name, magicNumber: trader.magicNumber, equity, riskLimit });
             await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId).catch(
               (e) => console.warn(`[BreachMonitor] Telegram to trader failed:`, e)
             );

@@ -93,6 +93,7 @@ async function generateAndSend2FACode(
   telegramHandle: string | null,
   telegramChatId: string | null,
   traderName: string,
+  magicNumber: string,
   purpose: "login_2fa" | "password_reset" | "password_change"
 ): Promise<boolean> {
   if (!telegramHandle || !telegramChatId) return false;
@@ -108,7 +109,7 @@ async function generateAndSend2FACode(
         : "password change";
 
   const message =
-    `🔐 <b>Verification Code</b>\n\n` +
+    `[Magic ${magicNumber}] 🔐 <b>Verification Code</b>\n\n` +
     `Hi ${traderName},\n\n` +
     `Your verification code for <b>${purposeLabel}</b> is:\n\n` +
     `<code>${code}</code>\n\n` +
@@ -387,7 +388,7 @@ async function recordPaymentAndNotify(params: {
 
     await createNotification({
       magicNumberId,
-      title: "Payment Received",
+      title: `[Magic ${trader.magicNumber}] Payment Received`,
       message: `You have received a payment of $${amount.toFixed(2)}. Transaction hash: ${transactionHash}`,
       type: "payment",
       isRead: false,
@@ -399,6 +400,7 @@ async function recordPaymentAndNotify(params: {
     if (trader.telegramHandle && trader.telegramChatId) {
       const telegramMsg = buildPaymentMessage({
         traderName: trader.name,
+        magicNumber: trader.magicNumber,
         amount,
         network: network || trader.usdtNetwork || "TRC20",
         networkFee,
@@ -494,6 +496,7 @@ export const appRouter = router({
               magicNumberData.telegramHandle,
               magicNumberData.telegramChatId,
               magicNumberData.name,
+              magicNumberData.magicNumber,
               "login_2fa"
             );
             return {
@@ -597,6 +600,7 @@ export const appRouter = router({
           trader.telegramHandle,
           trader.telegramChatId,
           trader.name,
+          trader.magicNumber,
           "password_reset"
         );
 
@@ -674,6 +678,7 @@ export const appRouter = router({
               trader.telegramHandle,
               trader.telegramChatId,
               trader.name,
+              trader.magicNumber,
               "password_change"
             );
             return { success: false, requires2FA: true };
@@ -1033,7 +1038,7 @@ export const appRouter = router({
         // In-app notification for the trader
         await createNotification({
           magicNumberId: trader.id,
-          title: "Risk Limit Breached — Trading Disabled",
+          title: `[Magic ${trader.magicNumber}] Risk Limit Breached — Trading Disabled`,
           message: `Your incubator account equity dropped to $${input.equity.toFixed(2)}, below your risk limit of $${input.riskLimit.toFixed(2)}. All trades have been closed. Please contact an admin to re-enable trading.`,
           type: "error",
         });
@@ -1043,6 +1048,7 @@ export const appRouter = router({
         if (trader.telegramHandle && trader.telegramChatId) {
           const msg = buildRiskLimitBreachMessage({
             traderName: trader.name,
+            magicNumber: trader.magicNumber,
             equity: input.equity,
             riskLimit: input.riskLimit,
           });
@@ -2045,12 +2051,11 @@ export const appRouter = router({
           });
         }
         await resolveRiskLimitBreach(input.breachId);
-        // Re-enable trading by setting isActive = true on the magic number
         await updateMagicNumber(input.magicNumberId, { isActive: true });
-        // In-app notification to the trader that trading has been re-enabled
+        const resolvedTrader = await getMagicNumberById(input.magicNumberId);
         await createNotification({
           magicNumberId: input.magicNumberId,
-          title: "Trading Re-enabled",
+          title: `[Magic ${resolvedTrader?.magicNumber ?? "?"}] Trading Re-enabled`,
           message:
             "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
           type: "info",
@@ -2127,12 +2132,12 @@ export const appRouter = router({
 
       const resolved = await bulkResolveRiskLimitBreaches();
 
-      // Re-enable trading and notify each affected trader
       for (const breach of activeBreaches) {
         await updateMagicNumber(breach.magicNumberId, { isActive: true });
+        const breachTrader = await getMagicNumberById(breach.magicNumberId);
         await createNotification({
           magicNumberId: breach.magicNumberId,
-          title: "Trading Re-enabled",
+          title: `[Magic ${breachTrader?.magicNumber ?? "?"}] Trading Re-enabled`,
           message:
             "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
           type: "info",
@@ -2271,11 +2276,10 @@ export const appRouter = router({
         let inAppSent = 0;
 
         for (const trader of allTraders) {
-          // In-app notification
           if (input.sendInApp) {
             await createNotification({
               magicNumberId: trader.id,
-              title: input.title,
+              title: `[Magic ${trader.magicNumber}] ${input.title}`,
               message: input.message,
               type: "info",
               isRead: false,
@@ -2291,7 +2295,7 @@ export const appRouter = router({
           ) {
             const sent = await sendTelegramMessage(
               trader.telegramHandle,
-              `<b>${input.title}</b>\n\n${input.message}`,
+              `[Magic ${trader.magicNumber}] <b>${input.title}</b>\n\n${input.message}`,
               trader.telegramChatId
             );
             if (sent) telegramSent++;
@@ -2334,7 +2338,7 @@ export const appRouter = router({
         if (input.sendInApp) {
           await createNotification({
             magicNumberId: trader.id,
-            title: input.title,
+            title: `[Magic ${trader.magicNumber}] ${input.title}`,
             message: input.message,
             type: "info",
             isRead: false,
@@ -2349,7 +2353,7 @@ export const appRouter = router({
         ) {
           telegramSent = await sendTelegramMessage(
             trader.telegramHandle,
-            `<b>${input.title}</b>\n\n${input.message}`,
+            `[Magic ${trader.magicNumber}] <b>${input.title}</b>\n\n${input.message}`,
             trader.telegramChatId
           );
         }
