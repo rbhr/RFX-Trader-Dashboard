@@ -163,10 +163,8 @@ export default function Dashboard(props: {
   const [passwordChangeCode, setPasswordChangeCode] = useState("");
 
   // View-as-trader: use external prop (from AdminDashboard) or internal state
-  // Default to admin's own entry in the trader list so trades + trade history show
   const [internalViewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
-  const adminTraderId = selfSession?.isAdmin ? selfSession.id : undefined;
-  const viewAsTraderId = externalViewAsTraderId ?? internalViewAsTraderId ?? adminTraderId;
+  const viewAsTraderId = externalViewAsTraderId ?? internalViewAsTraderId;
   const isViewingAsTrader = viewAsTraderId !== undefined;
   const viewAsInput = viewAsTraderId ? { viewAsTraderId } : undefined;
 
@@ -177,6 +175,16 @@ export default function Dashboard(props: {
   const { data: allTraders } = trpc.admin.getAllTraders.useQuery(undefined, {
     enabled: !!selfSession?.isAdmin && !embedded,
   });
+
+  // Default admin to their own entry once allTraders loads
+  useEffect(() => {
+    if (selfSession?.isAdmin && allTraders && !externalViewAsTraderId && internalViewAsTraderId === undefined) {
+      const adminEntry = allTraders.find((t) => t.id === selfSession.id);
+      if (adminEntry) {
+        setViewAsTraderId(adminEntry.id);
+      }
+    }
+  }, [selfSession, allTraders, externalViewAsTraderId, internalViewAsTraderId]);
 
   // When viewing as another trader, fetch their session info
   const { data: viewedSession } = trpc.trading.getSession.useQuery(viewAsInput, {
