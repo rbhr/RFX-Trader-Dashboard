@@ -67,9 +67,10 @@ async function checkTrailingRiskLimits(): Promise<void> {
 
         const currentAbsoluteLimit = activeLimit.absoluteRiskLimit as number;
         const buffer = parseFloat(trader.trailingRiskLimit);
-        const newLimit = balance - buffer;
+        const newLimit = Math.round((balance - buffer) * 100) / 100;
+        const currentRounded = Math.round(currentAbsoluteLimit * 100) / 100;
 
-        if (newLimit > currentAbsoluteLimit) {
+        if (newLimit > currentRounded) {
           await metaCopierService.updateAccountRiskLimit(
             trader.mcAccountId,
             activeLimit.id,
