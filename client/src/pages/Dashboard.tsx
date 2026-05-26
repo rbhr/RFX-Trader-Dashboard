@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useTradingSession } from "@/hooks/useTradingSession";
@@ -296,6 +296,17 @@ export default function Dashboard(props: {
     }
   }, [accountEquity, riskLimit]);
 
+  const isViewedTraderAdmin = session?.isViewedTraderAdmin ?? false;
+  const magicToTrader = useMemo(() => {
+    const map = new Map<string, string>();
+    if (allTraders) {
+      for (const t of allTraders) {
+        map.set(t.magicNumber, t.name);
+      }
+    }
+    return map;
+  }, [allTraders]);
+
   // Redirect to login if not authenticated (skip when embedded in admin layout)
   if (!embedded && !sessionLoading && !selfSession) {
     setLocation("/");
@@ -548,8 +559,8 @@ export default function Dashboard(props: {
             </CardContent>
           </Card>
 
-          {/* Account & Copier Configuration Card */}
-          <Card className="border-primary/20">
+          {/* Account & Copier Configuration Card — hidden for admin accounts */}
+          {!isViewedTraderAdmin && <Card className="border-primary/20">
             <CardHeader>
               <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <Activity className="h-4 w-4" />
@@ -606,7 +617,7 @@ export default function Dashboard(props: {
                 <p className="text-sm text-muted-foreground">No copier linked to your account.</p>
               )}
             </CardContent>
-          </Card>
+          </Card>}
         </div>
 
         {/* P&L Summary Grid */}
@@ -674,6 +685,8 @@ export default function Dashboard(props: {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {isViewedTraderAdmin && <TableHead>Magic</TableHead>}
+                    {isViewedTraderAdmin && <TableHead>Trader</TableHead>}
                     <TableHead>Ticket</TableHead>
                     <TableHead>Symbol</TableHead>
                     <TableHead>Type</TableHead>
@@ -691,6 +704,12 @@ export default function Dashboard(props: {
                     const isPositive = totalPnL >= 0;
                     return (
                       <TableRow key={position.id}>
+                        {isViewedTraderAdmin && (
+                          <TableCell className="font-mono text-xs">{position.magicNumber}</TableCell>
+                        )}
+                        {isViewedTraderAdmin && (
+                          <TableCell className="text-xs">{magicToTrader.get(position.magicNumber) ?? "—"}</TableCell>
+                        )}
                         <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
                         <TableCell className="font-semibold">{position.symbol}</TableCell>
                         <TableCell>
@@ -746,6 +765,8 @@ export default function Dashboard(props: {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {isViewedTraderAdmin && <TableHead>Magic</TableHead>}
+                      {isViewedTraderAdmin && <TableHead>Trader</TableHead>}
                       <TableHead>Ticket</TableHead>
                       <TableHead>Symbol</TableHead>
                       <TableHead>Type</TableHead>
@@ -767,6 +788,12 @@ export default function Dashboard(props: {
                       const slHit = wasSLHit(position);
                       return (
                         <TableRow key={position.id ?? index}>
+                          {isViewedTraderAdmin && (
+                            <TableCell className="font-mono text-xs">{position.magicNumber}</TableCell>
+                          )}
+                          {isViewedTraderAdmin && (
+                            <TableCell className="text-xs">{magicToTrader.get(position.magicNumber) ?? "—"}</TableCell>
+                          )}
                           <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
                           <TableCell className="font-semibold">{position.symbol}</TableCell>
                           <TableCell>
