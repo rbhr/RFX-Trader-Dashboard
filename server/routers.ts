@@ -714,6 +714,7 @@ export const appRouter = router({
           profitShare: parseFloat(trader.profitShare),
           showAllData: trader.showAllData,
           isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
+          isViewedTraderAdmin: trader.isAdmin || false,
           lifetimeProfit: parseFloat(trader.lifetimeProfit || "0"),
           lifetimeProfitShare: parseFloat(trader.lifetimeProfitShare || "0"),
           lifetimeIncome: parseFloat(trader.lifetimeIncome || "0"),
