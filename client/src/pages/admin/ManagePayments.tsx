@@ -37,6 +37,7 @@ export default function ManagePayments() {
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 16));
   const [amount, setAmount] = useState<string>("");
   const [networkFee, setNetworkFee] = useState<string>("0");
+  const [narration, setNarration] = useState<string>("");
   const [transactionHash, setTransactionHash] = useState<string>("");
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
@@ -93,6 +94,7 @@ export default function ManagePayments() {
   const resetForm = () => {
     setSelectedTraderId("");
     setAmount("");
+    setNarration("");
     setNetworkFee("0");
     setTransactionHash("");
     const now = new Date();
@@ -120,6 +122,7 @@ export default function ManagePayments() {
           networkFee: parseFloat(networkFee),
           transactionHash,
           paymentDate: new Date(paymentDate),
+          narration: narration || undefined,
         });
         toast.success("Payment recorded and trader notified");
       }
@@ -136,12 +139,13 @@ export default function ManagePayments() {
       toast.error("No payment history to export");
       return;
     }
-    const headers = ["Date", "Trader", "Magic Number", "Amount (USDT)", "Network", "Network Fee (USDT)", "Transaction Hash"];
+    const headers = ["Date", "Trader", "Magic Number", "Amount (USDT)", "Narration", "Network", "Network Fee (USDT)", "Transaction Hash"];
     const rows = paymentHistory.map((p) => [
       new Date(p.paymentDate).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }),
       p.traderName,
       p.magicNumber,
       p.amount.toFixed(2),
+      p.narration || '',
       p.network || 'TRC20',
       (p.networkFee || 0).toFixed(2),
       p.transactionHash,
@@ -331,7 +335,7 @@ export default function ManagePayments() {
                 })()}
               </div>
 
-              <div className={paymentMode === "manual" ? "grid grid-cols-3 gap-4" : ""}>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount (USDT)</Label>
                   <Input
@@ -343,33 +347,41 @@ export default function ManagePayments() {
                     onChange={(e) => setAmount(e.target.value)}
                   />
                 </div>
-
-                {paymentMode === "manual" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="networkFee">Network Fee (USDT)</Label>
-                      <Input
-                        id="networkFee"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={networkFee}
-                        onChange={(e) => setNetworkFee(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="transactionHash">Transaction Hash</Label>
-                      <Input
-                        id="transactionHash"
-                        placeholder="Enter transaction hash"
-                        value={transactionHash}
-                        onChange={(e) => setTransactionHash(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
+                <div className="space-y-2">
+                  <Label htmlFor="narration">Narration</Label>
+                  <Input
+                    id="narration"
+                    placeholder="Optional payment narration"
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                  />
+                </div>
               </div>
+
+              {paymentMode === "manual" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="networkFee">Network Fee (USDT)</Label>
+                    <Input
+                      id="networkFee"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={networkFee}
+                      onChange={(e) => setNetworkFee(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="transactionHash">Transaction Hash</Label>
+                    <Input
+                      id="transactionHash"
+                      placeholder="Enter transaction hash"
+                      value={transactionHash}
+                      onChange={(e) => setTransactionHash(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* USDT Address Display */}
               {selectedTraderId && (() => {
@@ -488,6 +500,11 @@ export default function ManagePayments() {
                           </div>
                         </div>
                       </div>
+                      {payment.narration && (
+                        <div className="text-sm text-muted-foreground mt-1 italic">
+                          {payment.narration}
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground mt-2">
                         <div className="font-mono break-all">TX: {payment.transactionHash}</div>
                       </div>
@@ -647,6 +664,13 @@ export default function ManagePayments() {
                     <span>{selectedPayment.network || 'TRC20'}</span>
                   </div>
                 </div>
+
+                {selectedPayment.narration && (
+                  <div className="flex justify-between py-3 border-b">
+                    <span className="text-muted-foreground">Narration</span>
+                    <span className="text-right max-w-[300px]">{selectedPayment.narration}</span>
+                  </div>
+                )}
 
                 <div className="flex justify-between py-3 border-b">
                   <span className="text-muted-foreground">Network fee</span>

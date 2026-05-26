@@ -365,6 +365,7 @@ async function recordPaymentAndNotify(params: {
   networkFee?: number;
   network?: "TRC20" | "ERC20";
   paymentDate: Date;
+  narration?: string;
 }) {
   const {
     magicNumberId,
@@ -373,6 +374,7 @@ async function recordPaymentAndNotify(params: {
     networkFee = 0,
     network,
     paymentDate,
+    narration,
   } = params;
 
   await createPayment({
@@ -382,6 +384,7 @@ async function recordPaymentAndNotify(params: {
     transactionHash,
     paymentDate,
     network: network ?? null,
+    narration: narration ?? null,
     notificationSent: true,
   });
 
@@ -2317,6 +2320,7 @@ export const appRouter = router({
           network: p.network || trader?.usdtNetwork || "TRC20",
           networkFee: parseFloat(p.networkFee || "0"),
           usdtAddress: trader?.usdtAddress || null,
+          narration: p.narration || null,
         };
       });
     }),
@@ -2330,6 +2334,7 @@ export const appRouter = router({
           networkFee: z.number().optional(),
           transactionHash: z.string(),
           paymentDate: z.date(),
+          narration: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -2348,6 +2353,7 @@ export const appRouter = router({
           networkFee: input.networkFee,
           network: (trader?.usdtNetwork as "TRC20" | "ERC20") ?? undefined,
           paymentDate: input.paymentDate,
+          narration: input.narration,
         });
 
         return { success: true };
