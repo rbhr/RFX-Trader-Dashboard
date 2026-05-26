@@ -2573,6 +2573,7 @@ export const appRouter = router({
         z.object({
           magicNumberId: z.number().int().positive(),
           amount: z.number().positive().max(10_000),
+          narration: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -2625,6 +2626,7 @@ export const appRouter = router({
               transactionHash: pendingHash,
               network,
               paymentDate: new Date(),
+              narration: input.narration,
             });
             console.warn(
               `[Payment] Recorded pending payment ${pendingHash} for ${trader.name} — GasFree confirmation timed out`
@@ -2647,6 +2649,7 @@ export const appRouter = router({
           transactionHash: txHash,
           network,
           paymentDate: new Date(),
+          narration: input.narration,
         });
 
         return { success: true, txHash, network };

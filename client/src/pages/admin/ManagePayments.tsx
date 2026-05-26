@@ -113,6 +113,7 @@ export default function ManagePayments() {
         const result = await sendWalletPaymentMutation.mutateAsync({
           magicNumberId: parseInt(selectedTraderId),
           amount: parseFloat(amount),
+          narration: narration || undefined,
         });
         toast.success(`Payment sent on-chain! TX: ${result.txHash.substring(0, 12)}...`);
       } else {
