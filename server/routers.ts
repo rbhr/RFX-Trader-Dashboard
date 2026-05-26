@@ -1088,11 +1088,22 @@ export const appRouter = router({
         const { magicNumber, liveAccountNumber } = trader;
         const showAllData = trader.showAllData || trader.isAdmin;
 
-        // Admin filtering by master account
+        // Admin: filter by specific master account
         if (showAllData && input?.masterAccountId) {
           return metaCopierService.getOpenPositionsFromAccount(
             input.masterAccountId
           );
+        }
+
+        // Admin with no master selected: aggregate across all master accounts
+        if (showAllData && trader.isAdmin) {
+          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+          const allPositions: import("./metacopier").Position[] = [];
+          for (const m of masters) {
+            const positions = await metaCopierService.getOpenPositionsFromAccount(m.id);
+            allPositions.push(...positions);
+          }
+          return allPositions;
         }
 
         // If trader has a live account assigned, fetch from that account
@@ -1125,6 +1136,18 @@ export const appRouter = router({
         const { magicNumber, liveAccountNumber } = trader;
         const showAllData = trader.showAllData || trader.isAdmin;
 
+        // Admin: aggregate across all master accounts
+        if (showAllData && trader.isAdmin) {
+          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+          const all: import("./metacopier").Position[] = [];
+          for (const m of masters) {
+            all.push(...await metaCopierService.getHistoricalPositionsFromAccount(
+              m.id, getStartOfToday(), getEndOfToday()
+            ));
+          }
+          return all;
+        }
+
         // If trader has a live account assigned, fetch from that account
         if (liveAccountNumber && !showAllData) {
           const liveAccountId =
@@ -1156,9 +1179,20 @@ export const appRouter = router({
       .input(viewAsInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, showAllData, liveAccountNumber } = trader;
+        const { magicNumber, liveAccountNumber } = trader;
+        const showAllData = trader.showAllData || trader.isAdmin;
 
-        // If trader has a live account assigned, fetch from that account
+        if (showAllData && trader.isAdmin) {
+          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+          const all: import("./metacopier").Position[] = [];
+          for (const m of masters) {
+            all.push(...await metaCopierService.getHistoricalPositionsFromAccount(
+              m.id, getStartOfWeek(), getEndOfToday()
+            ));
+          }
+          return all;
+        }
+
         if (liveAccountNumber && !showAllData) {
           const liveAccountId =
             await metaCopierService.getAccountIdByLoginNumber(
@@ -1174,7 +1208,6 @@ export const appRouter = router({
           }
         }
 
-        // Fallback to default account
         const positions = await metaCopierService.getHistoricalPositions(
           getStartOfWeek(),
           getEndOfToday(),
@@ -1225,13 +1258,33 @@ export const appRouter = router({
 
         const effectiveShowAll = trader.showAllData || trader.isAdmin;
 
-        // Admin filtering by master account
+        // Admin: filter by specific master account
         if (effectiveShowAll && input?.masterAccountId) {
           return metaCopierService.getHistoricalPositionsFromAccount(
             input.masterAccountId,
             getAllTimeStart(),
             getEndOfToday()
           );
+        }
+
+        // Admin with no master selected: aggregate across all master accounts
+        if (effectiveShowAll && trader.isAdmin) {
+          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+          const allPositions: import("./metacopier").Position[] = [];
+          for (const m of masters) {
+            const positions = await metaCopierService.getHistoricalPositionsFromAccount(
+              m.id,
+              getAllTimeStart(),
+              getEndOfToday()
+            );
+            allPositions.push(...positions);
+          }
+          const seen = new Set<string>();
+          return allPositions.filter(p => {
+            if (seen.has(p.id)) return false;
+            seen.add(p.id);
+            return true;
+          });
         }
 
         return fetchAggregatedLifetimePositions({
@@ -1252,6 +1305,47 @@ export const appRouter = router({
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
         const { magicNumber, profitShare, liveAccountNumber } = trader;
         const showAllData = trader.showAllData || trader.isAdmin;
+
+        // Admin: aggregate P&L across all master accounts
+        if (showAllData && trader.isAdmin) {
+          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+          const aggregate = async (
+            fetcher: (accountId: string) => Promise<import("./metacopier").Position[]>
+          ) => {
+            const all: import("./metacopier").Position[] = [];
+            for (const m of masters) all.push(...await fetcher(m.id));
+            return all;
+          };
+          const [
+            openPositions,
+            todayPositions,
+            weekPositions,
+            monthPositions,
+            allTimePositions,
+          ] = await Promise.all([
+            aggregate(id => metaCopierService.getOpenPositionsFromAccount(id)),
+            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getStartOfToday(), getEndOfToday())),
+            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getStartOfWeek(), getEndOfToday())),
+            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getStartOfMonth(), getEndOfToday())),
+            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getAllTimeStart(), getEndOfToday())),
+          ]);
+
+          const floatingPnL = calculatePnL(openPositions);
+          const todayRealizedPnL = calculatePnL(todayPositions);
+          const profitShareValue = parseFloat(profitShare);
+          const weekPnL = calculatePnL(weekPositions) + floatingPnL;
+
+          return {
+            floatingPnL,
+            todayRealizedPnL,
+            todayTotalPnL: floatingPnL + todayRealizedPnL,
+            weekPnL,
+            monthPnL: calculatePnL(monthPositions) + floatingPnL,
+            allTimePnL: calculatePnL(allTimePositions) + floatingPnL,
+            weeklyProfitShare: weekPnL > 0 ? weekPnL * profitShareValue : 0,
+            profitSharePercent: profitShareValue,
+          };
+        }
 
         // If trader has a live account assigned, fetch from that account
         let liveAccountId: string | null = null;
