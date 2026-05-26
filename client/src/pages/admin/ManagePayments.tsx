@@ -575,6 +575,12 @@ export default function ManagePayments() {
                             </div>
                           </>
                         )}
+                        {narration && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Transaction Narration</span>
+                            <span className="font-medium text-foreground text-right max-w-[200px]">{narration}</span>
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -665,13 +671,6 @@ export default function ManagePayments() {
                   </div>
                 </div>
 
-                {selectedPayment.narration && (
-                  <div className="flex justify-between py-3 border-b">
-                    <span className="text-muted-foreground">Narration</span>
-                    <span className="text-right max-w-[300px]">{selectedPayment.narration}</span>
-                  </div>
-                )}
-
                 <div className="flex justify-between py-3 border-b">
                   <span className="text-muted-foreground">Network fee</span>
                   <span>{selectedPayment.networkFee || 0} USDT</span>
@@ -741,6 +740,13 @@ export default function ManagePayments() {
                     </div>
                   )}
                 </div>
+
+                {selectedPayment.narration && (
+                  <div className="flex justify-between py-3 border-b">
+                    <span className="text-muted-foreground">Transaction Narration</span>
+                    <span className="text-right max-w-[300px]">{selectedPayment.narration}</span>
+                  </div>
+                )}
 
                 <div className="flex justify-between py-3">
                   <span className="text-muted-foreground">Submitted time</span>
