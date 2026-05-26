@@ -184,6 +184,7 @@ export const payments = mysqlTable("payments", {
     "0.00"
   ),
   network: mysqlEnum("network", ["TRC20", "ERC20"]),
+  narration: varchar("narration", { length: 500 }),
   notificationSent: boolean("notificationSent").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
