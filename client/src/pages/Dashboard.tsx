@@ -163,8 +163,10 @@ export default function Dashboard(props: {
   const [passwordChangeCode, setPasswordChangeCode] = useState("");
 
   // View-as-trader: use external prop (from AdminDashboard) or internal state
+  // Default to admin's own entry in the trader list so trades + trade history show
   const [internalViewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
-  const viewAsTraderId = externalViewAsTraderId ?? internalViewAsTraderId;
+  const adminTraderId = selfSession?.isAdmin ? selfSession.id : undefined;
+  const viewAsTraderId = externalViewAsTraderId ?? internalViewAsTraderId ?? adminTraderId;
   const isViewingAsTrader = viewAsTraderId !== undefined;
   const viewAsInput = viewAsTraderId ? { viewAsTraderId } : undefined;
 
@@ -415,7 +417,6 @@ export default function Dashboard(props: {
                       <SelectValue placeholder="View as trader..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="self">My Dashboard</SelectItem>
                       {allTraders.map((t) => (
                         <SelectItem key={t.id} value={t.id.toString()}>
                           {t.name} - {t.magicNumber}
