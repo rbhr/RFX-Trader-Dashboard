@@ -1085,7 +1085,8 @@ export const appRouter = router({
       .input(viewAsWithMasterInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, showAllData, liveAccountNumber } = trader;
+        const { magicNumber, liveAccountNumber } = trader;
+        const showAllData = trader.showAllData || trader.isAdmin;
 
         // Admin filtering by master account
         if (showAllData && input?.masterAccountId) {
@@ -1121,7 +1122,8 @@ export const appRouter = router({
       .input(viewAsInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, showAllData, liveAccountNumber } = trader;
+        const { magicNumber, liveAccountNumber } = trader;
+        const showAllData = trader.showAllData || trader.isAdmin;
 
         // If trader has a live account assigned, fetch from that account
         if (liveAccountNumber && !showAllData) {
@@ -1221,8 +1223,10 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
 
+        const effectiveShowAll = trader.showAllData || trader.isAdmin;
+
         // Admin filtering by master account
-        if (trader.showAllData && input?.masterAccountId) {
+        if (effectiveShowAll && input?.masterAccountId) {
           return metaCopierService.getHistoricalPositionsFromAccount(
             input.masterAccountId,
             getAllTimeStart(),
@@ -1230,7 +1234,10 @@ export const appRouter = router({
           );
         }
 
-        return fetchAggregatedLifetimePositions(trader);
+        return fetchAggregatedLifetimePositions({
+          ...trader,
+          showAllData: effectiveShowAll,
+        });
       }),
 
     // Get account info
@@ -1243,8 +1250,8 @@ export const appRouter = router({
       .input(viewAsInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, showAllData, profitShare, liveAccountNumber } =
-          trader;
+        const { magicNumber, profitShare, liveAccountNumber } = trader;
+        const showAllData = trader.showAllData || trader.isAdmin;
 
         // If trader has a live account assigned, fetch from that account
         let liveAccountId: string | null = null;
