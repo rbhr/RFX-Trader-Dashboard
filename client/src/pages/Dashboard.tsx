@@ -168,6 +168,9 @@ export default function Dashboard(props: {
   const isViewingAsTrader = viewAsTraderId !== undefined;
   const viewAsInput = viewAsTraderId ? { viewAsTraderId } : undefined;
 
+  // Master account filter for admin dashboard
+  const [selectedMasterAccountId, setSelectedMasterAccountId] = useState<string | undefined>(undefined);
+
   // Fetch trader list for admin dropdown (only when not embedded — AdminDashboard has its own picker)
   const { data: allTraders } = trpc.admin.getAllTraders.useQuery(undefined, {
     enabled: !!selfSession?.isAdmin && !embedded,
@@ -180,6 +183,7 @@ export default function Dashboard(props: {
 
   // Use viewed trader's session when in view-as mode, otherwise self
   const session = isViewingAsTrader ? viewedSession : selfSession;
+  const isViewedTraderAdmin = session?.isViewedTraderAdmin ?? false;
 
   const validateUsdtAddress = (address: string, network: string): string | null => {
     if (!address) return null;
@@ -229,12 +233,22 @@ export default function Dashboard(props: {
     refetchInterval: 60000,
   });
 
-  const { data: openPositions, isLoading: positionsLoading } = trpc.trading.getOpenPositions.useQuery(viewAsInput, {
+  // Build position query input — includes masterAccountId when admin selects a master
+  const positionInput = viewAsTraderId || selectedMasterAccountId
+    ? { viewAsTraderId, masterAccountId: selectedMasterAccountId }
+    : undefined;
+
+  const { data: openPositions, isLoading: positionsLoading } = trpc.trading.getOpenPositions.useQuery(positionInput, {
     refetchInterval: 30000,
   });
 
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,
+  });
+
+  // Fetch master accounts when viewing an admin user
+  const { data: masterAccounts } = trpc.admin.getRfxMasterAccounts.useQuery(undefined, {
+    enabled: !!selfSession?.isAdmin,
   });
 
   const { data: maxOpenTrades } = trpc.trading.getMaxOpenTrades.useQuery(viewAsInput, {
@@ -253,9 +267,10 @@ export default function Dashboard(props: {
     refetchInterval: 60000,
   });
 
-  // Trade history — only fetched when embedded (admin view-as mode)
-  const { data: allTimePositions, isLoading: historyLoading } = trpc.trading.getAllTimePositions.useQuery(viewAsInput, {
-    enabled: embedded,
+  // Trade history — fetched when embedded OR when viewing an admin user
+  const showTradeHistory = embedded || isViewedTraderAdmin;
+  const { data: allTimePositions, isLoading: historyLoading } = trpc.trading.getAllTimePositions.useQuery(positionInput, {
+    enabled: showTradeHistory,
     refetchInterval: 300000,
   });
 
@@ -296,7 +311,6 @@ export default function Dashboard(props: {
     }
   }, [accountEquity, riskLimit]);
 
-  const isViewedTraderAdmin = session?.isViewedTraderAdmin ?? false;
   const magicToTrader = useMemo(() => {
     const map = new Map<string, string>();
     if (allTraders) {
@@ -392,7 +406,10 @@ export default function Dashboard(props: {
                 <div className="ml-4">
                   <Select
                     value={viewAsTraderId?.toString() ?? "self"}
-                    onValueChange={(v) => setViewAsTraderId(v === "self" ? undefined : parseInt(v))}
+                    onValueChange={(v) => {
+                      setViewAsTraderId(v === "self" ? undefined : parseInt(v));
+                      setSelectedMasterAccountId(undefined);
+                    }}
                   >
                     <SelectTrigger className="w-[220px] h-8 text-sm">
                       <SelectValue placeholder="View as trader..." />
@@ -559,65 +576,93 @@ export default function Dashboard(props: {
             </CardContent>
           </Card>
 
-          {/* Account & Copier Configuration Card — hidden for admin accounts */}
-          {!isViewedTraderAdmin && <Card className="border-primary/20">
-            <CardHeader>
-              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-                <Activity className="h-4 w-4" />
-                <span>Account &amp; Copier Configuration</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {copierInfo ? (
-                <>
-                  {!copierInfo.isActive ? (
-                    <p className="text-sm font-bold text-green-600">
-                      Your trades are not being copied into the Live Account
-                    </p>
-                  ) : (
+          {isViewedTraderAdmin ? (
+            <Card className="border-primary/20">
+              <CardHeader>
+                <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                  <Activity className="h-4 w-4" />
+                  <span>Master Account</span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Select
+                  value={selectedMasterAccountId ?? "all"}
+                  onValueChange={(v) => setSelectedMasterAccountId(v === "all" ? undefined : v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All accounts" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All accounts</SelectItem>
+                    {masterAccounts?.map((ma: any) => (
+                      <SelectItem key={ma.id} value={ma.id}>
+                        {ma.alias} ({ma.loginAccountNumber})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-primary/20">
+              <CardHeader>
+                <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                  <Activity className="h-4 w-4" />
+                  <span>Account &amp; Copier Configuration</span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {copierInfo ? (
+                  <>
+                    {!copierInfo.isActive ? (
+                      <p className="text-sm font-bold text-green-600">
+                        Your trades are not being copied into the Live Account
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {copierInfo.scaleType === 3 ? (
+                          <>
+                            Each of your trades is going into the Live Account as <span className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</span>
+                          </>
+                        ) : (
+                          <>
+                            Each of your trades are being multiplied by <span className="font-bold text-green-600">{copierInfo.multiplier}x</span> into the Live Account
+                          </>
+                        )}
+                      </p>
+                    )}
                     <p className="text-sm text-muted-foreground">
-                      {copierInfo.scaleType === 3 ? (
-                        <>
-                          Each of your trades is going into the Live Account as <span className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</span>
-                        </>
-                      ) : (
-                        <>
-                          Each of your trades are being multiplied by <span className="font-bold text-green-600">{copierInfo.multiplier}x</span> into the Live Account
-                        </>
-                      )}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    Your maximum open trades: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Your maximum lot size per trade: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
-                  </p>
-                  {riskLimit != null && (
-                    <p className="text-sm text-muted-foreground">
-                      If the equity in your incubator account drops below{' '}
-                      <span className="font-bold text-green-600">${riskLimit.toLocaleString()}</span>,
-                      all trades will be closed. You will need to message an admin to re-enable trading.
-                    </p>
-                  )}
-                  <div className="border-t pt-2 mt-2 space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      Account Balance: <span className="font-bold text-green-600">
-                        {accountBalanceEquity?.balance != null ? formatCurrency(accountBalanceEquity.balance) : 'unavailable'}
-                      </span>
+                      Your maximum open trades: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Account Equity: <span className="font-bold text-green-600">
-                        {accountBalanceEquity?.equity != null ? formatCurrency(accountBalanceEquity.equity) : 'unavailable'}
-                      </span>
+                      Your maximum lot size per trade: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
                     </p>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No copier linked to your account.</p>
-              )}
-            </CardContent>
-          </Card>}
+                    {riskLimit != null && (
+                      <p className="text-sm text-muted-foreground">
+                        If the equity in your incubator account drops below{' '}
+                        <span className="font-bold text-green-600">${riskLimit.toLocaleString()}</span>,
+                        all trades will be closed. You will need to message an admin to re-enable trading.
+                      </p>
+                    )}
+                    <div className="border-t pt-2 mt-2 space-y-1">
+                      <p className="text-sm text-muted-foreground">
+                        Account Balance: <span className="font-bold text-green-600">
+                          {accountBalanceEquity?.balance != null ? formatCurrency(accountBalanceEquity.balance) : 'unavailable'}
+                        </span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Account Equity: <span className="font-bold text-green-600">
+                          {accountBalanceEquity?.equity != null ? formatCurrency(accountBalanceEquity.equity) : 'unavailable'}
+                        </span>
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No copier linked to your account.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* P&L Summary Grid */}
@@ -746,8 +791,8 @@ export default function Dashboard(props: {
               </CardContent>
             </Card>
           )}
-        {/* Trade History — shown inline when embedded in admin view */}
-        {embedded && (
+        {/* Trade History — shown when embedded or viewing admin dashboard */}
+        {showTradeHistory && (
           <div>
             <h2 className="text-2xl font-bold mb-4">Trade History</h2>
             {historyLoading ? (

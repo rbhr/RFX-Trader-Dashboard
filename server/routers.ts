@@ -171,6 +171,13 @@ const viewAsInput = z
   .object({ viewAsTraderId: z.number().int().positive().optional() })
   .optional();
 
+const viewAsWithMasterInput = z
+  .object({
+    viewAsTraderId: z.number().int().positive().optional(),
+    masterAccountId: z.string().optional(),
+  })
+  .optional();
+
 /**
  * Resolves the trader to use for a query. If viewAsTraderId is provided
  * and the caller is admin, returns that trader's data. Otherwise returns
@@ -1075,10 +1082,17 @@ export const appRouter = router({
 
     // Get open positions
     getOpenPositions: tradingProcedure
-      .input(viewAsInput)
+      .input(viewAsWithMasterInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
         const { magicNumber, showAllData, liveAccountNumber } = trader;
+
+        // Admin filtering by master account
+        if (showAllData && input?.masterAccountId) {
+          return metaCopierService.getOpenPositionsFromAccount(
+            input.masterAccountId
+          );
+        }
 
         // If trader has a live account assigned, fetch from that account
         if (liveAccountNumber && !showAllData) {
@@ -1203,9 +1217,19 @@ export const appRouter = router({
 
     // Get all-time positions (aggregated across historical magic numbers & master accounts)
     getAllTimePositions: tradingProcedure
-      .input(viewAsInput)
+      .input(viewAsWithMasterInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+
+        // Admin filtering by master account
+        if (trader.showAllData && input?.masterAccountId) {
+          return metaCopierService.getHistoricalPositionsFromAccount(
+            input.masterAccountId,
+            getAllTimeStart(),
+            getEndOfToday()
+          );
+        }
+
         return fetchAggregatedLifetimePositions(trader);
       }),
 
