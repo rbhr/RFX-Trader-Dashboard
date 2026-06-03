@@ -79,6 +79,9 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   showMyTradesUrl: varchar("showMyTradesUrl", { length: 500 }),
   usdtAddress: varchar("usdtAddress", { length: 255 }),
   usdtNetwork: mysqlEnum("usdtNetwork", ["TRC20", "ERC20"]),
+  // Set once the trader completes onboarding (Telegram linked, password changed,
+  // USDT details set) and their live copiers are activated. One-way: never cleared.
+  liveCopiersActivatedAt: timestamp("liveCopiersActivatedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { getMagicNumbersByTelegramHandle, updateMagicNumber } from "./db";
+import { maybeActivateOnboarding } from "./onboarding";
 
 let bot: TelegramBot | null = null;
 let pollingStarted = false;
@@ -76,6 +77,12 @@ export function startTelegramPolling(): void {
 
           await pollingBot.sendMessage(chatId, welcomeMsg, { parse_mode: "HTML", disable_web_page_preview: true } as any);
           console.log(`[Telegram] ${anyFirstLink ? 'Linked' : 'Re-linked'} chat ID ${chatId} to ${traders.length} trader(s) (@${username})`);
+
+          // Linking Telegram may complete onboarding → activate live copiers.
+          // Idempotent (guarded by liveCopiersActivatedAt); safe to call every /start.
+          for (const t of traders) {
+            await maybeActivateOnboarding(t.id);
+          }
         } else {
           await pollingBot.sendMessage(
             chatId,

@@ -65,6 +65,7 @@ import {
   buildRiskLimitBreachMessage,
   buildAdminRiskLimitAlertMessage,
 } from "./telegram";
+import { maybeActivateOnboarding } from "./onboarding";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
@@ -656,6 +657,9 @@ export const appRouter = router({
         const hashed = await hashPassword(input.newPassword);
         await updateMagicNumber(trader.id, { password: hashed });
 
+        // Password change may complete onboarding → activate live copiers.
+        void maybeActivateOnboarding(trader.id);
+
         return { success: true };
       }),
 
@@ -710,6 +714,9 @@ export const appRouter = router({
         const hashed = await hashPassword(input.newPassword);
         await updateMagicNumber(trader.id, { password: hashed });
 
+        // Password change may complete onboarding → activate live copiers.
+        void maybeActivateOnboarding(trader.id);
+
         return { success: true, requires2FA: false };
       }),
 
@@ -751,6 +758,9 @@ export const appRouter = router({
           usdtAddress: input.usdtAddress,
           usdtNetwork: input.usdtNetwork,
         });
+
+        // Saving USDT details may complete onboarding → activate live copiers.
+        void maybeActivateOnboarding(magicNumberId);
 
         return { success: true };
       }),
@@ -1881,10 +1891,11 @@ export const appRouter = router({
                 const liveCopierResult = await metaCopierService.createCopier({
                   fromAccountId: mcAccountId,
                   toAccountId: liveAccount.accountId,
+                  status: "DISABLED",
                 });
                 if (liveCopierResult.success) {
                   console.log(
-                    `[MC Account Creation] Created copier on live account ${trader.liveAccountNumber}`
+                    `[MC Account Creation] Created copier on live account ${trader.liveAccountNumber} (disabled — enables on onboarding completion)`
                   );
                 } else {
                   console.warn(
