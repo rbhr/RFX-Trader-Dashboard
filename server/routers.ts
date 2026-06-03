@@ -1871,30 +1871,47 @@ export const appRouter = router({
             trailingRiskLimitEnabled: true,
           });
 
-          // Step 4: Delete the temporary copier (we only needed it to get the magic number)
-          if (copierId) {
+          // Step 4: Keep demo copier active (needed for magic number routing)
+
+          // Step 5: Create copier on trader's live account if configured
+          if (trader.liveAccountNumber) {
             try {
-              await metaCopierService.removeCopier(SLAVE_ACCOUNT_ID, copierId);
-              console.log(
-                `[MC Account Creation] Deleted temporary copier ${copierId}`
-              );
+              const liveAccount = await metaCopierService.checkAccountExists(trader.liveAccountNumber);
+              if (liveAccount.exists && liveAccount.accountId) {
+                const liveCopierResult = await metaCopierService.createCopier({
+                  fromAccountId: mcAccountId,
+                  toAccountId: liveAccount.accountId,
+                });
+                if (liveCopierResult.success) {
+                  console.log(
+                    `[MC Account Creation] Created copier on live account ${trader.liveAccountNumber}`
+                  );
+                } else {
+                  console.warn(
+                    `[MC Account Creation] Failed to create copier on live account: ${liveCopierResult.message}`
+                  );
+                }
+              } else {
+                console.warn(
+                  `[MC Account Creation] Live account ${trader.liveAccountNumber} not found in MetaCopier`
+                );
+              }
             } catch (error) {
               console.warn(
-                `[MC Account Creation] Failed to delete copier ${copierId}:`,
+                `[MC Account Creation] Error creating copier on live account:`,
                 error
               );
-              // Don't fail the whole process if copier deletion fails
             }
           }
 
-          // Step 5: Rename MC account to "RFX - <name> - <magic>"
+          // Step 6: Rename MC account to "RFX - <name> - <magic>"
           const newAccountName = `RFX - ${trader.name} - ${realMagic}`;
           await metaCopierService.updateAccountName(
             mcAccountId,
             newAccountName
           );
 
-          // Step 6: Add "RFX Trader" label
+          // Step 7: Add "RFX Trader" label
           await metaCopierService.addAccountLabel(mcAccountId, "RFX Trader");
 
           return {
