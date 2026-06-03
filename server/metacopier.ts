@@ -482,20 +482,52 @@ class MetaCopierService {
         {
           fromAccountId: params.fromAccountId,
           status: { id: 2 }, // Active
-          copyMode: { id: 1 }, // Copy mode (default)
+          scaleType: { id: 4 }, // No scaling
           lotMultiplier: 1.0,
           maxLotSize: 0,
           minLotSize: 0,
           copyStopLoss: true,
           copyTakeProfit: true,
+          copyMagicNumber: true, // use a custom magic number (set below)
           reverseSignals: false,
         }
       );
-      
+
+      const copierId = response.id;
+      const shortId = response.fromAccountShortId;
+
+      // Set the custom magic number to the trader's magic (the source short id)
+      if (copierId && shortId !== undefined && shortId !== null) {
+        try {
+          await this.fetchWithAuth(
+            `/accounts/${params.toAccountId}/copiers/${copierId}`,
+            'PUT',
+            { customMagicNumber: shortId }
+          );
+        } catch (e) {
+          console.warn(
+            `[MetaCopier] Failed to set custom magic number on copier ${copierId}:`,
+            e
+          );
+        }
+      }
+
+      // Add "Skip position if SL or TP missing" feature (type 31)
+      if (copierId) {
+        try {
+          await this.addCopierSkipPositionFeature(params.toAccountId, copierId);
+        } catch (e) {
+          console.warn(
+            `[MetaCopier] Failed to add skip-position feature on copier ${copierId}:`,
+            e
+          );
+        }
+      }
+
       return {
         success: true,
-        copierId: response.id,
-        fromAccountShortId: response.fromAccountShortId,
+        copierId,
+        fromAccountShortId: shortId,
         message: 'Copier created successfully',
       };
     } catch (error: any) {
@@ -505,6 +537,36 @@ class MetaCopierService {
         message: error.response?.data?.message || 'Failed to create copier',
       };
     }
+  }
+
+  /**
+   * Add the "Skip position" feature (type 31) to a copier so positions are
+   * skipped if either SL or TP is missing on the master. Idempotent: does not
+   * add a second copy if a type-31 feature already exists.
+   */
+  async addCopierSkipPositionFeature(
+    toAccountId: string,
+    copierId: string
+  ): Promise<void> {
+    const existing = await this.fetchWithAuth<any[]>(
+      `/accounts/${toAccountId}/copiers/${copierId}/features`,
+      'GET'
+    ).catch(() => [] as any[]);
+    if (existing.some(f => f?.type?.id === 31)) return;
+
+    await this.fetchWithAuth(
+      `/accounts/${toAccountId}/copiers/${copierId}/features`,
+      'POST',
+      {
+        type: { id: 31 },
+        setting: {
+          ifSlNotDefined: true,
+          ifTpNotDefined: true,
+          logicOperatorTpSl: 'OR',
+          symbolsConfiguration: {},
+        },
+      }
+    );
   }
 
   /**
