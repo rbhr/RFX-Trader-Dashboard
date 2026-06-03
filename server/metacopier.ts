@@ -474,14 +474,17 @@ class MetaCopierService {
   async createCopier(params: {
     fromAccountId: string;
     toAccountId: string;
+    status?: 'ACTIVE' | 'DISABLED' | 'MANAGE';
   }): Promise<{ success: boolean; copierId?: string; fromAccountShortId?: string; message?: string }> {
     try {
+      const statusIdMap: Record<string, number> = { ACTIVE: 2, DISABLED: 3, MANAGE: 4 };
+      const statusId = statusIdMap[params.status ?? 'ACTIVE'];
       const response = await this.fetchWithAuth<any>(
         `/accounts/${params.toAccountId}/copiers`,
         'POST',
         {
           fromAccountId: params.fromAccountId,
-          status: { id: 2 }, // Active
+          status: { id: statusId }, // default Active; DISABLED until onboarding complete
           scaleType: { id: 4 }, // No scaling
           lotMultiplier: 1.0,
           maxLotSize: 0,
@@ -825,6 +828,41 @@ class MetaCopierService {
 }
 
 export const metaCopierService = new MetaCopierService();
+
+/**
+ * Enable (set ACTIVE) all live copiers where this trader is the source — i.e.
+ * every copier on any account that copies from the trader's MetaCopier
+ * (incubator) account. Used when a trader finishes onboarding. Idempotent:
+ * enabling an already-active copier is a harmless no-op (this also covers the
+ * trader's demo/slave copier, which is already active). Per-copier failures are
+ * logged and skipped so one bad copier doesn't abort the rest.
+ */
+export async function enableTraderLiveCopiers(trader: {
+  mcAccountId?: string | null;
+  isActive?: boolean | null;
+  magicNumber?: string | null;
+}): Promise<{ enabled: number; skipped: boolean; reason?: string }> {
+  if (!trader.isActive) return { enabled: 0, skipped: true, reason: 'inactive' };
+  if (!trader.mcAccountId) return { enabled: 0, skipped: true, reason: 'no-mc-account' };
+
+  const copiers = await metaCopierService.getCopiersBySourceAccount(trader.mcAccountId);
+  let enabled = 0;
+  for (const c of copiers) {
+    try {
+      await metaCopierService.updateCopierStatus(c.toAccountId, c.id, 'ACTIVE');
+      enabled++;
+    } catch (e) {
+      console.warn(
+        `[MetaCopier] enableTraderLiveCopiers: failed to enable copier ${c.id} on ${c.toAccountId}:`,
+        e
+      );
+    }
+  }
+  console.log(
+    `[MetaCopier] enableTraderLiveCopiers: enabled ${enabled}/${copiers.length} copier(s) for magic ${trader.magicNumber}`
+  );
+  return { enabled, skipped: false };
+}
 
 // P&L calculation helper
 export function calculatePnL(positions: Position[]): number {
