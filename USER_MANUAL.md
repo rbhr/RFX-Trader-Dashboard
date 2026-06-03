@@ -12,7 +12,7 @@
 
 ### Logging In
 
-1. Open the dashboard URL in your browser
+1. Open the dashboard at **https://tradersdash.rftrust.co/** in your browser
 2. Enter your **Magic Number** (your unique trader identifier)
 3. Enter your **Password**
 4. Optionally check **Remember Me** to save your magic number for next time
@@ -278,6 +278,6 @@ The trader receives a notification via Telegram and/or in-app.
 The system uses **@RFXTraderBot** for notifications:
 
 - Traders connect by entering their handle in Settings and sending `/start` to the bot
-- The bot sends a personalised welcome message with their profit share rate and dashboard link
+- The bot replies with a welcome message listing the linked account(s) and the dashboard link, **https://tradersdash.rftrust.co/** (the same link is included when re-linking)
 - Admins can send direct messages, broadcast messages, and the system sends automatic notifications for breaches and payments
 - Green/grey dots in the Telegram column indicate connection status
