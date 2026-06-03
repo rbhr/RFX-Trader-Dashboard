@@ -1865,7 +1865,7 @@ export const appRouter = router({
           // Step 3: Update database with new magic number, password, MC account ID, and trailing risk limit defaults
           await updateMagicNumber(trader.id, {
             magicNumber: realMagic,
-            password: realMagic,
+            password: await hashPassword(realMagic),
             mcAccountId: mcAccountId,
             trailingRiskLimit: "1000",
             trailingRiskLimitEnabled: true,
