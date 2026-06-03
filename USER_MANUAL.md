@@ -232,6 +232,18 @@ Each master (live) account section shows:
 To assign: check the traders and click **Save**.
 To unassign: click the X on a trader badge and confirm.
 
+#### Copier Activation & the Onboarding Gate
+
+New traders' live copiers are created **Disabled** and stay that way until the trader completes onboarding. A trader's live copiers activate **automatically** — and the bot sends them their Exness/MT5 login details — once **all** of the following are true:
+
+1. **Telegram linked** — they sent `/start` to @RFXTraderBot
+2. **Password changed** — no longer the default (their magic number)
+3. **USDT set** — both address and network saved
+
+The check runs whenever the trader links Telegram, changes their password, or saves USDT details — so activation happens the moment the last step is done. It is **one-way**: once a trader has been activated, later edits (e.g. clearing their USDT address) won't disable their copiers or re-send the login message.
+
+Admins can still override copier state at any time via **View Copiers** on the trader row (Disable / Manage / Activate). A copier you manually disable (e.g. for a breach or dispute) stays disabled — the onboarding gate never re-enables an already-activated trader.
+
 ### Risk Limit Breaches
 
 Monitors traders whose equity has dropped below their configured risk limit.
