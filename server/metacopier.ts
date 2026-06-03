@@ -189,7 +189,12 @@ class MetaCopierService {
   async checkAccountExists(accountNumber: string): Promise<{ exists: boolean; accountId?: string }> {
     try {
       const accounts = await this.getCachedAccounts();
-      const account = accounts.find(acc => acc.login === accountNumber || acc.accountNumber === accountNumber);
+      const account = accounts.find(
+        acc =>
+          acc.loginAccountNumber === accountNumber ||
+          acc.login === accountNumber ||
+          acc.accountNumber === accountNumber
+      );
       
       if (account) {
         return { exists: true, accountId: account.id };
