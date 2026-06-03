@@ -20,6 +20,14 @@
 
 You will be redirected to the Trader Dashboard or the Admin Portal depending on your role.
 
+### Two-Factor Verification
+
+If you sign in from a **new device** and have Telegram connected, a 6-digit verification code is sent to your Telegram. Enter it to complete login. Recognised devices don't ask again. (Admins are exempt.)
+
+### Forgot Password
+
+Use **Forgot Password** on the login screen: enter your magic number, receive a code via Telegram, then set a new password. Passwords are stored hashed — support cannot read them back, only reset them. You can also change your password from Settings (also confirmed with a Telegram code).
+
 ---
 
 ## Trader Guide

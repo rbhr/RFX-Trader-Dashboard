@@ -2,8 +2,8 @@
 
 ---
 
-## 🚀 RELEASE MILESTONE - v1.5 (Planned)
-**Status:** 🔵 In Planning
+## 🚀 RELEASE MILESTONE - v1.5
+**Status:** 🟢 Shipped — current version **v1.5.10**. Remaining unchecked items below are still open for a future release.
 
 ### New Admin View
 - [ ] **Admin Open Trades** — table showing all live open trades across all traders, with standard trade columns (Symbol, Type, Volume, Open Price, Current Price, Profit) plus Magic Number and Trader Name
@@ -11,14 +11,14 @@
 - [ ] **Trader's Dashboard for Admin** — admin can view any individual trader's dashboard (P&L, open positions, account & copier configuration) as if they were that trader, accessible from the Manage Traders table
 
 ### Telegram Improvements
-- [ ] **Telegram welcome message** — when a trader first sends /start to @RFXTraderBot, reply with their name, profit share rate, and a link to the dashboard (personalised onboarding)
-- [ ] **Telegram handle in admin Edit Trader dialog** — let admins set or correct a trader's handle without requiring the trader to log in first
+- [x] **Telegram welcome message** — when a trader first sends /start to @RFXTraderBot, reply with their name, profit share rate, and a link to the dashboard (personalised onboarding) — shipped in v1.4.8
+- [x] **Telegram handle in admin Edit Trader dialog** — let admins set or correct a trader's handle without requiring the trader to log in first
 
 ### Security
-- [ ] **Hash magic number passwords** — migrate plaintext passwords in `magic_numbers` table to bcrypt hashes; update login procedure to verify with `bcrypt.compare()`; include a one-time migration script to hash existing passwords
+- [x] **Hash magic number passwords** — passwords in `magic_numbers` are bcrypt-hashed (12 rounds); login verifies with `bcrypt.compare()`; `hash-existing-passwords.mjs` migrated the existing rows. Also added Telegram-delivered 2FA for login (new device), password reset, and password change.
 
 ### Data & Reporting
-- [ ] **Export Manage Traders to CSV** — download button that exports currently visible columns (respecting column visibility toggle) to a CSV file
+- [ ] **Export Manage Traders to CSV** — download button that exports currently visible columns (respecting column visibility toggle) to a CSV file (note: payment history CSV export is done; the Manage Traders table export is not)
 - [ ] **Trader risk limit change history** — log every risk limit update (old value, new value, changed by, timestamp) and surface it as an audit trail inside the Edit Trader dialog
 
 ---

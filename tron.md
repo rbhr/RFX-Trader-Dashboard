@@ -1,5 +1,7 @@
 # USDT-TRC20 Custodial Wallet Integration
 
+> **Status: ✅ Implemented** — see `server/tron.ts`. This document is the original design spec, kept for reference.
+
 ## Overview
 
 Add a server-side custodial USDT-TRC20 wallet to the RFX Trader Dashboard, enabling outbound USDT payments to trader wallet addresses. The private key lives exclusively on the server. The existing `payments` table and Telegram notification system are reused directly.

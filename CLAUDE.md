@@ -18,8 +18,9 @@ pnpm db:push      # Generate + apply database migrations (Drizzle Kit)
 
 - **Frontend**: React 19, Wouter (routing), TanStack Query (server state), shadcn/ui + Tailwind CSS
 - **Backend**: Express + tRPC 11 (type-safe API), Drizzle ORM (MySQL)
-- **Services**: MetaCopier API integration, Telegram bot, server-side breach monitor (1-min interval)
-- **Auth**: JWT cookies — trader auth via magic number + password, admin auth via OAuth
+- **Services**: MetaCopier API integration, Telegram bot, server-side breach monitor (1-min interval), trailing risk-limit monitor, custodial USDT payout wallets (TRC20 + ERC20)
+- **Auth**: JWT cookies — trader auth via magic number + bcrypt-hashed password (12 rounds), with Telegram-delivered 2FA for login/password reset/change; admin auth via OAuth
+- **Traders**: each `magic_numbers` row has a `manager` (e.g. `RFX`, `RFX - Zarab`) and a `liveAccountNumber` (the MetaCopier master/live account their trades copy to)
 
 ## Project Structure
 
@@ -37,8 +38,10 @@ drizzle/          Database schema (schema.ts) and migration files
 - `server/db.ts` — Database query helpers
 - `server/metacopier.ts` — MetaCopier API client
 - `server/breachMonitor.ts` — Server-side risk limit monitor
+- `server/trailingRiskLimit.ts` — Trailing risk-limit monitor
 - `server/telegram.ts` — Telegram bot integration
-- `drizzle/schema.ts` — All table definitions
+- `server/tron.ts` / `server/erc20.ts` — Custodial USDT payout wallets (TRC20 / EVM)
+- `drizzle/schema.ts` — All table definitions (11 tables)
 
 ## Deployment
 
