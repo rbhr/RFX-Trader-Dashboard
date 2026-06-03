@@ -418,19 +418,19 @@ class MetaCopierService {
    */
   async updateCopierStatus(toAccountId: string, copierId: string, status: 'ACTIVE' | 'DISABLED' | 'MANAGE'): Promise<void> {
     try {
-      // Map status to MetaCopier status IDs
-      const statusMap: Record<string, number> = {
-        'ACTIVE': 2,    // Active
-        'DISABLED': 3,  // Disabled
-        'MANAGE': 4,    // Manage (no new trades)
-      };
-      
+      // Copier enable/disable is controlled by the `active` boolean (and
+      // `monitorOnly` for Manage). The API silently ignores a `status: { id }`
+      // field on copiers, so we must set these booleans.
+      const body =
+        status === 'DISABLED'
+          ? { active: false }
+          : status === 'MANAGE'
+            ? { active: true, monitorOnly: true }
+            : { active: true, monitorOnly: false }; // ACTIVE
       await this.fetchWithAuth(
         `/accounts/${toAccountId}/copiers/${copierId}`,
         'PUT',
-        {
-          status: { id: statusMap[status] }
-        }
+        body
       );
     } catch (error) {
       console.error('[MetaCopier] Error updating copier status:', error);
@@ -477,14 +477,11 @@ class MetaCopierService {
     status?: 'ACTIVE' | 'DISABLED' | 'MANAGE';
   }): Promise<{ success: boolean; copierId?: string; fromAccountShortId?: string; message?: string }> {
     try {
-      const statusIdMap: Record<string, number> = { ACTIVE: 2, DISABLED: 3, MANAGE: 4 };
-      const statusId = statusIdMap[params.status ?? 'ACTIVE'];
       const response = await this.fetchWithAuth<any>(
         `/accounts/${params.toAccountId}/copiers`,
         'POST',
         {
           fromAccountId: params.fromAccountId,
-          status: { id: statusId }, // default Active; DISABLED until onboarding complete
           scaleType: { id: 4 }, // No scaling
           lotMultiplier: 1.0,
           maxLotSize: 0,
@@ -499,16 +496,20 @@ class MetaCopierService {
       const copierId = response.id;
       const shortId = response.fromAccountShortId;
 
-      // The create (POST) endpoint ignores scaleType and copyMagicNumber in the
-      // body — copiers come back as scaleType 1 (Balance) and copyMagicNumber
-      // false regardless. They must be set via a follow-up PUT. copyMagicNumber
-      // and customMagicNumber must be sent together: PUTting copyMagicNumber
-      // alone clears customMagicNumber.
+      // The create (POST) endpoint ignores scaleType, copyMagicNumber and the
+      // active/monitorOnly state — copiers come back as scaleType 1 (Balance),
+      // copyMagicNumber false, and active. They must be set via a follow-up PUT.
+      // copyMagicNumber and customMagicNumber must be sent together: PUTting
+      // copyMagicNumber alone clears customMagicNumber.
       if (copierId) {
         try {
+          const status = params.status ?? 'ACTIVE';
           const settings: Record<string, unknown> = {
             scaleType: { id: 4 }, // No scaling
             copyMagicNumber: true,
+            // Enable/disable is the `active` boolean (status:{id} is ignored).
+            active: status !== 'DISABLED',
+            monitorOnly: status === 'MANAGE',
           };
           // Set the custom magic number to the trader's magic (the source short id)
           if (shortId !== undefined && shortId !== null) {
