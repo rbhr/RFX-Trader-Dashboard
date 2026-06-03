@@ -1862,11 +1862,13 @@ export const appRouter = router({
           const realMagic = copierResult.fromAccountShortId;
           const copierId = copierResult.copierId;
 
-          // Step 3: Update database with new magic number, password, and MC account ID
+          // Step 3: Update database with new magic number, password, MC account ID, and trailing risk limit defaults
           await updateMagicNumber(trader.id, {
             magicNumber: realMagic,
             password: realMagic,
             mcAccountId: mcAccountId,
+            trailingRiskLimit: "1000",
+            trailingRiskLimitEnabled: true,
           });
 
           // Step 4: Delete the temporary copier (we only needed it to get the magic number)

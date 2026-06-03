@@ -432,8 +432,8 @@ export default function ManageTraders() {
     setFormData({
       magicNumber: "99999",
       name: "",
-      password: "",
-      profitShare: 0.35,
+      password: "99999",
+      profitShare: 0.30,
       mtAccount: "",
       mtServer: "",
       mtPassword: "",

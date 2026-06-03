@@ -589,7 +589,7 @@ class MetaCopierService {
       const riskLimitData = {
         riskType: { id: 4 }, // Actual - must be object format
         riskLimit: 0.0, // Required field - relative risk limit
-        absoluteRiskLimit: 300.0, // Absolute dollar amount
+        absoluteRiskLimit: 1000.0, // Absolute dollar amount
         fulfillSeconds: 1, // Close positions within 1 second
         closeAllOpenPositions: true,
         active: true
