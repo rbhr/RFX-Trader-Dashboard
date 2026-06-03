@@ -103,10 +103,17 @@ async function checkTrailingRiskLimits(): Promise<void> {
             );
           }
         }
-      } catch (traderError) {
+      } catch (traderError: any) {
+        // MetaCopier's /information endpoint intermittently fails when a demo
+        // account is momentarily disconnected (common right after restart).
+        // This is transient and harmless — the trader is simply skipped this
+        // cycle — so log a concise line instead of a full AxiosError stack.
+        const status = traderError?.response?.status;
         console.warn(
-          `[TrailingRiskLimit] Error checking ${trader.name} (${trader.magicNumber}):`,
-          traderError
+          `[TrailingRiskLimit] Skipped ${trader.name} (${trader.magicNumber}): ` +
+            (status
+              ? `MetaCopier returned ${status} (transient, will retry next cycle)`
+              : traderError?.message || "unknown error")
         );
       }
     }

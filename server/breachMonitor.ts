@@ -95,11 +95,17 @@ async function checkAllTraders(): Promise<void> {
             content: `Trader ${trader.name} (Magic: ${trader.magicNumber}) breached their risk limit. Equity: $${equity.toFixed(2)}, Limit: $${riskLimit.toFixed(2)}.`,
           }).catch((e) => console.warn(`[BreachMonitor] Owner notify failed:`, e));
         }
-      } catch (traderError) {
-        // Don't let one trader's error stop the whole monitor
+      } catch (traderError: any) {
+        // Don't let one trader's error stop the whole monitor. MetaCopier's
+        // /information endpoint intermittently fails when a demo account is
+        // momentarily disconnected — transient and harmless (trader skipped
+        // this cycle) — so log a concise line, not a full AxiosError stack.
+        const status = traderError?.response?.status;
         console.warn(
-          `[BreachMonitor] Error checking trader ${trader.name} (${trader.magicNumber}):`,
-          traderError
+          `[BreachMonitor] Skipped ${trader.name} (${trader.magicNumber}): ` +
+            (status
+              ? `MetaCopier returned ${status} (transient, will retry next cycle)`
+              : traderError?.message || "unknown error")
         );
       }
     }
