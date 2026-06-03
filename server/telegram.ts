@@ -70,6 +70,7 @@ export function startTelegramPolling(): void {
             : (
                 `✅ <b>Re-linked!</b>\n\n` +
                 `Your Telegram is connected to ${traders.length} account(s):\n${accountList}\n\n` +
+                `• 📊 <b>Dashboard:</b> <a href="${dashboardUrl}">${dashboardUrl}</a>\n\n` +
                 `Notifications will continue to be delivered here.`
               );
 
