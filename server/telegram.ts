@@ -55,7 +55,7 @@ export function startTelegramPolling(): void {
             await updateMagicNumber(t.id, { telegramChatId: String(chatId) });
           }
 
-          const dashboardUrl = "https://rfxtrader.manus.space";
+          const dashboardUrl = "https://tradersdash.rftrust.co/";
           const accountList = traders
             .map((t) => `• [Magic ${t.magicNumber}] ${t.name}`)
             .join("\n");
