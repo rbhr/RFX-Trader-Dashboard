@@ -251,8 +251,8 @@ export default function ManageTraders() {
   const [formData, setFormData] = useState({
     magicNumber: "99999",
     name: "",
-    password: "",
-    profitShare: 0.35,
+    password: "99999",
+    profitShare: 0.30,
     mtAccount: "",
     mtServer: "",
     mtPassword: "",
@@ -1627,7 +1627,7 @@ export default function ManageTraders() {
                     id="magicNumber"
                     value={formData.magicNumber}
                     onChange={e =>
-                      setFormData({ ...formData, magicNumber: e.target.value })
+                      setFormData({ ...formData, magicNumber: e.target.value, password: e.target.value })
                     }
                     placeholder="99999"
                     className="text-muted-foreground"
