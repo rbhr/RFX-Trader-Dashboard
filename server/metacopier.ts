@@ -414,24 +414,39 @@ class MetaCopierService {
   }
 
   /**
-   * Update copier status
+   * Read-modify-write a copier: the copier PUT endpoint REPLACES the whole
+   * config — any field omitted reverts to its default (scaleType -> Balance,
+   * copyMagicNumber -> false, customMagicNumber -> cleared, etc.). So we GET the
+   * current copier and PUT it back with only `changes` overridden, preserving
+   * every other setting.
+   */
+  private async patchCopier(toAccountId: string, copierId: string, changes: Record<string, unknown>): Promise<void> {
+    const current = await this.fetchWithAuth<any>(
+      `/accounts/${toAccountId}/copiers/${copierId}`,
+      'GET'
+    );
+    await this.fetchWithAuth(
+      `/accounts/${toAccountId}/copiers/${copierId}`,
+      'PUT',
+      { ...current, ...changes }
+    );
+  }
+
+  /**
+   * Update copier status. Enable/disable is the `active` boolean (and
+   * `monitorOnly` for Manage) — the API ignores a `status: { id }` field on
+   * copiers. Uses read-modify-write so toggling never wipes the copier's other
+   * settings (scaleType, copyMagicNumber, customMagicNumber, …).
    */
   async updateCopierStatus(toAccountId: string, copierId: string, status: 'ACTIVE' | 'DISABLED' | 'MANAGE'): Promise<void> {
     try {
-      // Copier enable/disable is controlled by the `active` boolean (and
-      // `monitorOnly` for Manage). The API silently ignores a `status: { id }`
-      // field on copiers, so we must set these booleans.
-      const body =
+      const changes =
         status === 'DISABLED'
           ? { active: false }
           : status === 'MANAGE'
             ? { active: true, monitorOnly: true }
             : { active: true, monitorOnly: false }; // ACTIVE
-      await this.fetchWithAuth(
-        `/accounts/${toAccountId}/copiers/${copierId}`,
-        'PUT',
-        body
-      );
+      await this.patchCopier(toAccountId, copierId, changes);
     } catch (error) {
       console.error('[MetaCopier] Error updating copier status:', error);
       throw new Error('Failed to update copier status');
@@ -499,14 +514,16 @@ class MetaCopierService {
       // The create (POST) endpoint ignores scaleType, copyMagicNumber and the
       // active/monitorOnly state — copiers come back as scaleType 1 (Balance),
       // copyMagicNumber false, and active. They must be set via a follow-up PUT.
-      // copyMagicNumber and customMagicNumber must be sent together: PUTting
-      // copyMagicNumber alone clears customMagicNumber.
+      // Use read-modify-write (patchCopier) so the PUT doesn't wipe the other
+      // settings the POST applied (copyStopLoss/copyTakeProfit, etc.).
       if (copierId) {
         try {
           const status = params.status ?? 'ACTIVE';
           const settings: Record<string, unknown> = {
             scaleType: { id: 4 }, // No scaling
             copyMagicNumber: true,
+            copyStopLoss: true,
+            copyTakeProfit: true,
             // Enable/disable is the `active` boolean (status:{id} is ignored).
             active: status !== 'DISABLED',
             monitorOnly: status === 'MANAGE',
@@ -515,11 +532,7 @@ class MetaCopierService {
           if (shortId !== undefined && shortId !== null) {
             settings.customMagicNumber = shortId;
           }
-          await this.fetchWithAuth(
-            `/accounts/${params.toAccountId}/copiers/${copierId}`,
-            'PUT',
-            settings
-          );
+          await this.patchCopier(params.toAccountId, copierId, settings);
         } catch (e) {
           console.warn(
             `[MetaCopier] Failed to set scale/magic number on copier ${copierId}:`,
@@ -830,13 +843,17 @@ class MetaCopierService {
 
 export const metaCopierService = new MetaCopierService();
 
+// The fixed demo/slave account used for magic-number routing. Its copiers must
+// never be toggled by trader-facing flows.
+const SLAVE_ACCOUNT_ID = 'b94cabc8-946d-4a99-9b81-286f8553cc63';
+
 /**
- * Enable (set ACTIVE) all live copiers where this trader is the source — i.e.
- * every copier on any account that copies from the trader's MetaCopier
- * (incubator) account. Used when a trader finishes onboarding. Idempotent:
- * enabling an already-active copier is a harmless no-op (this also covers the
- * trader's demo/slave copier, which is already active). Per-copier failures are
- * logged and skipped so one bad copier doesn't abort the rest.
+ * Enable (set ACTIVE) all LIVE copiers where this trader is the source — every
+ * copier on any account that copies from the trader's MetaCopier (incubator)
+ * account, EXCLUDING the demo/slave account (left alone for magic routing).
+ * Used when a trader finishes onboarding. Idempotent: enabling an already-active
+ * copier is a harmless no-op. Per-copier failures are logged and skipped so one
+ * bad copier doesn't abort the rest.
  */
 export async function enableTraderLiveCopiers(trader: {
   mcAccountId?: string | null;
@@ -849,6 +866,7 @@ export async function enableTraderLiveCopiers(trader: {
   const copiers = await metaCopierService.getCopiersBySourceAccount(trader.mcAccountId);
   let enabled = 0;
   for (const c of copiers) {
+    if (c.toAccountId === SLAVE_ACCOUNT_ID) continue; // never touch the demo copier
     try {
       await metaCopierService.updateCopierStatus(c.toAccountId, c.id, 'ACTIVE');
       enabled++;
