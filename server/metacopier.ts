@@ -317,7 +317,7 @@ class MetaCopierService {
         {
           type: { id: 37 },
           setting: {
-            maxLotSizeThreshold: 0.1,
+            maxLotSizeThreshold: 0.01,
             enabled: true,
             aggregatePerSymbol: false,
             maxOpenTimeSeconds: 0,
