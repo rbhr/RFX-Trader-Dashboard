@@ -1,207 +1,183 @@
 # RFX Trader Dashboard
 
-A secure web-based P&L tracking dashboard for MetaCopier.io trading accounts with magic number authentication and real-time position monitoring.
+A full-stack TypeScript P&L dashboard for RFX traders running on MetaCopier.io. Traders log in with a magic number + password to view their live P&L, open positions, and trade history; admins manage traders, MetaCopier copiers, master/live account assignments, risk limits, and USDT payouts. Built with tRPC for end-to-end type safety.
 
 ## Features
 
 ### Authentication & Security
-- **Magic Number Authentication**: Secure login system using trading account identifiers
-- **Session Management**: JWT-based sessions with configurable expiration (7-30 days)
-- **Remember Me**: Optional credential persistence using localStorage
-- **Password Protection**: Individual password support per magic number
+- **Magic number authentication** — traders log in with their trading account identifier + password
+- **bcrypt password hashing** — passwords are stored as bcrypt hashes (12 rounds), never plaintext
+- **Two-factor authentication** — short-lived codes delivered via Telegram for login, password reset, and password change
+- **Admin OAuth** — admin portal authenticates via OAuth
+- **JWT session cookies** — secure HTTP-only cookies with configurable expiration
 
-### Dashboard
-- **Real-time P&L Tracking**: 
-  - Today's total P&L (realized + floating)
-  - Weekly, monthly, and all-time performance metrics
-  - Automatic refresh every 30-60 seconds
-- **Profit Share Calculation**: Displays 35% profit share on positive weekly P&L
-- **Open Positions**: Live view of active trades with:
-  - Symbol, type (BUY/SELL), volume
-  - Current profit with color-coded indicators
-  - Entry price and current status
+### Trader Dashboard
+- **Real-time P&L** — today (realized + floating), weekly, monthly, and all-time
+- **Profit share** — displays the trader's share of positive weekly P&L (default 35%)
+- **Open positions** — live view of active trades with color-coded P&L
+- **Trade history** — historical trades grouped by close date, expandable for detail
+- **Account & copier configuration** — scale type, max open trades, max lot size, risk limit, balance, equity
+- **Notifications** — in-app bell for breaches, payments, and admin broadcasts
+- **Settings** — Telegram handle connection and USDT payout details (TRC20/ERC20)
 
-### Trade History
-- **Date-Grouped View**: Historical trades organized by close date
-- **Expandable Sections**: Click to view detailed trade information
-- **Comprehensive Details**: 
-  - Entry and exit prices
-  - Trade duration and timestamps
-  - Profit/loss with swap and commission
+### Admin Portal
+- **Manage Traders** — full CRUD, inline profit-share editing, active toggle, sortable/sticky columns with persisted visibility, manager filter
+- **MetaCopier integration** — create MC accounts (auto magic-number retrieval, naming, features, risk limits), view/manage copiers (Disable / Manage / Activate / Remove)
+- **Master account assignment** — assign/unassign traders to live ("master") accounts, which sets `liveAccountNumber`
+- **Risk limit breaches** — server-side monitor; active/resolved breach tables with single and bulk re-enable
+- **Payments** — record USDT payouts, transmission-proof dialog with blockchain explorer links, CSV export
+- **Messaging** — direct and broadcast messages over Telegram + in-app
 
-### User Experience
-- **Responsive Design**: Optimized for desktop, tablet, and mobile devices
-- **Manual Refresh**: Pull-to-refresh functionality on all data views
-- **Loading States**: Skeleton loaders during data fetching
-- **Empty States**: Helpful messages when no data is available
-- **Error Handling**: User-friendly error messages with retry options
+### Server-side services
+- **Breach monitor** (`breachMonitor.ts`) — checks every trader's equity against their risk limit every 1 minute
+- **Trailing risk limit** (`trailingRiskLimit.ts`) — trailing risk limit monitor
+- **Telegram bot** (`telegram.ts`) — `@RFXTraderBot`, handles `/start`, notifications, 2FA codes
+- **Custodial USDT wallets** (`tron.ts`, `erc20.ts`) — server-side TRC20 and ERC20/EVM wallets for outbound payouts; private keys live only on the server
 
 ## Technology Stack
 
-### Backend
-- **Runtime**: Node.js with Express
-- **API Framework**: tRPC 11 for type-safe API calls
-- **Database**: MySQL/TiDB with Drizzle ORM
-- **Authentication**: Custom session management with secure cookies
-- **External API**: MetaCopier.io REST API integration
-
-### Frontend
-- **Framework**: React 19 with TypeScript
-- **Routing**: Wouter for lightweight client-side routing
-- **State Management**: TanStack Query (React Query) for server state
-- **UI Components**: shadcn/ui with Radix UI primitives
-- **Styling**: Tailwind CSS 4 with custom trading theme
-- **Icons**: Lucide React
+- **Frontend**: React 19 + TypeScript, Wouter (routing), TanStack Query (server state), shadcn/ui + Radix on Tailwind CSS
+- **Backend**: Node.js + Express, tRPC 11, Drizzle ORM (MySQL 8.0)
+- **External**: MetaCopier.io REST API, Telegram Bot API, TRON (`tronweb`) + EVM (`ethers`) for payouts
+- **Auth**: bcrypt, JWT cookies, OAuth (admin)
 
 ## Project Structure
 
 ```
-rfx-trader-web/
-├── client/                 # Frontend application
-│   └── src/
-│       ├── pages/         # Page components (Login, Dashboard, History)
-│       ├── hooks/         # Custom React hooks (useTradingSession)
-│       ├── components/    # Reusable UI components
-│       └── lib/           # tRPC client configuration
-├── server/                # Backend application
-│   ├── routers.ts        # tRPC router definitions
-│   ├── db.ts             # Database query helpers
-│   ├── metacopier.ts     # MetaCopier API service
-│   └── *.test.ts         # Backend tests
-├── drizzle/              # Database schema and migrations
-│   └── schema.ts         # Table definitions
-└── scripts/              # Utility scripts
-    └── seed-magic-numbers.mjs  # Database seeding
+client/src/        Frontend (pages, components, hooks, contexts, lib)
+server/            Express backend
+  routers.ts       All tRPC procedures (auth, trading, admin)
+  db.ts            Drizzle query helpers
+  metacopier.ts    MetaCopier API client
+  breachMonitor.ts Server-side risk-limit monitor (1-min interval)
+  trailingRiskLimit.ts  Trailing risk-limit monitor
+  telegram.ts      Telegram bot integration
+  tron.ts          Custodial TRC20 wallet
+  erc20.ts         Custodial ERC20/EVM wallet
+  *.test.ts        Backend tests (Vitest), next to source
+  _core/           Server bootstrap (Express init, tRPC config, env vars, OAuth)
+shared/            Shared types and constants
+drizzle/           schema.ts (table definitions) + migration files
 ```
 
-## API Integration
+## Commands
 
-### MetaCopier.io Endpoints Used
-
-1. **Get Open Positions**
-   - Endpoint: `/accounts/{accountId}/positions`
-   - Refresh: Every 30 seconds
-   - Filters: By magic number
-
-2. **Get Historical Positions**
-   - Endpoint: `/accounts/{accountId}/history/positions`
-   - Parameters: start date, end date
-   - Refresh: Every 60 seconds (varies by time range)
-   - Filters: By magic number and date range
-
-3. **Get Account Information**
-   - Endpoint: `/accounts/{accountId}/information`
-   - Returns: Balance, equity, margin, etc.
-   - Refresh: Every 30 seconds
-
-### P&L Calculation
-
-```typescript
-P&L = Σ(profit + swap + commission)
+```bash
+pnpm dev          # Dev server (Express + Vite HMR) on port 3000
+pnpm build        # Build frontend (Vite) + bundle server (esbuild)
+pnpm start        # Run production build
+pnpm test         # Backend tests (Vitest)
+pnpm check        # TypeScript type checking (no emit)
+pnpm format       # Prettier
+pnpm db:push      # Generate + apply DB migrations (Drizzle Kit)
 ```
-
-- **Floating P&L**: Sum of open positions
-- **Realized P&L**: Sum of closed positions in time period
-- **Total P&L**: Floating + Realized
 
 ## Database Schema
 
-### Magic Numbers Table
-Stores trading account configurations:
-- `magicNumber`: Unique identifier
-- `name`: Friendly display name
-- `password`: Authentication credential
-- `profitShare`: Percentage (default 35%)
-- `showAllData`: Admin flag for viewing all accounts
-- `isActive`: Enable/disable account
+11 tables (`drizzle/schema.ts`):
 
-### Trading Sessions Table
-Tracks active user sessions:
-- `sessionToken`: Unique session identifier
-- `magicNumberId`: Associated magic number
-- `ipAddress`: Client IP for security
-- `userAgent`: Browser information
-- `expiresAt`: Session expiration timestamp
+| Table | Purpose |
+|-------|---------|
+| `users` | Admin / OAuth users backing the auth flow |
+| `magic_numbers` | Trader configs: magic number, hashed password, profit share, MT & MetaCopier details, manager, live account, Telegram, profit tracking, risk limit, USDT payout info |
+| `trading_sessions` | Active trader sessions (token, IP, user agent, expiry) |
+| `copier_templates` | Reusable copier configuration templates |
+| `payments` | USDT payout records (amount, hash, network, fee) |
+| `notifications` | In-app notifications |
+| `risk_limit_breaches` | Equity-below-limit breach history |
+| `trader_previous_magic_numbers` | Historical magic numbers per trader |
+| `trader_previous_master_accounts` | Historical live/master accounts per trader |
+| `two_factor_codes` | Short-lived Telegram-delivered 2FA codes |
+| `admin_settings` | Key-value admin settings store |
 
 ## Configuration
 
-### Environment Variables
+Environment variables are defined in `server/_core/env.ts` and set via `.env` (see the keys below). Required:
 
-Required secrets (automatically configured):
-- `METACOPIER_API_KEY`: MetaCopier API authentication key
-- `METACOPIER_ACCOUNT_ID`: MetaCopier account UUID
-- `DATABASE_URL`: MySQL connection string
-- `JWT_SECRET`: Session signing secret
+```env
+# Database
+DATABASE_URL=mysql://rfx:PASSWORD@mysql:3306/rfx_trader
+MYSQL_ROOT_PASSWORD=...
+MYSQL_PASSWORD=...
 
-### Magic Numbers
+# Auth
+JWT_SECRET=...
+VITE_APP_ID=...
+OAUTH_SERVER_URL=...
+OWNER_OPEN_ID=...
 
-Magic numbers are seeded from the original iOS app configuration:
-- 16 pre-configured trading accounts
-- Default password: `VV8UUFa3p_B-ZcY`
-- One admin account (Richard #6868) with custom password
-- All accounts have 35% profit share
+# MetaCopier
+METACOPIER_API_KEY=...
+METACOPIER_ACCOUNT_ID=...
+
+# Telegram
+TELEGRAM_BOT_TOKEN=...
+
+# Domain (Caddy auto-HTTPS)
+DOMAIN=tradersdash.rftrust.co
+
+# Payouts — TRC20 (TRON)
+TRON_PRIVATE_KEY=...
+TRON_FULL_NODE=...
+TRON_USDT_CONTRACT=...
+GASFREE_API_KEY=...
+GASFREE_API_SECRET=...
+
+# Payouts — ERC20 (EVM)
+EVM_PRIVATE_KEY=...
+EVM_RPC_URL=...
+EVM_USDT_CONTRACT=...
+EVM_CHAIN_NAME=...
+```
+
+## Deployment
+
+Runs as Docker Compose (`rfx-app`, `mysql`, `caddy`) on Oracle Cloud. Caddy provides automatic HTTPS for **tradersdash.rftrust.co**.
+
+```bash
+# Pull + rebuild app (injects git short hash as BUILD_HASH for the version footer)
+git pull origin main && BUILD_HASH=$(git rev-parse --short HEAD) docker compose up -d --build rfx-app
+
+# Apply DB migrations
+docker exec -it rfx-app pnpm db:push
+
+# View logs
+docker logs rfx-app --tail 50 -f
+```
+
+> Note: MySQL is only reachable on the internal Docker network. Run DB/MetaCopier scripts inside the app container, e.g.:
+> `docker exec -w /app -i rfx-app node --input-type=module < script.mjs`
+
+## P&L Calculation
+
+```
+P&L = Σ(profit + swap + commission)
+```
+
+- **Floating P&L** — sum over open positions
+- **Realized P&L** — sum over closed positions in the period
+- **Total P&L** — floating + realized
+
+Trader P&L is computed from positions on the trader's **live (master) account**, filtered by their magic number.
+
+## MetaCopier Notes
+
+- New copiers are created with No-scaling (scaleType 4), `copyMagicNumber` enabled, and a custom magic number equal to the trader's magic, plus a "skip position if SL or TP missing" feature (type 31).
+- The `POST /copiers` create endpoint ignores `scaleType`/`copyMagicNumber` in the body — these are applied via a follow-up `PUT` (and must be sent together with `customMagicNumber`, since setting `copyMagicNumber` alone clears it). See `metacopier.ts:createCopier`.
+- The API returns deleted accounts with `status.name = "Deleted"` rather than erroring.
 
 ## Development
 
-### Running Tests
-
 ```bash
-# Run all tests
-pnpm test
-
-# Run specific test file
+pnpm test                  # all backend tests
 pnpm test metacopier.test.ts
-pnpm test trading.auth.test.ts
+pnpm check                 # type checking
 ```
 
-### Database Management
-
-```bash
-# Push schema changes
-pnpm db:push
-
-# Seed magic numbers
-pnpm exec tsx scripts/seed-magic-numbers.mjs
-```
-
-### Type Safety
-
-The application uses tRPC for end-to-end type safety:
-- Backend procedures define input/output types
-- Frontend automatically infers types from backend
-- No manual API client code or type definitions needed
-
-## Mobile App Considerations
-
-This web application is architected to support future iOS and Android clients:
-
-1. **API-First Design**: All business logic is in tRPC procedures
-2. **Stateless Backend**: Session-based auth works across platforms
-3. **Consistent Data Models**: TypeScript types can be shared
-4. **Proven Integration**: Logic validated from existing iOS app
-
-### For Mobile Development
-
-- Use the same tRPC endpoints via HTTP
-- Implement native session storage (Keychain/Keystore)
-- Reuse P&L calculation logic
-- Maintain consistent magic number authentication flow
+Conventions: TypeScript strict mode (avoid `any`), Zod for all tRPC input validation, camelCase variables/functions, PascalCase components, Prettier (2-space indent, trailing commas). Tests live next to source in `server/` (`*.test.ts`).
 
 ## Security Notes
 
-- API keys are stored server-side only
-- Sessions use secure HTTP-only cookies
-- Passwords are stored in plaintext (consider hashing for production)
-- CORS is configured for the application domain
-- Rate limiting should be added for production use
-
-## Future Enhancements
-
-- [ ] Password hashing with bcrypt
-- [ ] Rate limiting on authentication endpoints
-- [ ] WebSocket support for real-time updates
-- [ ] Export trade history to CSV/PDF
-- [ ] Advanced filtering and search
-- [ ] Performance analytics and charts
-- [ ] Push notifications for significant P&L changes
-- [ ] Multi-language support
+- API keys and wallet private keys are server-side only
+- Passwords are bcrypt-hashed; sessions use secure HTTP-only cookies
+- 2FA codes are short-lived and delivered out-of-band via Telegram

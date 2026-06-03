@@ -1,5 +1,7 @@
 # USDT-ERC20 Wallet Integration
 
+> **Status: ✅ Implemented** — see `server/erc20.ts`. This document is the original design spec, kept for reference.
+
 ## Overview
 
 Add a server-side custodial USDT-ERC20 wallet to the RFX Trader Dashboard, enabling outbound USDT payments on Ethereum or any EVM-compatible L2 (Polygon, Base, Arbitrum). Follows the same pattern as `tron.md` — same `payments` table, same tRPC structure, same Telegram notifications.
