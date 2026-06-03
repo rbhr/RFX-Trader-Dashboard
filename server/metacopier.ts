@@ -496,17 +496,29 @@ class MetaCopierService {
       const copierId = response.id;
       const shortId = response.fromAccountShortId;
 
-      // Set the custom magic number to the trader's magic (the source short id)
-      if (copierId && shortId !== undefined && shortId !== null) {
+      // The create (POST) endpoint ignores scaleType and copyMagicNumber in the
+      // body — copiers come back as scaleType 1 (Balance) and copyMagicNumber
+      // false regardless. They must be set via a follow-up PUT. copyMagicNumber
+      // and customMagicNumber must be sent together: PUTting copyMagicNumber
+      // alone clears customMagicNumber.
+      if (copierId) {
         try {
+          const settings: Record<string, unknown> = {
+            scaleType: { id: 4 }, // No scaling
+            copyMagicNumber: true,
+          };
+          // Set the custom magic number to the trader's magic (the source short id)
+          if (shortId !== undefined && shortId !== null) {
+            settings.customMagicNumber = shortId;
+          }
           await this.fetchWithAuth(
             `/accounts/${params.toAccountId}/copiers/${copierId}`,
             'PUT',
-            { customMagicNumber: shortId }
+            settings
           );
         } catch (e) {
           console.warn(
-            `[MetaCopier] Failed to set custom magic number on copier ${copierId}:`,
+            `[MetaCopier] Failed to set scale/magic number on copier ${copierId}:`,
             e
           );
         }
