@@ -62,17 +62,30 @@ async function isDefaultPassword(trader: TraderRow): Promise<boolean> {
 export async function maybeActivateOnboarding(traderId: number): Promise<void> {
   try {
     const trader = await getMagicNumberById(traderId);
-    if (!trader) return;
+    if (!trader) {
+      console.log(`[Onboarding] traderId ${traderId} not found — skipping`);
+      return;
+    }
+    const who = `${trader.name} (magic ${trader.magicNumber})`;
 
     // One-way: already activated.
-    if (trader.liveCopiersActivatedAt) return;
+    if (trader.liveCopiersActivatedAt) {
+      console.log(`[Onboarding] ${who}: already activated — skipping`);
+      return;
+    }
 
-    // Gate conditions.
-    if (!trader.isActive) return;
-    if (!trader.mcAccountId) return;
-    if (!trader.telegramChatId) return;
-    if (!trader.usdtAddress || !trader.usdtNetwork) return;
-    if (await isDefaultPassword(trader)) return;
+    // Evaluate every gate condition so the log shows exactly what's outstanding.
+    const pending: string[] = [];
+    if (!trader.isActive) pending.push("trader inactive");
+    if (!trader.mcAccountId) pending.push("no MetaCopier account");
+    if (!trader.telegramChatId) pending.push("Telegram not linked");
+    if (!trader.usdtAddress || !trader.usdtNetwork) pending.push("USDT address/network not set");
+    if (await isDefaultPassword(trader)) pending.push("password still default");
+
+    if (pending.length > 0) {
+      console.log(`[Onboarding] ${who} not activated — waiting on: ${pending.join(", ")}`);
+      return;
+    }
 
     // All conditions met — activate live copiers, then stamp + notify.
     const result = await enableTraderLiveCopiers(trader);
@@ -87,13 +100,13 @@ export async function maybeActivateOnboarding(traderId: number): Promise<void> {
       );
     } catch (e) {
       console.error(
-        `[Onboarding] Sent activation but failed to deliver login details for magic ${trader.magicNumber}:`,
+        `[Onboarding] ${who}: activated but failed to deliver login details:`,
         e
       );
     }
 
     console.log(
-      `[Onboarding] Activated magic ${trader.magicNumber}: enabled ${result.enabled} live copier(s), login details sent.`
+      `🎉 [Onboarding] ${who} ACTIVATED — onboarding complete! Enabled ${result.enabled} live copier(s) and sent login details to ${trader.telegramHandle}. Welcome aboard! 🚀`
     );
   } catch (e) {
     console.error(`[Onboarding] maybeActivateOnboarding(${traderId}) failed:`, e);
