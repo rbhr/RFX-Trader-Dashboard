@@ -6,7 +6,10 @@ import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
+import { createDebug } from "./debug";
 import { ENV } from "./env";
+
+const debug = createDebug("auth");
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -201,7 +204,7 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      debug("Missing session cookie");
       return null;
     }
 
@@ -217,7 +220,7 @@ class SDKServer {
         !isNonEmptyString(appId) ||
         !isNonEmptyString(name)
       ) {
-        console.warn("[Auth] Session payload missing required fields");
+        debug("Session payload missing required fields");
         return null;
       }
 
@@ -227,7 +230,7 @@ class SDKServer {
         name,
       };
     } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      debug("Session verification failed", String(error));
       return null;
     }
   }
