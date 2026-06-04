@@ -17,4 +17,7 @@ export const ENV = {
   evmChainName: process.env.EVM_CHAIN_NAME ?? "EVM",
   gasFreeApiKey: process.env.GASFREE_API_KEY ?? "",
   gasFreeApiSecret: process.env.GASFREE_API_SECRET ?? "",
+  // Comma-separated debug namespaces to enable (e.g. "auth,onboarding"), or
+  // "*"/"1"/"true" for all. Empty = quiet (default). See server/_core/debug.ts.
+  debug: process.env.DEBUG ?? "",
 };
