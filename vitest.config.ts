@@ -15,5 +15,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    // Hard-fail before any test runs if pointed at a non-test database — the
+    // integration tests write/delete real rows. See server/test-db-guard.ts.
+    setupFiles: ["server/test-db-guard.ts"],
   },
 });
