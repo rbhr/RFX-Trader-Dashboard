@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeAll } from "vitest";
-import { getAllMagicNumbers, getMagicNumberById, updateMagicNumber, createMagicNumber } from "./db";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { getAllMagicNumbers, getMagicNumberById, updateMagicNumber, createMagicNumber, deleteMagicNumber } from "./db";
 
 // Test admin trader management database operations
 
@@ -77,9 +77,18 @@ describe("Trader Management - Update Trader", () => {
 });
 
 describe("Trader Management - Create Trader", () => {
+  let createdId: number | undefined;
+
+  afterAll(async () => {
+    // Remove the trader created by this suite so it never leaks into the DB.
+    if (createdId !== undefined) {
+      await deleteMagicNumber(createdId);
+    }
+  });
+
   it("creates a new trader successfully", async () => {
     const testMagicNumber = `test-${Date.now()}`;
-    
+
     await createMagicNumber({
       magicNumber: testMagicNumber,
       name: "Test Trader",
@@ -95,7 +104,8 @@ describe("Trader Management - Create Trader", () => {
     // Verify the trader was created
     const traders = await getAllMagicNumbers();
     const created = traders.find(t => t.magicNumber === testMagicNumber);
-    
+    createdId = created?.id;
+
     expect(created).toBeDefined();
     expect(created!.name).toBe("Test Trader");
     expect(parseFloat(created!.profitShare)).toBe(0.30);
