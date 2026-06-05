@@ -46,7 +46,21 @@ export function startTelegramPolling(): void {
     const username = msg.from?.username;
     const text = msg.text?.trim();
 
-    if (text === "/start" && username) {
+    if (text === "/start") {
+      // A Telegram account with no public @username can't be matched to a
+      // dashboard handle. Without this branch the /start is silently dropped
+      // (no link, no reply, no log) — tell the user how to fix it instead.
+      if (!username) {
+        await pollingBot.sendMessage(
+          chatId,
+          `👋 <b>Welcome to RFX Trader Dashboard!</b>\n\n` +
+            `⚠️ Your Telegram account doesn't have a <b>username</b> set, so we can't link it to your trading account.\n\n` +
+            `Please set one in <b>Telegram → Settings → Username</b>, make sure that same handle is saved in your dashboard settings, then send /start again.`,
+          { parse_mode: "HTML", disable_web_page_preview: true } as any
+        );
+        console.log(`[Telegram] /start with no Telegram username (chat ID: ${chatId})`);
+        return;
+      }
       try {
         const traders = await getMagicNumbersByTelegramHandle(username);
         if (traders.length > 0) {
