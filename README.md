@@ -128,6 +128,10 @@ EVM_PRIVATE_KEY=...
 EVM_RPC_URL=...
 EVM_USDT_CONTRACT=...
 EVM_CHAIN_NAME=...
+
+# Logging (optional) — comma-separated debug namespaces, or */1/true for all.
+# Empty/unset = quiet (default). See "Logs & debugging".
+DEBUG=
 ```
 
 ## Deployment
@@ -147,6 +151,27 @@ docker logs rfx-app --tail 50 -f
 
 > Note: MySQL is only reachable on the internal Docker network. Run DB/MetaCopier scripts inside the app container, e.g.:
 > `docker exec -w /app -i rfx-app node --input-type=module < script.mjs`
+
+### Logs & debugging
+
+Logs are **quiet by default** — verbose per-request lines (e.g. `[Auth] Missing session cookie`) are gated behind the `DEBUG` env var, so the stream stays greppable.
+
+```bash
+# Follow logs and filter to a topic. 2>&1 merges stderr (where many logs go);
+# --line-buffered makes grep emit matches in real time instead of in chunks.
+docker logs rfx-app -f 2>&1 | grep --line-buffered Onboarding
+
+# Invert to hide noise instead
+docker logs rfx-app -f 2>&1 | grep --line-buffered -ivE 'session|cookie'
+```
+
+Turn verbose logging on by setting `DEBUG` in `.env`, then restart (it's read once at startup):
+
+```bash
+echo "DEBUG=auth" >> .env && docker compose up -d rfx-app   # enable the "auth" namespace
+```
+
+`DEBUG=auth,onboarding` enables multiple; `DEBUG=*` (or `1`/`true`) enables everything; remove the line and restart to silence again. New namespaces are added in code via `createDebug("name")` (see `server/_core/debug.ts`).
 
 ## P&L Calculation
 
