@@ -171,9 +171,10 @@ export default function Dashboard(props: {
   // Master account filter for admin dashboard
   const [selectedMasterAccountId, setSelectedMasterAccountId] = useState<string | undefined>(undefined);
 
-  // Fetch trader list for admin dropdown (only when not embedded — AdminDashboard has its own picker)
+  // Fetch trader list for the admin dropdown and the magic→trader-name lookup
+  // in aggregated position tables (needed in embedded mode too)
   const { data: allTraders } = trpc.admin.getAllTraders.useQuery(undefined, {
-    enabled: !!selfSession?.isAdmin && !embedded,
+    enabled: !!selfSession?.isAdmin,
   });
 
   // Default admin to their own entry once allTraders loads

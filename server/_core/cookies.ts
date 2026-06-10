@@ -42,7 +42,9 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    // "lax" blocks cross-site POSTs from attaching the session cookie (CSRF)
+    // while still sending it on top-level navigations (OAuth callback).
+    sameSite: "lax",
     secure: isSecureRequest(req),
   };
 }

@@ -1,6 +1,7 @@
 import { TronWeb } from "tronweb";
 import { createHmac } from "crypto";
 import { ENV } from "./_core/env";
+import { TxFailedError, TxPendingError } from "./walletErrors";
 
 const USDT_DECIMALS = 1_000_000;
 
@@ -202,43 +203,43 @@ async function sendUsdtGasFree(
 
   // 7. Poll for completion (max 120 seconds)
   const maxAttempts = 40;
+  let lastTxnHash: string | null = null;
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 3000));
 
+    let state: string | undefined;
+    let txnHash: string | undefined;
+    let statusData: any;
     try {
       const status = await gasFreeGet(`/api/v1/gasfree/${transferId}`);
-      const state = status.data?.state;
-      const txnHash = status.data?.txnHash;
-
-      console.log(`[TRON] GasFree poll ${i + 1}/${maxAttempts}: state=${state}, txnHash=${txnHash || "none"}`);
-
-      // Check for any success-like state (case-insensitive)
-      const upperState = (state || "").toUpperCase();
-      if (upperState === "SUCCESS" || upperState === "SUCCEED" || upperState === "COMPLETED" || upperState === "CONFIRMED") {
-        if (txnHash) return txnHash;
-      }
-      if (upperState === "FAILED" || upperState === "REJECTED" || upperState === "EXPIRED") {
-        throw new Error(`GasFree transfer ${state}: ${JSON.stringify(status.data)}`);
-      }
-      // Any other state (PENDING, PROCESSING, etc.) — keep polling
+      statusData = status.data;
+      state = statusData?.state;
+      txnHash = statusData?.txnHash;
     } catch (err: any) {
-      // If it's our own thrown error (FAILED/REJECTED), rethrow
-      if (err?.message?.startsWith("GasFree transfer FAILED") ||
-          err?.message?.startsWith("GasFree transfer REJECTED") ||
-          err?.message?.startsWith("GasFree transfer EXPIRED")) {
-        throw err;
-      }
-      // Otherwise it's a network error polling status — log and keep trying
+      // Network error polling status — log and keep trying
       console.warn(`[TRON] GasFree poll error (attempt ${i + 1}):`, err?.message);
+      continue;
     }
+
+    console.log(`[TRON] GasFree poll ${i + 1}/${maxAttempts}: state=${state}, txnHash=${txnHash || "none"}`);
+    if (txnHash) lastTxnHash = txnHash;
+
+    const upperState = (state || "").toUpperCase();
+    if (upperState === "SUCCESS" || upperState === "SUCCEED" || upperState === "COMPLETED" || upperState === "CONFIRMED") {
+      if (txnHash) return txnHash;
+    }
+    if (upperState === "FAILED" || upperState === "REJECTED" || upperState === "EXPIRED") {
+      throw new TxFailedError(`GasFree transfer ${upperState}: ${JSON.stringify(statusData)}`);
+    }
+    // Any other state (PENDING, PROCESSING, etc.) — keep polling
   }
 
   // Timeout: transfer was submitted but we couldn't confirm it.
-  // Return the transfer ID prefixed so the caller knows it's not a tx hash.
   console.warn(`[TRON] GasFree transfer ${transferId} — polling timed out, transfer may still complete`);
-  throw new Error(
+  throw new TxPendingError(
     `GasFree transfer submitted (ID: ${transferId}) but confirmation timed out. ` +
-    `The transfer may still complete — check TronScan or the GasFree dashboard.`
+    `The transfer may still complete — check TronScan or the GasFree dashboard.`,
+    lastTxnHash
   );
 }
 

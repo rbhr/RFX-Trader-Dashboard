@@ -22,6 +22,7 @@ import {
   updateCopierTemplate,
   deleteCopierTemplate,
   createPayment,
+  incrementLifetimeIncome,
   getPaymentsByMagicNumberId,
   getAllPayments,
   updatePaymentNotificationStatus,
@@ -44,6 +45,7 @@ import {
   removePreviousMasterAccount,
   createTwoFactorCode,
   verifyTwoFactorCode,
+  invalidateTwoFactorCodes,
   hasSeenDevice,
   getAdminSetting,
   setAdminSetting,
@@ -85,9 +87,15 @@ import {
   isEvmConfigured,
 } from "./erc20";
 import { ENV } from "./_core/env";
+import { TxFailedError, TxPendingError } from "./walletErrors";
+import { checkRateLimit, resetRateLimit } from "./rateLimit";
+import { randomInt } from "crypto";
 
 const TRADING_SESSION_COOKIE = "rfx_trading_session";
 const BCRYPT_ROUNDS = 12;
+
+// Trader IDs with a wallet payout currently being broadcast (double-send guard)
+const inFlightWalletPayments = new Set<number>();
 
 async function generateAndSend2FACode(
   magicNumberId: number,
@@ -99,7 +107,7 @@ async function generateAndSend2FACode(
 ): Promise<boolean> {
   if (!telegramHandle || !telegramChatId) return false;
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const code = String(randomInt(100000, 1000000));
   await createTwoFactorCode(magicNumberId, code, purpose);
 
   const purposeLabel =
@@ -117,6 +125,30 @@ async function generateAndSend2FACode(
     `This code expires in 5 minutes. If you didn't request this, ignore this message.`;
 
   return sendTelegramMessage(telegramHandle, message, telegramChatId);
+}
+
+/**
+ * Verifies a 2FA code with a hard attempt cap: after 5 failed attempts in
+ * 5 minutes the outstanding codes are burned and the caller must request a
+ * fresh one. Without this, a 6-digit code is brute-forceable in its window.
+ */
+async function verifyTwoFactorCodeWithCap(
+  magicNumberId: number,
+  code: string,
+  purpose: "login_2fa" | "password_reset" | "password_change"
+): Promise<boolean> {
+  const key = `2fa:${magicNumberId}:${purpose}`;
+  if (!checkRateLimit(key, 5, 5 * 60 * 1000)) {
+    await invalidateTwoFactorCodes(magicNumberId, purpose);
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message:
+        "Too many verification attempts. Request a new code and try again.",
+    });
+  }
+  const valid = await verifyTwoFactorCode(magicNumberId, code, purpose);
+  if (valid) resetRateLimit(key);
+  return valid;
 }
 
 async function hashPassword(password: string): Promise<string> {
@@ -165,6 +197,18 @@ const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
       tradingSession: sessionData,
     },
   });
+});
+
+// Admin-only procedure: trading session + isAdmin check enforced in middleware
+// so individual procedures can't forget the guard.
+const adminProcedure = tradingProcedure.use(async ({ ctx, next }) => {
+  if (!ctx.tradingSession.magicNumber.isAdmin) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Admin access required",
+    });
+  }
+  return next({ ctx });
 });
 
 /** Zod schema for optional admin view-as-trader input. */
@@ -368,20 +412,16 @@ async function recordPaymentAndNotify(params: {
   paymentDate: Date;
   narration?: string;
 }) {
-  const {
-    magicNumberId,
-    amount,
-    transactionHash,
-    networkFee = 0,
-    network,
-    paymentDate,
-    narration,
-  } = params;
+  const { magicNumberId, transactionHash, network, paymentDate, narration } =
+    params;
+  // Round to cents before persisting into decimal(15,2) columns
+  const amount = Math.round(params.amount * 100) / 100;
+  const networkFee = Math.round((params.networkFee ?? 0) * 100) / 100;
 
   await createPayment({
     magicNumberId,
-    amount: amount.toString(),
-    networkFee: networkFee.toString(),
+    amount: amount.toFixed(2),
+    networkFee: networkFee.toFixed(2),
     transactionHash,
     paymentDate,
     network: network ?? null,
@@ -391,11 +431,7 @@ async function recordPaymentAndNotify(params: {
 
   const trader = await getMagicNumberById(magicNumberId);
   if (trader) {
-    const currentLifetimeIncome = parseFloat(trader.lifetimeIncome || "0");
-    const newLifetimeIncome = currentLifetimeIncome + amount;
-    await updateMagicNumber(magicNumberId, {
-      lifetimeIncome: newLifetimeIncome.toFixed(2),
-    });
+    await incrementLifetimeIncome(magicNumberId, amount);
 
     await createNotification({
       magicNumberId,
@@ -470,6 +506,22 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+        // req.ip respects Express "trust proxy" (set to 1 hop for Caddy),
+        // so it can't be spoofed via X-Forwarded-For by external clients.
+        const clientIp = ctx.req.ip || null;
+
+        // Brute-force protection: per-account and per-IP attempt limits
+        const magicKey = `login:magic:${input.magicNumber}`;
+        if (
+          !checkRateLimit(magicKey, 10, 15 * 60 * 1000) ||
+          (clientIp && !checkRateLimit(`login:ip:${clientIp}`, 30, 15 * 60 * 1000))
+        ) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many login attempts. Try again in 15 minutes.",
+          });
+        }
+
         const magicNumberData = await getMagicNumberByNumber(input.magicNumber);
 
         if (!magicNumberData) {
@@ -489,11 +541,6 @@ export const appRouter = router({
             message: "Invalid password",
           });
         }
-
-        const clientIp =
-          ctx.req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
-          ctx.req.ip ||
-          null;
         const knownDevice = await hasSeenDevice(magicNumberData.id, clientIp);
 
         if (
@@ -519,7 +566,7 @@ export const appRouter = router({
             };
           }
 
-          const codeValid = await verifyTwoFactorCode(
+          const codeValid = await verifyTwoFactorCodeWithCap(
             magicNumberData.id,
             input.twoFactorCode,
             "login_2fa"
@@ -561,6 +608,8 @@ export const appRouter = router({
             : 7 * 24 * 60 * 60 * 1000,
         });
 
+        resetRateLimit(magicKey);
+
         return {
           success: true,
           requires2FA: false,
@@ -590,6 +639,15 @@ export const appRouter = router({
     requestPasswordReset: publicProcedure
       .input(z.object({ magicNumber: z.string() }))
       .mutation(async ({ input }) => {
+        // Limit reset-code requests so the endpoint can't be used to spam
+        // a trader's Telegram or stack brute-force windows
+        if (!checkRateLimit(`pwreset:${input.magicNumber}`, 3, 15 * 60 * 1000)) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many reset requests. Try again in 15 minutes.",
+          });
+        }
+
         const trader = await getMagicNumberByNumber(input.magicNumber);
         if (!trader) {
           throw new TRPCError({
@@ -642,7 +700,7 @@ export const appRouter = router({
           });
         }
 
-        const codeValid = await verifyTwoFactorCode(
+        const codeValid = await verifyTwoFactorCodeWithCap(
           trader.id,
           input.code,
           "password_reset"
@@ -698,7 +756,7 @@ export const appRouter = router({
             return { success: false, requires2FA: true };
           }
 
-          const codeValid = await verifyTwoFactorCode(
+          const codeValid = await verifyTwoFactorCodeWithCap(
             trader.id,
             input.twoFactorCode,
             "password_change"
@@ -846,11 +904,14 @@ export const appRouter = router({
         }));
       }),
 
-    // Mark notification as read
+    // Mark notification as read (scoped to the caller's own notifications)
     markNotificationRead: tradingProcedure
       .input(z.object({ notificationId: z.number() }))
-      .mutation(async ({ input }) => {
-        await markNotificationAsRead(input.notificationId);
+      .mutation(async ({ input, ctx }) => {
+        await markNotificationAsRead(
+          input.notificationId,
+          ctx.tradingSession.magicNumber.id
+        );
         return { success: true };
       }),
 
@@ -2360,11 +2421,11 @@ export const appRouter = router({
       .input(
         z.object({
           magicNumberId: z.number(),
-          amount: z.number(),
-          networkFee: z.number().optional(),
-          transactionHash: z.string(),
+          amount: z.number().positive().max(1_000_000),
+          networkFee: z.number().min(0).max(10_000).optional(),
+          transactionHash: z.string().min(1),
           paymentDate: z.date(),
-          narration: z.string().optional(),
+          narration: z.string().max(500).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -2614,75 +2675,95 @@ export const appRouter = router({
           });
         }
 
-        const trader = await getMagicNumberById(input.magicNumberId);
-        if (!trader) {
+        // One in-flight payout per trader: a double-click or concurrent admin
+        // must not broadcast the same payment twice.
+        if (inFlightWalletPayments.has(input.magicNumberId)) {
           throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Trader not found",
+            code: "CONFLICT",
+            message:
+              "A wallet payment for this trader is already in progress. Wait for it to finish before sending another.",
           });
         }
-        if (!trader.usdtAddress || !trader.usdtNetwork) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Trader has no USDT address or network configured",
-          });
-        }
-
-        const network = trader.usdtNetwork as "TRC20" | "ERC20";
-        let txHash: string;
+        inFlightWalletPayments.add(input.magicNumberId);
 
         try {
-          if (network === "TRC20") {
-            if (!isTronConfigured()) {
-              throw new Error("TRON wallet is not configured on this server");
-            }
-            txHash = await sendUsdt(trader.usdtAddress, input.amount);
-          } else {
-            if (!isEvmConfigured()) {
-              throw new Error("EVM wallet is not configured on this server");
-            }
-            txHash = await sendUsdtErc20(trader.usdtAddress, input.amount);
-          }
-        } catch (err: any) {
-          const msg = err?.message ?? "On-chain transaction failed";
-
-          // If the transfer was submitted but confirmation timed out,
-          // record it as pending so the admin doesn't have to re-enter manually
-          if (msg.includes("submitted") && msg.includes("timed out")) {
-            const pendingHash = `PENDING-${Date.now()}`;
-            await recordPaymentAndNotify({
-              magicNumberId: input.magicNumberId,
-              amount: input.amount,
-              transactionHash: pendingHash,
-              network,
-              paymentDate: new Date(),
-              narration: input.narration,
+          const trader = await getMagicNumberById(input.magicNumberId);
+          if (!trader) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Trader not found",
             });
-            console.warn(
-              `[Payment] Recorded pending payment ${pendingHash} for ${trader.name} — GasFree confirmation timed out`
-            );
+          }
+          if (!trader.usdtAddress || !trader.usdtNetwork) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Trader has no USDT address or network configured",
+            });
+          }
+
+          const network = trader.usdtNetwork as "TRC20" | "ERC20";
+          let txHash: string;
+
+          try {
+            if (network === "TRC20") {
+              if (!isTronConfigured()) {
+                throw new Error("TRON wallet is not configured on this server");
+              }
+              txHash = await sendUsdt(trader.usdtAddress, input.amount);
+            } else {
+              if (!isEvmConfigured()) {
+                throw new Error("EVM wallet is not configured on this server");
+              }
+              txHash = await sendUsdtErc20(trader.usdtAddress, input.amount);
+            }
+          } catch (err: any) {
+            if (err instanceof TxPendingError) {
+              // Broadcast but unconfirmed — record it (with the real hash when
+              // we have one) so the admin never re-sends manually.
+              const recordedHash = err.txHash ?? `PENDING-${Date.now()}`;
+              await recordPaymentAndNotify({
+                magicNumberId: input.magicNumberId,
+                amount: input.amount,
+                transactionHash: recordedHash,
+                network,
+                paymentDate: new Date(),
+                narration: input.narration,
+              });
+              console.warn(
+                `[Payment] Recorded unconfirmed payment ${recordedHash} for ${trader.name} — ${err.message}`
+              );
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `Payment was sent but confirmation timed out. It has been recorded${err.txHash ? "" : " as pending"} — verify on the block explorer${err.txHash ? "" : " and update the transaction hash"}.`,
+              });
+            }
+
+            if (err instanceof TxFailedError) {
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `Transfer failed on-chain — no funds were sent. ${err.message}`,
+              });
+            }
+
             throw new TRPCError({
               code: "INTERNAL_SERVER_ERROR",
-              message: `Payment was sent but confirmation timed out. It has been recorded as pending — check TronScan to verify and update the transaction hash.`,
+              message: err?.message ?? "On-chain transaction failed",
             });
           }
 
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: msg,
+          await recordPaymentAndNotify({
+            magicNumberId: input.magicNumberId,
+            amount: input.amount,
+            transactionHash: txHash,
+            network,
+            paymentDate: new Date(),
+            narration: input.narration,
           });
+
+          return { success: true, txHash, network };
+        } finally {
+          inFlightWalletPayments.delete(input.magicNumberId);
         }
-
-        await recordPaymentAndNotify({
-          magicNumberId: input.magicNumberId,
-          amount: input.amount,
-          transactionHash: txHash,
-          network,
-          paymentDate: new Date(),
-          narration: input.narration,
-        });
-
-        return { success: true, txHash, network };
       }),
 
     // --- Previous Magic Numbers ---
@@ -2789,19 +2870,19 @@ export const appRouter = router({
   // Copier Templates
   copierTemplates: router({
     // Get all copier templates
-    list: tradingProcedure.query(async () => {
+    list: adminProcedure.query(async () => {
       return await getAllCopierTemplates();
     }),
 
     // Get a single copier template by ID
-    getById: tradingProcedure
+    getById: adminProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await getCopierTemplateById(input.id);
       }),
 
     // Create a new copier template
-    create: tradingProcedure
+    create: adminProcedure
       .input(
         z.object({
           name: z.string(),
@@ -2841,7 +2922,7 @@ export const appRouter = router({
       }),
 
     // Update a copier template
-    update: tradingProcedure
+    update: adminProcedure
       .input(
         z.object({
           id: z.number(),
@@ -2883,7 +2964,7 @@ export const appRouter = router({
       }),
 
     // Delete a copier template
-    delete: tradingProcedure
+    delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await deleteCopierTemplate(input.id);

@@ -201,8 +201,9 @@ export async function cleanupExpiredSessions() {
   const db = await getDb();
   if (!db) return;
 
-  const now = new Date();
-  await db.delete(tradingSessions).where(eq(tradingSessions.expiresAt, now));
+  await db
+    .delete(tradingSessions)
+    .where(lt(tradingSessions.expiresAt, new Date()));
 }
 
 // Trader management functions
@@ -362,14 +363,35 @@ export async function getNotificationsByMagicNumberId(magicNumberId: number) {
     .orderBy(desc(notifications.createdAt));
 }
 
-export async function markNotificationAsRead(id: number) {
+/** Atomically add an amount to a trader's lifetimeIncome (avoids read-modify-write races). */
+export async function incrementLifetimeIncome(
+  magicNumberId: number,
+  amount: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(magicNumbers)
+    .set({
+      lifetimeIncome: sql`COALESCE(${magicNumbers.lifetimeIncome}, 0) + ${amount.toFixed(2)}`,
+    })
+    .where(eq(magicNumbers.id, magicNumberId));
+}
+
+export async function markNotificationAsRead(id: number, magicNumberId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   await db
     .update(notifications)
     .set({ isRead: true })
-    .where(eq(notifications.id, id));
+    .where(
+      and(
+        eq(notifications.id, id),
+        eq(notifications.magicNumberId, magicNumberId)
+      )
+    );
 }
 
 export async function markAllNotificationsAsRead(magicNumberId: number) {
@@ -544,6 +566,19 @@ export async function createTwoFactorCode(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  // Only one live code per trader+purpose: stacking multiple un-expired
+  // codes multiplies an attacker's brute-force odds.
+  await db
+    .update(twoFactorCodes)
+    .set({ used: true })
+    .where(
+      and(
+        eq(twoFactorCodes.magicNumberId, magicNumberId),
+        eq(twoFactorCodes.purpose, purpose),
+        eq(twoFactorCodes.used, false)
+      )
+    );
+
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + 5);
 
@@ -553,6 +588,26 @@ export async function createTwoFactorCode(
     purpose,
     expiresAt,
   });
+}
+
+/** Burns all outstanding codes for a trader+purpose (used when the attempt cap is hit). */
+export async function invalidateTwoFactorCodes(
+  magicNumberId: number,
+  purpose: "login_2fa" | "password_reset" | "password_change"
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(twoFactorCodes)
+    .set({ used: true })
+    .where(
+      and(
+        eq(twoFactorCodes.magicNumberId, magicNumberId),
+        eq(twoFactorCodes.purpose, purpose),
+        eq(twoFactorCodes.used, false)
+      )
+    );
 }
 
 export async function verifyTwoFactorCode(
@@ -610,7 +665,8 @@ export async function hasSeenDevice(
     .where(
       and(
         eq(tradingSessions.magicNumberId, magicNumberId),
-        eq(tradingSessions.ipAddress, ipAddress)
+        eq(tradingSessions.ipAddress, ipAddress),
+        gt(tradingSessions.expiresAt, new Date())
       )
     )
     .limit(1);

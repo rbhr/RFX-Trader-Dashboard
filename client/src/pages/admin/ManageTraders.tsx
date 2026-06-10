@@ -93,6 +93,57 @@ interface Trader {
   updatedAt: Date;
 }
 
+// Inline profit-share editor: edits a local draft and only persists on
+// blur/Enter, so typing "47.5" doesn't fire a mutation per keystroke.
+function ProfitShareCell({
+  percentValue,
+  onCommit,
+}: {
+  percentValue: string;
+  onCommit: (fraction: number) => void;
+}) {
+  const [draft, setDraft] = useState(percentValue);
+  const [editing, setEditing] = useState(false);
+
+  const commit = () => {
+    setEditing(false);
+    const fraction = parseFloat(draft) / 100;
+    if (isNaN(fraction) || fraction < 0 || fraction > 1) {
+      setDraft(percentValue);
+      return;
+    }
+    if (draft !== percentValue) onCommit(fraction);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        min="0"
+        max="100"
+        step="0.1"
+        value={editing ? draft : percentValue}
+        onFocus={() => {
+          setDraft(percentValue);
+          setEditing(true);
+        }}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") {
+            setDraft(percentValue);
+            setEditing(false);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="w-16 h-8 text-sm"
+      />
+      <span className="text-sm text-muted-foreground">%</span>
+    </div>
+  );
+}
+
 // Small component to display risk limit in table cell (lazy fetch)
 function TraderRiskLimitCell({ mcAccountId }: { mcAccountId: string | null }) {
   const { data, isLoading } = trpc.admin.getTraderRiskLimit.useQuery(
@@ -116,12 +167,14 @@ function RiskLimitField({
   mcAccountId,
   value,
   onChange,
+  onBaseline,
   loading,
   setLoading,
 }: {
   mcAccountId: string;
   value: number | "";
   onChange: (v: number | "") => void;
+  onBaseline?: (v: number) => void;
   loading: boolean;
   setLoading: (v: boolean) => void;
 }) {
@@ -133,6 +186,7 @@ function RiskLimitField({
   useEffect(() => {
     if (data?.absoluteRiskLimit !== undefined && value === "") {
       onChange(data.absoluteRiskLimit);
+      onBaseline?.(data.absoluteRiskLimit);
     }
   }, [data]);
 
@@ -177,6 +231,11 @@ export default function ManageTraders() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const [riskLimitValue, setRiskLimitValue] = useState<number | "">("");
+  // The value loaded from MetaCopier when the edit dialog opened — only
+  // resubmit the risk limit when the admin actually changed it
+  const [riskLimitBaseline, setRiskLimitBaseline] = useState<number | null>(
+    null
+  );
   const [riskLimitLoading, setRiskLimitLoading] = useState(false);
 
   // Broadcast dialog state
@@ -357,6 +416,7 @@ export default function ManageTraders() {
 
   const updateRiskLimit = trpc.admin.updateTraderRiskLimit.useMutation({
     onSuccess: () => {
+      utils.admin.getTraderRiskLimit.invalidate();
       toast.success("Risk limit updated successfully");
     },
     onError: error => {
@@ -453,6 +513,7 @@ export default function ManageTraders() {
   const handleEdit = (trader: Trader) => {
     setSelectedTrader(trader);
     setRiskLimitValue("");
+    setRiskLimitBaseline(null);
     setRiskLimitLoading(false);
     setFormData({
       magicNumber: trader.magicNumber,
@@ -609,8 +670,14 @@ export default function ManageTraders() {
 
     updateTrader.mutate(updates);
 
-    // If risk limit was changed and trader has an MC account, update it too
-    if (riskLimitValue !== "" && selectedTrader?.mcAccountId) {
+    // Only push the risk limit to MetaCopier when the admin actually changed
+    // it — resubmitting the prefilled value re-writes the external API and
+    // can revert a limit changed elsewhere (e.g. the trailing monitor)
+    if (
+      riskLimitValue !== "" &&
+      selectedTrader?.mcAccountId &&
+      Number(riskLimitValue) !== riskLimitBaseline
+    ) {
       updateRiskLimit.mutate({
         mcAccountId: selectedTrader.mcAccountId,
         absoluteRiskLimit: Number(riskLimitValue),
@@ -1133,30 +1200,12 @@ export default function ManageTraders() {
                       )}
                       {visibleColumns.profitShare && (
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              value={(trader.profitShare * 100).toFixed(1)}
-                              onChange={e => {
-                                const newValue =
-                                  parseFloat(e.target.value) / 100;
-                                if (
-                                  !isNaN(newValue) &&
-                                  newValue >= 0 &&
-                                  newValue <= 1
-                                ) {
-                                  handleUpdateProfitShare(trader, newValue);
-                                }
-                              }}
-                              className="w-16 h-8 text-sm"
-                            />
-                            <span className="text-sm text-muted-foreground">
-                              %
-                            </span>
-                          </div>
+                          <ProfitShareCell
+                            percentValue={(trader.profitShare * 100).toFixed(1)}
+                            onCommit={fraction =>
+                              handleUpdateProfitShare(trader, fraction)
+                            }
+                          />
                         </TableCell>
                       )}
                       {visibleColumns.copyRate && (
@@ -1816,13 +1865,17 @@ export default function ManageTraders() {
                     min="0"
                     max="100"
                     step="0.1"
-                    value={(formData.profitShare * 100).toFixed(1)}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        profitShare: parseFloat(e.target.value) / 100,
-                      })
+                    value={
+                      isNaN(formData.profitShare)
+                        ? ""
+                        : (formData.profitShare * 100).toFixed(1)
                     }
+                    onChange={e => {
+                      const fraction = parseFloat(e.target.value) / 100;
+                      if (!isNaN(fraction) && fraction >= 0 && fraction <= 1) {
+                        setFormData({ ...formData, profitShare: fraction });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -1944,6 +1997,7 @@ export default function ManageTraders() {
                         mcAccountId={selectedTrader.mcAccountId}
                         value={riskLimitValue}
                         onChange={setRiskLimitValue}
+                        onBaseline={setRiskLimitBaseline}
                         loading={riskLimitLoading}
                         setLoading={setRiskLimitLoading}
                       />

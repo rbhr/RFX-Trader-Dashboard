@@ -48,7 +48,13 @@ export default function AdminDashboard() {
         </div>
 
         {selectedTraderId ? (
-          <Dashboard viewAsTraderId={parseInt(selectedTraderId)} embedded />
+          // key remounts the Dashboard on trader switch so internal state
+          // (master-account filter, dialogs) doesn't leak between traders
+          <Dashboard
+            key={selectedTraderId}
+            viewAsTraderId={parseInt(selectedTraderId)}
+            embedded
+          />
         ) : (
           <Card>
             <CardHeader>

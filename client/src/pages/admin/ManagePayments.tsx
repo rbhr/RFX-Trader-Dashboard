@@ -72,16 +72,27 @@ export default function ManagePayments() {
   }, []);
 
   const handleMakePayment = () => {
+    const parsedAmount = parseFloat(amount);
+    if (!selectedTraderId || isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Please select a trader and enter an amount greater than 0");
+      return;
+    }
+
     if (paymentMode === "manual") {
-      if (!selectedTraderId || !amount || !transactionHash) {
-        toast.error("Please fill in all required fields");
+      if (!transactionHash) {
+        toast.error("Please enter the transaction hash");
+        return;
+      }
+      const fee = parseFloat(networkFee);
+      if (networkFee !== "" && (isNaN(fee) || fee < 0)) {
+        toast.error("Network fee must be 0 or a positive number");
+        return;
+      }
+      if (isNaN(new Date(paymentDate).getTime())) {
+        toast.error("Please enter a valid payment date");
         return;
       }
     } else {
-      if (!selectedTraderId || !amount) {
-        toast.error("Please select a trader and enter an amount");
-        return;
-      }
       const selectedTrader = traders?.find(t => t.id === parseInt(selectedTraderId));
       if (!selectedTrader?.usdtAddress || !selectedTrader?.usdtNetwork) {
         toast.error("Selected trader has no USDT address configured");
@@ -117,10 +128,11 @@ export default function ManagePayments() {
         });
         toast.success(`Payment sent on-chain! TX: ${result.txHash.substring(0, 12)}...`);
       } else {
+        const fee = parseFloat(networkFee);
         await makePaymentMutation.mutateAsync({
           magicNumberId: parseInt(selectedTraderId),
           amount: parseFloat(amount),
-          networkFee: parseFloat(networkFee),
+          networkFee: isNaN(fee) ? 0 : fee,
           transactionHash,
           paymentDate: new Date(paymentDate),
           narration: narration || undefined,
