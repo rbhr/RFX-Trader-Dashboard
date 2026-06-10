@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { ENV } from "./_core/env";
+import { TxFailedError, TxPendingError } from "./walletErrors";
 
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -88,7 +89,28 @@ export async function sendUsdtErc20(
   const rawAmount = BigInt(Math.round(amount * Number(USDT_DECIMALS)));
 
   const tx = await contract.transfer(recipientAddress, rawAmount);
-  await tx.wait(1);
+  const txHash = tx.hash as string;
 
-  return tx.hash as string;
+  // The transfer is broadcast at this point — from here on the hash must
+  // never be lost, or the caller may retry and double-send real funds.
+  try {
+    const receipt = await tx.wait(1, 90_000);
+    if (receipt && receipt.status === 0) {
+      throw new TxFailedError(`ERC-20 transfer reverted on-chain (tx: ${txHash})`);
+    }
+  } catch (err: any) {
+    if (err instanceof TxFailedError) throw err;
+    // ethers v6 throws CALL_EXCEPTION when the mined tx reverted — definitive failure
+    if (err?.code === "CALL_EXCEPTION") {
+      throw new TxFailedError(`ERC-20 transfer reverted on-chain (tx: ${txHash})`);
+    }
+    // RPC error or confirmation timeout — the tx is on the network and may
+    // still mine. Surface the hash so the payment gets recorded as pending.
+    throw new TxPendingError(
+      `ERC-20 transfer broadcast (tx: ${txHash}) but confirmation did not complete: ${err?.message ?? "unknown error"}`,
+      txHash
+    );
+  }
+
+  return txHash;
 }

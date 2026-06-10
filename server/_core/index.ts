@@ -34,6 +34,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // One trusted proxy hop (Caddy) — makes req.ip use the real client IP
+  // from X-Forwarded-For without letting clients spoof it
+  app.set("trust proxy", 1);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
