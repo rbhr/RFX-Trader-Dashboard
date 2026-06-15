@@ -68,18 +68,12 @@ export async function notifyOwner(
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
 
-  if (!ENV.forgeApiUrl) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service URL is not configured.",
-    });
-  }
-
-  if (!ENV.forgeApiKey) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service API key is not configured.",
-    });
+  // The Manus owner-notification service is optional infrastructure (not used
+  // in self-hosted deploys). Treat "not configured" like an unreachable
+  // upstream — return false so callers fall back, instead of throwing a TRPC
+  // error that surfaces as a stack trace on every breach.
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    return false;
   }
 
   const endpoint = buildEndpointUrl(ENV.forgeApiUrl);

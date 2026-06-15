@@ -1544,26 +1544,30 @@ export const appRouter = router({
           };
           let copierInfo: CopierInfo | null = null;
 
-          const profitPromise = computeTraderProfitSummary({
-            id: t.id,
-            magicNumber: t.magicNumber,
-            liveAccountNumber: t.liveAccountNumber,
-            showAllData: t.showAllData,
-          })
-            .then(s => {
-              profitSummary.weekPnL = s.weekPnL;
-              profitSummary.monthPnL = s.monthPnL;
-              profitSummary.lifetimePnL = s.lifetimePnL;
-            })
-            .catch(error => {
-              console.error(
-                `Failed to compute profit summary for ${t.name} (${t.magicNumber}):`,
-                error?.message || error
-              );
-            });
+          // The admin account isn't a real trader (no magic / live account), so
+          // MetaCopier profit + copier lookups 400 and just spam logs — skip them.
+          const profitPromise = t.isAdmin
+            ? Promise.resolve()
+            : computeTraderProfitSummary({
+                id: t.id,
+                magicNumber: t.magicNumber,
+                liveAccountNumber: t.liveAccountNumber,
+                showAllData: t.showAllData,
+              })
+                .then(s => {
+                  profitSummary.weekPnL = s.weekPnL;
+                  profitSummary.monthPnL = s.monthPnL;
+                  profitSummary.lifetimePnL = s.lifetimePnL;
+                })
+                .catch(error => {
+                  console.error(
+                    `Failed to compute profit summary for ${t.name} (${t.magicNumber}):`,
+                    error?.message || error
+                  );
+                });
 
           const copierPromise = (async () => {
-            if (!t.liveAccountNumber) return;
+            if (t.isAdmin || !t.liveAccountNumber) return;
             try {
               const accountId =
                 await metaCopierService.getAccountIdByLoginNumber(
