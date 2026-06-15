@@ -1691,6 +1691,7 @@ export const appRouter = router({
         z.object({
           id: z.number(),
           name: z.string().optional(),
+          magicNumber: z.string().min(1).optional(),
           password: z.string().optional(),
           profitShare: z.number().min(0).max(1).optional(),
           isActive: z.boolean().optional(),
@@ -1721,6 +1722,8 @@ export const appRouter = router({
         const updateData: any = {};
 
         if (data.name !== undefined) updateData.name = data.name;
+        if (data.magicNumber !== undefined)
+          updateData.magicNumber = data.magicNumber;
         if (data.password !== undefined)
           updateData.password = await hashPassword(data.password);
         if (data.profitShare !== undefined)

@@ -55,6 +55,8 @@ import {
   Columns3,
   Megaphone,
   Send,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -144,6 +146,90 @@ function ProfitShareCell({
   );
 }
 
+// Password field with a show/hide eye toggle.
+function PasswordInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow(s => !s)}
+        aria-label={show ? "Hide password" : "Show password"}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+      >
+        {show ? (
+          <EyeOff className="h-4 w-4" />
+        ) : (
+          <Eye className="h-4 w-4" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+// Percent input for forms: keeps a raw text draft while typing so the value
+// isn't reformatted out from under the cursor (no need to delete first).
+// Stores/emits the underlying 0–1 fraction.
+function PercentInput({
+  id,
+  fraction,
+  onFraction,
+}: {
+  id?: string;
+  fraction: number;
+  onFraction: (fraction: number) => void;
+}) {
+  const toPct = (f: number) => (isNaN(f) ? "" : String(+(f * 100).toFixed(4)));
+  const [draft, setDraft] = useState(toPct(fraction));
+
+  // Re-sync when the source fraction changes externally (e.g. dialog opens for
+  // a different trader). Skip if the draft already represents the same value so
+  // typing isn't clobbered.
+  useEffect(() => {
+    const next = toPct(fraction);
+    setDraft(prev => {
+      const prevNum = parseFloat(prev) / 100;
+      if (!isNaN(prevNum) && Math.abs(prevNum - fraction) < 1e-9) return prev;
+      return next;
+    });
+  }, [fraction]);
+
+  return (
+    <Input
+      id={id}
+      type="number"
+      min="0"
+      max="100"
+      step="0.1"
+      value={draft}
+      onChange={e => {
+        setDraft(e.target.value);
+        const f = parseFloat(e.target.value) / 100;
+        if (!isNaN(f) && f >= 0 && f <= 1) onFraction(f);
+      }}
+    />
+  );
+}
+
 // Small component to display risk limit in table cell (lazy fetch)
 function TraderRiskLimitCell({ mcAccountId }: { mcAccountId: string | null }) {
   const { data, isLoading } = trpc.admin.getTraderRiskLimit.useQuery(
@@ -214,6 +300,10 @@ function RiskLimitField({
 
 export default function ManageTraders() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // Magic number is locked in the edit dialog; the pencil unlocks it after a
+  // confirmation, since changing it has downstream effects (copier routing).
+  const [magicUnlocked, setMagicUnlocked] = useState(false);
+  const [magicConfirmOpen, setMagicConfirmOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [mcStatusDialogOpen, setMcStatusDialogOpen] = useState(false);
@@ -537,6 +627,7 @@ export default function ManageTraders() {
       lifetimeProfitShare: trader.lifetimeProfitShare ?? 0,
       lifetimeIncome: trader.lifetimeIncome,
     });
+    setMagicUnlocked(false);
     setEditDialogOpen(true);
   };
 
@@ -666,6 +757,16 @@ export default function ManageTraders() {
 
     if (formData.mtPassword) {
       updates.mtPassword = formData.mtPassword;
+    }
+
+    // Only send a magic-number change when the admin explicitly unlocked it and
+    // actually changed the value.
+    if (
+      magicUnlocked &&
+      formData.magicNumber &&
+      formData.magicNumber !== selectedTrader.magicNumber
+    ) {
+      updates.magicNumber = formData.magicNumber;
     }
 
     updateTrader.mutate(updates);
@@ -1697,30 +1798,22 @@ export default function ManageTraders() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="password">Password *</Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     value={formData.password}
-                    onChange={e =>
-                      setFormData({ ...formData, password: e.target.value })
+                    onChange={value =>
+                      setFormData({ ...formData, password: value })
                     }
                     placeholder="Login password"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="profitShare">Profit Share (0-1)</Label>
-                  <Input
+                  <Label htmlFor="profitShare">Profit Share (%)</Label>
+                  <PercentInput
                     id="profitShare"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={formData.profitShare}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        profitShare: parseFloat(e.target.value),
-                      })
+                    fraction={formData.profitShare}
+                    onFraction={fraction =>
+                      setFormData({ ...formData, profitShare: fraction })
                     }
                   />
                 </div>
@@ -1754,12 +1847,11 @@ export default function ManageTraders() {
                 <div className="grid grid-cols-2 gap-4 mt-4">
                   <div className="space-y-2">
                     <Label htmlFor="mtPassword">MT Password</Label>
-                    <Input
+                    <PasswordInput
                       id="mtPassword"
-                      type="password"
                       value={formData.mtPassword}
-                      onChange={e =>
-                        setFormData({ ...formData, mtPassword: e.target.value })
+                      onChange={value =>
+                        setFormData({ ...formData, mtPassword: value })
                       }
                       placeholder="MT account password"
                     />
@@ -1826,11 +1918,36 @@ export default function ManageTraders() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Magic Number</Label>
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="edit-magicNumber">Magic Number</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      aria-label="Edit magic number"
+                      onClick={() => {
+                        if (magicUnlocked) {
+                          setMagicUnlocked(false);
+                        } else {
+                          setMagicConfirmOpen(true);
+                        }
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                   <Input
+                    id="edit-magicNumber"
                     value={formData.magicNumber}
-                    disabled
-                    className="bg-muted"
+                    disabled={!magicUnlocked}
+                    className={magicUnlocked ? "" : "bg-muted"}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        magicNumber: e.target.value,
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -1847,35 +1964,23 @@ export default function ManageTraders() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-password">New Password (optional)</Label>
-                  <Input
+                  <PasswordInput
                     id="edit-password"
-                    type="password"
                     value={formData.password}
-                    onChange={e =>
-                      setFormData({ ...formData, password: e.target.value })
+                    onChange={value =>
+                      setFormData({ ...formData, password: value })
                     }
                     placeholder="Leave blank to keep current"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-profitShare">Profit Share (%)</Label>
-                  <Input
+                  <PercentInput
                     id="edit-profitShare"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={
-                      isNaN(formData.profitShare)
-                        ? ""
-                        : (formData.profitShare * 100).toFixed(1)
+                    fraction={formData.profitShare}
+                    onFraction={fraction =>
+                      setFormData({ ...formData, profitShare: fraction })
                     }
-                    onChange={e => {
-                      const fraction = parseFloat(e.target.value) / 100;
-                      if (!isNaN(fraction) && fraction >= 0 && fraction <= 1) {
-                        setFormData({ ...formData, profitShare: fraction });
-                      }
-                    }}
                   />
                 </div>
               </div>
@@ -1908,12 +2013,11 @@ export default function ManageTraders() {
                     <Label htmlFor="edit-mtPassword">
                       MT Password (optional)
                     </Label>
-                    <Input
+                    <PasswordInput
                       id="edit-mtPassword"
-                      type="password"
                       value={formData.mtPassword}
-                      onChange={e =>
-                        setFormData({ ...formData, mtPassword: e.target.value })
+                      onChange={value =>
+                        setFormData({ ...formData, mtPassword: value })
                       }
                       placeholder="Leave blank to keep current"
                     />
@@ -2307,6 +2411,27 @@ export default function ManageTraders() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Magic Number Edit Confirmation */}
+        <AlertDialog open={magicConfirmOpen} onOpenChange={setMagicConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Edit magic number?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The magic number is the trader's core identifier. Changing it
+                affects login, copier magic-number routing, and historical P&L
+                attribution — you'll likely need to update their MetaCopier
+                copiers to match. Only proceed if you know what you're doing.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => setMagicUnlocked(true)}>
+                Yes, let me edit it
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
