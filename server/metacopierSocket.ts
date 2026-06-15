@@ -141,7 +141,8 @@ function frame(
   return f + "\n" + body + "\x00";
 }
 
-function handleDto(dto: any): void {
+/** Apply a parsed DTO to the cache and emit an update. Exported for tests. */
+export function ingestDto(dto: any): void {
   const type = dto?.type;
   const data = dto?.data;
   const accountId = data?.accountId;
@@ -188,7 +189,7 @@ function processFrame(chunk: string): void {
     );
   } else if (command === "MESSAGE") {
     try {
-      handleDto(JSON.parse(body));
+      ingestDto(JSON.parse(body));
     } catch {
       /* ignore malformed frame body */
     }
