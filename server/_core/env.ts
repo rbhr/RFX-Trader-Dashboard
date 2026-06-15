@@ -20,4 +20,11 @@ export const ENV = {
   // Comma-separated debug namespaces to enable (e.g. "auth,onboarding"), or
   // "*"/"1"/"true" for all. Empty = quiet (default). See server/_core/debug.ts.
   debug: process.env.DEBUG ?? "",
+  // MetaCopier real-time socket (Phase 1). Default ON; set MC_SOCKET_ENABLED=false
+  // to revert to pure REST polling. Read methods always fall back to REST.
+  mcSocketEnabled: process.env.MC_SOCKET_ENABLED !== "false",
+  // Live dashboard push over SSE (Phase 2). Default OFF — additive; enable with
+  // MC_LIVE_STREAM=true (server) and VITE_LIVE_STREAM=true (client build).
+  // Polling remains the fallback regardless.
+  mcLiveStream: process.env.MC_LIVE_STREAM === "true",
 };

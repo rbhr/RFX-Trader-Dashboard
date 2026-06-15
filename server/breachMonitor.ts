@@ -19,11 +19,18 @@ import {
   buildAdminRiskLimitAlertMessage,
 } from "./telegram";
 import { notifyOwner } from "./_core/notification";
+import { socketEvents } from "./metacopierSocket";
+import { ENV } from "./_core/env";
 
 const MONITOR_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
+// When the real-time socket pushes equity updates, run an extra check — but at
+// most this often, so a burst of updates can't hammer the check loop.
+const SOCKET_TRIGGER_DEBOUNCE_MS = 20 * 1000;
 let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 let lastCheckedAt: Date | null = null;
+let lastSocketTrigger = 0;
+let socketListenerBound = false;
 
 export function getLastCheckedAt(): Date | null {
   return lastCheckedAt;
@@ -126,6 +133,19 @@ export function startBreachMonitor(): void {
   checkAllTraders();
 
   monitorTimer = setInterval(checkAllTraders, MONITOR_INTERVAL_MS);
+
+  // Fast path: react to real-time equity pushes (debounced). The interval above
+  // remains the reliable backbone; this just tightens detection latency.
+  if (ENV.mcSocketEnabled && !socketListenerBound) {
+    socketListenerBound = true;
+    socketEvents.on("update", (payload: { type?: string }) => {
+      if (payload?.type !== "UpdateAccountInformationDTO") return;
+      const now = Date.now();
+      if (now - lastSocketTrigger < SOCKET_TRIGGER_DEBOUNCE_MS) return;
+      lastSocketTrigger = now;
+      checkAllTraders();
+    });
+  }
 }
 
 export function stopBreachMonitor(): void {

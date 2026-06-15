@@ -26,6 +26,7 @@ services:
       context: .
       args:
         BUILD_HASH: ${BUILD_HASH:-dev}
+        VITE_LIVE_STREAM: ${VITE_LIVE_STREAM:-false}
     container_name: rfx-app
     restart: unless-stopped
     depends_on:

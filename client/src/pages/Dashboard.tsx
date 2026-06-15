@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useTradingSession } from "@/hooks/useTradingSession";
+import { useLivePositions } from "@/hooks/useLivePositions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -252,6 +253,10 @@ export default function Dashboard(props: {
   const { data: openPositions, isLoading: positionsLoading } = trpc.trading.getOpenPositions.useQuery(positionInput, {
     refetchInterval: 30000,
   });
+
+  // Phase 2: overlay live positions via SSE when enabled (own view only).
+  // Additive — the 30s poll above remains the fallback.
+  useLivePositions(positionInput, !isViewingAsTrader);
 
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,

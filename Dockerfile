@@ -12,6 +12,10 @@ WORKDIR /app
 RUN corepack enable pnpm
 ARG BUILD_HASH=dev
 ENV BUILD_HASH=$BUILD_HASH
+# Client build-time flag for the Phase 2 live position stream (Vite bakes
+# VITE_-prefixed vars from the build env; .env is dockerignored). Default off.
+ARG VITE_LIVE_STREAM=false
+ENV VITE_LIVE_STREAM=$VITE_LIVE_STREAM
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build

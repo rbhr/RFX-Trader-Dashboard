@@ -11,6 +11,8 @@ import { serveStatic, setupVite } from "./vite";
 import { startTelegramPolling } from "../telegram";
 import { startBreachMonitor } from "../breachMonitor";
 import { startTrailingRiskLimitMonitor } from "../trailingRiskLimit";
+import { startMetaCopierSocket } from "../metacopierSocket";
+import { registerLiveStreamRoutes } from "../liveStream";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -52,6 +54,9 @@ async function startServer() {
       createContext,
     })
   );
+  // Live position stream (SSE, Phase 2). No-op unless MC_LIVE_STREAM=true.
+  // Registered before the static handler so its /api route isn't swallowed.
+  registerLiveStreamRoutes(app);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -69,6 +74,10 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Start the MetaCopier real-time socket (warms the cache before monitors run).
+  // No-op when MC_SOCKET_ENABLED=false.
+  startMetaCopierSocket();
 
   // Start Telegram bot polling to capture /start chat IDs
   startTelegramPolling();

@@ -1,6 +1,18 @@
 import axios from 'axios';
+import { ENV } from './_core/env';
+import {
+  getCachedInfo,
+  getCachedPositions,
+  type SocketPositionDTO,
+} from './metacopierSocket';
 
 const API_BASE = 'https://api.metacopier.io/rest/api/v1';
+
+// Freshness windows for serving the real-time socket cache before falling back
+// to REST. Generous enough to absorb normal gaps between pushes; a stale/missing
+// entry transparently triggers a REST read.
+const INFO_TTL_MS = 120_000;
+const POS_TTL_MS = 45_000;
 
 export interface Position {
   id: string;
@@ -32,6 +44,63 @@ export interface AccountInfo {
   name: string;
   server: string;
   company: string;
+}
+
+/** Map a socket PositionDTO onto the REST Position shape used across the app. */
+function mapSocketPosition(p: SocketPositionDTO): Position {
+  const dir = String(p.dealType ?? p.orderType ?? '').toLowerCase();
+  return {
+    id: String(p.id),
+    symbol: String(p.symbol ?? ''),
+    type: dir.includes('sell') ? 'SELL' : 'BUY',
+    volume: Number(p.volume ?? 0),
+    openPrice: Number(p.openPrice ?? 0),
+    closePrice: p.closePrice != null ? Number(p.closePrice) : undefined,
+    profit: Number(p.profit ?? 0),
+    swap: Number(p.swap ?? 0),
+    commission: Number(p.commission ?? 0),
+    magicNumber: String(p.magicNumber ?? ''),
+    openTime: String(p.openTime ?? ''),
+    closeTime: p.closeTime != null ? String(p.closeTime) : undefined,
+    stopLoss: p.stopLoss != null ? Number(p.stopLoss) : undefined,
+    takeProfit: p.takeProfit != null ? Number(p.takeProfit) : undefined,
+    comment: p.comment != null ? String(p.comment) : undefined,
+  };
+}
+
+/**
+ * Account info from the socket cache, or null to force a REST read. Returns null
+ * unless equity AND balance are finite numbers — so any DTO field-shape surprise
+ * falls back to REST rather than feeding the monitors bad/zero values.
+ */
+function socketAccountInfo(accountId: string): AccountInfo | null {
+  if (!ENV.mcSocketEnabled) return null;
+  const i = getCachedInfo(accountId, INFO_TTL_MS);
+  if (!i) return null;
+  const equity = Number(i.equity);
+  const balance = Number(i.balance);
+  if (!Number.isFinite(equity) || !Number.isFinite(balance)) return null;
+  return {
+    balance,
+    equity,
+    margin: 0,
+    freeMargin: 0,
+    marginLevel: 0,
+    profit: Number.isFinite(Number(i.profitThisMonth)) ? Number(i.profitThisMonth) : 0,
+    currency: '',
+    leverage: Number.isFinite(Number(i.leverage)) ? Number(i.leverage) : 0,
+    name: '',
+    server: '',
+    company: '',
+  };
+}
+
+/** Open positions from the socket cache (mapped), or null to force a REST read. */
+function socketPositions(accountId: string): Position[] | null {
+  if (!ENV.mcSocketEnabled) return null;
+  const dtos = getCachedPositions(accountId, POS_TTL_MS);
+  if (!dtos) return null;
+  return dtos.map(mapSocketPosition);
 }
 
 class MetaCopierService {
@@ -106,11 +175,13 @@ class MetaCopierService {
   }
 
   async getOpenPositions(magicNumber?: string, showAll = false): Promise<Position[]> {
-    const positions = await this.fetchWithAuth<Position[]>(
-      `/accounts/${this.accountId}/positions`
-    );
-
-    if (!Array.isArray(positions)) return [];
+    let positions = socketPositions(this.accountId);
+    if (positions == null) {
+      const rest = await this.fetchWithAuth<Position[]>(
+        `/accounts/${this.accountId}/positions`
+      );
+      positions = Array.isArray(rest) ? rest : [];
+    }
 
     if (showAll || !magicNumber) {
       return positions;
@@ -120,11 +191,13 @@ class MetaCopierService {
   }
 
   async getOpenPositionsFromAccount(accountId: string, magicNumber?: string): Promise<Position[]> {
-    const positions = await this.fetchWithAuth<Position[]>(
-      `/accounts/${accountId}/positions`
-    );
-
-    if (!Array.isArray(positions)) return [];
+    let positions = socketPositions(accountId);
+    if (positions == null) {
+      const rest = await this.fetchWithAuth<Position[]>(
+        `/accounts/${accountId}/positions`
+      );
+      positions = Array.isArray(rest) ? rest : [];
+    }
 
     if (!magicNumber) {
       return positions;
@@ -172,14 +245,16 @@ class MetaCopierService {
   }
 
   async getAccountInfo(): Promise<AccountInfo> {
-    return this.fetchWithAuth<AccountInfo>(
-      `/accounts/${this.accountId}/information`
+    return (
+      socketAccountInfo(this.accountId) ??
+      this.fetchWithAuth<AccountInfo>(`/accounts/${this.accountId}/information`)
     );
   }
 
   async getAccountInfoById(accountId: string): Promise<AccountInfo> {
-    return this.fetchWithAuth<AccountInfo>(
-      `/accounts/${accountId}/information`
+    return (
+      socketAccountInfo(accountId) ??
+      this.fetchWithAuth<AccountInfo>(`/accounts/${accountId}/information`)
     );
   }
 
