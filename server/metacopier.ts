@@ -258,6 +258,11 @@ class MetaCopierService {
     );
   }
 
+  /** The default (project) MetaCopier account id. */
+  get defaultAccountId(): string {
+    return this.accountId;
+  }
+
   /**
    * Check if a MetaCopier account exists by account number
    */
@@ -956,6 +961,67 @@ export async function enableTraderLiveCopiers(trader: {
     `[MetaCopier] enableTraderLiveCopiers: enabled ${enabled}/${copiers.length} copier(s) for magic ${trader.magicNumber}`
   );
   return { enabled, skipped: false };
+}
+
+/**
+ * Resolve the open positions a dashboard view should show AND the MetaCopier
+ * account ids that feed it. Mirrors the admin.getOpenPositions resolution so the
+ * live SSE stream agrees with the polled query. `accountIds` is the set of
+ * accounts whose real-time updates should trigger a push for this view.
+ */
+export async function resolveViewPositions(opts: {
+  isAdmin: boolean;
+  showAllData: boolean;
+  magicNumber: string;
+  liveAccountNumber?: string | null;
+  masterAccountId?: string;
+}): Promise<{ accountIds: string[]; positions: Position[] }> {
+  const { isAdmin, showAllData, magicNumber, liveAccountNumber, masterAccountId } =
+    opts;
+
+  // Admin: a specific master account selected.
+  if (showAllData && masterAccountId) {
+    return {
+      accountIds: [masterAccountId],
+      positions:
+        await metaCopierService.getOpenPositionsFromAccount(masterAccountId),
+    };
+  }
+
+  // Admin overview: aggregate across all master accounts.
+  if (showAllData && isAdmin) {
+    const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+    const accountIds = masters.map((m: any) => m.id);
+    const positions: Position[] = [];
+    for (const m of masters) {
+      positions.push(
+        ...(await metaCopierService.getOpenPositionsFromAccount(m.id))
+      );
+    }
+    return { accountIds, positions };
+  }
+
+  // Normal trader with a live account: that account, filtered by their magic.
+  if (liveAccountNumber && !showAllData) {
+    const liveId =
+      await metaCopierService.getAccountIdByLoginNumber(liveAccountNumber);
+    if (liveId) {
+      return {
+        accountIds: [liveId],
+        positions: await metaCopierService.getOpenPositionsFromAccount(
+          liveId,
+          magicNumber
+        ),
+      };
+    }
+  }
+
+  // Fallback: the default account.
+  const positions = await metaCopierService.getOpenPositions(
+    showAllData ? undefined : magicNumber,
+    showAllData
+  );
+  return { accountIds: [metaCopierService.defaultAccountId], positions };
 }
 
 // P&L calculation helper

@@ -22,9 +22,17 @@ export function useLivePositions(input: PositionInput, enabled: boolean): void {
     if ((import.meta as any).env?.VITE_LIVE_STREAM !== "true") return;
     if (typeof EventSource === "undefined") return;
 
-    const es = new EventSource("/api/live/positions", {
-      withCredentials: true,
-    });
+    // Pass the current view (admin view-as / selected master) so the server
+    // resolves the same accounts the polled query does.
+    const params = new URLSearchParams();
+    if (input?.viewAsTraderId != null)
+      params.set("viewAsTraderId", String(input.viewAsTraderId));
+    if (input?.masterAccountId) params.set("masterAccountId", input.masterAccountId);
+    const qs = params.toString();
+    const es = new EventSource(
+      `/api/live/positions${qs ? `?${qs}` : ""}`,
+      { withCredentials: true }
+    );
 
     const onPositions = (ev: MessageEvent) => {
       try {

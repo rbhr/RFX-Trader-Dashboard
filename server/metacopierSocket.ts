@@ -85,6 +85,7 @@ let reconnectAttempts = 0;
 let started = false;
 let connected = false;
 let lastMessageAt = 0;
+let messageCount = 0;
 let recvBuffer = "";
 
 function entry(accountId: string): CacheEntry {
@@ -161,6 +162,7 @@ export function ingestDto(dto: any): void {
   } else {
     return;
   }
+  messageCount++;
   socketEvents.emit("update", { accountId, type });
 }
 
@@ -293,6 +295,12 @@ export function startMetaCopierSocket(): void {
   heartbeatTimer = setInterval(() => {
     if (connected) send("\n");
   }, HEARTBEAT_MS);
+  // Periodic cache visibility (debug "socket" only).
+  setInterval(() => {
+    debug(
+      `cache: ${cache.size} accounts, ${messageCount} msgs, connected=${connected}`
+    );
+  }, 30000);
 }
 
 export function stopMetaCopierSocket(): void {

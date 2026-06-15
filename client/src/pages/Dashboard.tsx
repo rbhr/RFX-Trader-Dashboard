@@ -254,9 +254,10 @@ export default function Dashboard(props: {
     refetchInterval: 30000,
   });
 
-  // Phase 2: overlay live positions via SSE when enabled (own view only).
-  // Additive — the 30s poll above remains the fallback.
-  useLivePositions(positionInput, !isViewingAsTrader);
+  // Phase 2: overlay live positions via SSE — own dashboard, admin overview,
+  // admin view-as, and admin master-account selection all stream. Additive —
+  // the 30s poll above remains the fallback.
+  useLivePositions(positionInput, !!selfSession);
 
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,
