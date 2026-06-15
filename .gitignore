@@ -17,8 +17,7 @@ build/
 # IDE and editor files
 .vscode/
 .idea/
-*.swp
-*.swo
+*.sw[a-p]
 *~
 
 # OS generated files
@@ -113,3 +112,23 @@ data/
 # Manus artifacts
 .manus/
 .manus-logs/
+
+# Local DB dumps / backups (root-level only; drizzle/ migrations stay tracked)
+/*.sql
+
+# Sensitive local data exports (trader lists, telegram handles, etc.)
+tg.txt
+traderaccounts.txt
+traders.txt
+
+# One-off operational scripts (run locally, not part of the app)
+add-rfx-traders.mjs
+backfill-live-copiers.ts
+fix-copier-magic-only.mjs
+fix-copier-settings.mjs
+fix-zarab-copier-magic.mjs
+hash-existing-passwords.mjs
+update-copiers.mjs
+update-guardrails.mjs
+update-trader-telegram.mjs
+zarab-switch-live.mjs
