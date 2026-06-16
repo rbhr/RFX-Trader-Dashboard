@@ -275,6 +275,29 @@ export default function Dashboard(props: {
   const displayFloating = liveFloating ?? pnlSummary?.floatingPnL ?? 0;
   const displayTodayTotal = (pnlSummary?.todayRealizedPnL ?? 0) + displayFloating;
 
+  // Week/Month/All-time = their realized component + live floating (same idea
+  // as Today). When live floating isn't available (positions not loaded, or a
+  // master is selected), fall back to the server's pre-combined values.
+  const displayWeek =
+    liveFloating != null
+      ? (pnlSummary?.weekRealizedPnL ?? 0) + liveFloating
+      : pnlSummary?.weekPnL ?? 0;
+  const displayMonth =
+    liveFloating != null
+      ? (pnlSummary?.monthRealizedPnL ?? 0) + liveFloating
+      : pnlSummary?.monthPnL ?? 0;
+  const displayAllTime =
+    liveFloating != null
+      ? (pnlSummary?.allTimeRealizedPnL ?? 0) + liveFloating
+      : pnlSummary?.allTimePnL ?? 0;
+  // Weekly profit share tracks the live week P&L (only on positive weeks).
+  const displayWeeklyProfitShare =
+    liveFloating != null
+      ? displayWeek > 0
+        ? displayWeek * (pnlSummary?.profitSharePercent ?? 0)
+        : 0
+      : pnlSummary?.weeklyProfitShare ?? 0;
+
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,
   });
@@ -701,28 +724,28 @@ export default function Dashboard(props: {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <PnLCard
             title="This Week"
-            value={pnlSummary?.weekPnL ?? 0}
+            value={displayWeek}
             subtitle="Last 7 days"
             icon={Calendar}
             isLoading={pnlLoading}
           />
           <PnLCard
             title="This Month"
-            value={pnlSummary?.monthPnL ?? 0}
+            value={displayMonth}
             subtitle="Current month"
             icon={Calendar}
             isLoading={pnlLoading}
           />
           <PnLCard
             title="All Time"
-            value={pnlSummary?.allTimePnL ?? 0}
+            value={displayAllTime}
             subtitle="Total performance"
             icon={TrendingUp}
             isLoading={pnlLoading}
           />
           <PnLCard
             title="Weekly Profit Share"
-            value={pnlSummary?.weeklyProfitShare ?? 0}
+            value={displayWeeklyProfitShare}
             subtitle={`${((pnlSummary?.profitSharePercent ?? 0) * 100).toFixed(0)}% of positive weekly P&L`}
             icon={Percent}
             isLoading={pnlLoading}

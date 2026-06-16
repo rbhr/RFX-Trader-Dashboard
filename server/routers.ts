@@ -1492,10 +1492,13 @@ export const appRouter = router({
 
         const floatingPnL = calculatePnL(openPositions);
         const todayRealizedPnL = calculatePnL(todayPositions);
+        const weekRealizedPnL = calculatePnL(weekPositions);
+        const monthRealizedPnL = calculatePnL(monthPositions);
+        const allTimeRealizedPnL = calculatePnL(allTimePositions);
         const todayTotalPnL = floatingPnL + todayRealizedPnL;
-        const weekPnL = calculatePnL(weekPositions) + floatingPnL;
-        const monthPnL = calculatePnL(monthPositions) + floatingPnL;
-        const allTimePnL = calculatePnL(allTimePositions) + floatingPnL;
+        const weekPnL = weekRealizedPnL + floatingPnL;
+        const monthPnL = monthRealizedPnL + floatingPnL;
+        const allTimePnL = allTimeRealizedPnL + floatingPnL;
 
         const profitShareValue = parseFloat(profitShare);
         const weeklyProfitShare = weekPnL > 0 ? weekPnL * profitShareValue : 0;
@@ -1503,6 +1506,11 @@ export const appRouter = router({
         return {
           floatingPnL,
           todayRealizedPnL,
+          // Realized (closed-only) components, so the client can recombine with
+          // live floating P&L for realtime week/month/all-time figures.
+          weekRealizedPnL,
+          monthRealizedPnL,
+          allTimeRealizedPnL,
           todayTotalPnL,
           weekPnL,
           monthPnL,
