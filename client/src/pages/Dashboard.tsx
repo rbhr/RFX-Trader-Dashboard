@@ -259,6 +259,22 @@ export default function Dashboard(props: {
   // the 30s poll above remains the fallback.
   useLivePositions(positionInput, !!selfSession);
 
+  // Realtime floating P&L derived from the (now live) open positions, so the
+  // Floating and Today's-Total figures move with the market instead of waiting
+  // for the 60s pnlSummary poll. Realized comes from pnlSummary (changes only
+  // when a position closes). Skipped when a specific master is selected, since
+  // pnlSummary then covers a different view than the positions list.
+  const liveFloating = useMemo(() => {
+    if (selectedMasterAccountId || !openPositions) return null;
+    return openPositions.reduce(
+      (sum, p) => sum + (p.profit ?? 0) + (p.swap ?? 0) + (p.commission ?? 0),
+      0
+    );
+  }, [openPositions, selectedMasterAccountId]);
+
+  const displayFloating = liveFloating ?? pnlSummary?.floatingPnL ?? 0;
+  const displayTodayTotal = (pnlSummary?.todayRealizedPnL ?? 0) + displayFloating;
+
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,
   });
@@ -569,9 +585,9 @@ export default function Dashboard(props: {
               ) : (
                 <>
                   <div className={`text-4xl font-bold mb-4 ${
-                    (pnlSummary?.todayTotalPnL ?? 0) >= 0 ? "text-primary" : "text-destructive"
+                    displayTodayTotal >= 0 ? "text-primary" : "text-destructive"
                   }`}>
-                    {formatCurrency(pnlSummary?.todayTotalPnL ?? 0, true)}
+                    {formatCurrency(displayTodayTotal, true)}
                   </div>
                   <div className="flex items-center gap-6 text-sm">
                     <div>
@@ -583,7 +599,7 @@ export default function Dashboard(props: {
                     <div>
                       <span className="text-muted-foreground">Floating: </span>
                       <span className="font-semibold">
-                        {formatCurrency(pnlSummary?.floatingPnL ?? 0, true)}
+                        {formatCurrency(displayFloating, true)}
                       </span>
                     </div>
                   </div>
