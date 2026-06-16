@@ -1,4 +1,4 @@
-import { eq, desc, isNull, sql, or, and, gt, lt } from "drizzle-orm";
+import { eq, desc, isNull, isNotNull, sql, or, and, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -481,6 +481,35 @@ export async function bulkResolveRiskLimitBreaches(): Promise<number> {
     .where(isNull(riskLimitBreaches.resolvedAt));
 
   return active.length;
+}
+
+// Hard-delete a single breach record by id (data cleanup; does not re-enable
+// trading — that's resolveRiskLimitBreach).
+export async function deleteRiskLimitBreach(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(riskLimitBreaches).where(eq(riskLimitBreaches.id, id));
+}
+
+// Hard-delete all resolved (historical) breach records. Active breaches are
+// left untouched. Returns the number deleted.
+export async function clearResolvedRiskLimitBreaches(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const resolved = await db
+    .select({ id: riskLimitBreaches.id })
+    .from(riskLimitBreaches)
+    .where(isNotNull(riskLimitBreaches.resolvedAt));
+
+  if (resolved.length === 0) return 0;
+
+  await db
+    .delete(riskLimitBreaches)
+    .where(isNotNull(riskLimitBreaches.resolvedAt));
+
+  return resolved.length;
 }
 
 // Previous Magic Numbers CRUD

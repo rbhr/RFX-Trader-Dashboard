@@ -37,6 +37,8 @@ import {
   resolveRiskLimitBreach,
   countActiveRiskLimitBreaches,
   bulkResolveRiskLimitBreaches,
+  deleteRiskLimitBreach,
+  clearResolvedRiskLimitBreaches,
   getPreviousMagicNumbers,
   addPreviousMagicNumber,
   removePreviousMagicNumber,
@@ -2352,6 +2354,33 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+
+    // Hard-delete a single breach record (data cleanup; does NOT re-enable
+    // trading — use resolveRiskLimitBreach for that).
+    deleteRiskLimitBreach: tradingProcedure
+      .input(z.object({ breachId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        await deleteRiskLimitBreach(input.breachId);
+        return { success: true };
+      }),
+
+    // Clear all resolved (historical) breach records. Active breaches untouched.
+    clearBreachHistory: tradingProcedure.mutation(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin access required",
+        });
+      }
+      const deleted = await clearResolvedRiskLimitBreaches();
+      return { deleted };
+    }),
 
     // Count active (unresolved) risk limit breaches — used for sidebar badge
     countActiveBreaches: tradingProcedure.query(async ({ ctx }) => {

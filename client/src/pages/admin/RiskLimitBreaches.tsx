@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldAlert, CheckCircle2, Clock, ShieldCheck, RefreshCw } from "lucide-react";
+import { ShieldAlert, CheckCircle2, Clock, ShieldCheck, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 
@@ -34,6 +34,8 @@ type Breach = {
 export default function RiskLimitBreaches() {
   const [resolveTarget, setResolveTarget] = useState<Breach | null>(null);
   const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Breach | null>(null);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const utils = trpc.useUtils();
 
   const { data: breaches, isLoading } = trpc.admin.getRiskLimitBreaches.useQuery(undefined, {
@@ -79,6 +81,31 @@ export default function RiskLimitBreaches() {
     },
   });
 
+  const deleteMutation = trpc.admin.deleteRiskLimitBreach.useMutation({
+    onSuccess: () => {
+      toast.success("Breach record deleted");
+      setDeleteTarget(null);
+      utils.admin.getRiskLimitBreaches.invalidate();
+      utils.admin.countActiveBreaches.invalidate();
+    },
+    onError: (err: any) => {
+      toast.error(`Delete failed: ${err.message}`);
+    },
+  });
+
+  const clearHistoryMutation = trpc.admin.clearBreachHistory.useMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Cleared ${data.deleted} historical breach${data.deleted !== 1 ? "es" : ""}`
+      );
+      setClearHistoryOpen(false);
+      utils.admin.getRiskLimitBreaches.invalidate();
+    },
+    onError: (err: any) => {
+      toast.error(`Clear failed: ${err.message}`);
+    },
+  });
+
   type BreachItem = NonNullable<typeof breaches>[number];
   const activeBreaches: BreachItem[] = breaches?.filter((b: BreachItem) => !b.resolvedAt) ?? [];
   const resolvedBreaches: BreachItem[] = breaches?.filter((b: BreachItem) => b.resolvedAt) ?? [];
@@ -120,6 +147,17 @@ export default function RiskLimitBreaches() {
                 Resolve All
               </Button>
             </>
+          )}
+          {resolvedBreaches.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setClearHistoryOpen(true)}
+              disabled={clearHistoryMutation.isPending}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear History
+            </Button>
           )}
           </div>
         </div>
@@ -179,13 +217,24 @@ export default function RiskLimitBreaches() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => setResolveTarget(breach)}
-                        >
-                          Re-enable Trading
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => setResolveTarget(breach)}
+                          >
+                            Re-enable Trading
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            aria-label="Delete breach record"
+                            onClick={() => setDeleteTarget(breach)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -215,6 +264,7 @@ export default function RiskLimitBreaches() {
                     <TableHead>Risk Limit</TableHead>
                     <TableHead>Breached At</TableHead>
                     <TableHead>Resolved At</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -236,6 +286,17 @@ export default function RiskLimitBreaches() {
                           <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                           {formatDate(breach.resolvedAt)}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          aria-label="Delete breach record"
+                          onClick={() => setDeleteTarget(breach)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -302,6 +363,61 @@ export default function RiskLimitBreaches() {
               {bulkResolveMutation.isPending
                 ? "Processing..."
                 : `Re-enable ${activeBreaches.length} Trader${activeBreaches.length !== 1 ? "s" : ""}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Delete Single Breach Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this breach record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently removes the breach record for{" "}
+              <strong>{deleteTarget?.traderName}</strong> (Magic:{" "}
+              {deleteTarget?.magicNumber}). This is a data-cleanup action only
+              {deleteTarget && !deleteTarget.resolvedAt
+                ? " — it does NOT re-enable trading (use Re-enable Trading for that)"
+                : ""}
+              . This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteTarget &&
+                deleteMutation.mutate({ breachId: deleteTarget.id })
+              }
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Clear History Dialog */}
+      <AlertDialog open={clearHistoryOpen} onOpenChange={setClearHistoryOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear breach history?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently deletes all <strong>{resolvedBreaches.length}</strong>{" "}
+              resolved breach record{resolvedBreaches.length !== 1 ? "s" : ""}.
+              Active breaches are not affected. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => clearHistoryMutation.mutate()}
+              disabled={clearHistoryMutation.isPending}
+            >
+              {clearHistoryMutation.isPending ? "Clearing..." : "Clear History"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
