@@ -21,6 +21,7 @@
 import { EventEmitter } from "events";
 import { ENV } from "./_core/env";
 import { createDebug } from "./_core/debug";
+import { logEvent } from "./logStore";
 
 const debug = createDebug("socket");
 
@@ -176,6 +177,7 @@ function processFrame(chunk: string): void {
     connected = true;
     reconnectAttempts = 0;
     debug("CONNECTED — subscribing to all accounts");
+    logEvent("socket", "Real-time socket connected — subscribed to all accounts");
     send(
       frame("SUBSCRIBE", {
         id: "sub-0",
@@ -271,9 +273,15 @@ function connect(): void {
   });
 
   socket.addEventListener("close", () => {
+    const wasConnected = connected;
     connected = false;
     if (ws === socket) ws = null;
-    if (started) scheduleReconnect();
+    if (started) {
+      if (wasConnected) {
+        logEvent("socket", "Real-time socket disconnected — reconnecting", "warn");
+      }
+      scheduleReconnect();
+    }
   });
 }
 

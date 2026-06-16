@@ -16,6 +16,7 @@ import {
   sendTelegramMessage,
   buildTrailingRiskLimitMessage,
 } from "./telegram";
+import { logEvent } from "./logStore";
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 let monitorTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -77,8 +78,9 @@ async function checkTrailingRiskLimits(): Promise<void> {
             newLimit
           );
 
-          console.log(
-            `[TrailingRiskLimit] Updated ${trader.name} (${trader.magicNumber}): $${currentAbsoluteLimit.toFixed(2)} → $${newLimit.toFixed(2)} (balance: $${balance.toFixed(2)}, buffer: $${buffer.toFixed(2)})`
+          logEvent(
+            "trailing",
+            `${trader.name} (${trader.magicNumber}): stopout $${currentAbsoluteLimit.toFixed(2)} → $${newLimit.toFixed(2)} (balance $${balance.toFixed(2)}, buffer $${buffer.toFixed(2)})`
           );
 
           await createNotification({

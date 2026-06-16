@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { getMagicNumberById, updateMagicNumber } from "./db";
 import { enableTraderLiveCopiers } from "./metacopier";
 import { sendTelegramMessage } from "./telegram";
+import { logEvent } from "./logStore";
 
 type TraderRow = NonNullable<Awaited<ReturnType<typeof getMagicNumberById>>>;
 
@@ -105,8 +106,9 @@ export async function maybeActivateOnboarding(traderId: number): Promise<void> {
       );
     }
 
-    console.log(
-      `🎉 [Onboarding] ${who} ACTIVATED — onboarding complete! Enabled ${result.enabled} live copier(s) and sent login details to ${trader.telegramHandle}. Welcome aboard! 🚀`
+    logEvent(
+      "onboarding",
+      `🎉 ${who} ACTIVATED — onboarding complete! Enabled ${result.enabled} live copier(s) and sent login details to ${trader.telegramHandle}.`
     );
   } catch (e) {
     console.error(`[Onboarding] maybeActivateOnboarding(${traderId}) failed:`, e);

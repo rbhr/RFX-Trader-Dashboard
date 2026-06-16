@@ -71,6 +71,7 @@ import { maybeActivateOnboarding } from "./onboarding";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
+import { logEvent, getRecentLogs, type LogCategory } from "./logStore";
 import {
   getWalletAddress as getTronWalletAddress,
   getUsdtBalance as getTronBalance,
@@ -432,6 +433,11 @@ async function recordPaymentAndNotify(params: {
   const trader = await getMagicNumberById(magicNumberId);
   if (trader) {
     await incrementLifetimeIncome(magicNumberId, amount);
+
+    logEvent(
+      "payment",
+      `Paid $${amount.toFixed(2)}${network ? ` (${network})` : ""} to ${trader.name} (${trader.magicNumber}) — tx ${transactionHash.slice(0, 10)}…`
+    );
 
     await createNotification({
       magicNumberId,
@@ -2051,6 +2057,13 @@ export const appRouter = router({
           warnings.push(`label failed: ${error.message}`);
         }
 
+        logEvent(
+          "metacopier",
+          `${freshlyCreated ? "Created" : "Linked/repaired"} MC account for ${trader.name} (magic ${magicForName})` +
+            (warnings.length ? ` — ${warnings.length} warning(s): ${warnings.join("; ")}` : ""),
+          warnings.length ? "warn" : "info"
+        );
+
         return {
           success: true,
           accountId: mcAccountId,
@@ -2362,6 +2375,40 @@ export const appRouter = router({
       }
       return { lastCheckedAt: getLastCheckedAt() };
     }),
+
+    // Recent system event log for the admin Logs tab (in-memory, newest first).
+    getLogs: tradingProcedure
+      .input(
+        z
+          .object({
+            category: z
+              .enum([
+                "onboarding",
+                "trailing",
+                "breach",
+                "telegram",
+                "metacopier",
+                "socket",
+                "payment",
+                "system",
+              ])
+              .optional(),
+            limit: z.number().min(1).max(2000).optional(),
+          })
+          .optional()
+      )
+      .query(async ({ ctx, input }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        return getRecentLogs({
+          category: input?.category as LogCategory | undefined,
+          limit: input?.limit,
+        });
+      }),
 
     getTrailingRiskLimitConfig: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {

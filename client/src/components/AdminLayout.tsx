@@ -12,6 +12,7 @@ import {
   LogOut,
   TrendingUp,
   ShieldAlert,
+  ScrollText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -66,6 +67,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       href: "/admin/risk-breaches",
       icon: ShieldAlert,
       badge: activeBreachCount,
+    },
+    {
+      title: "System Logs",
+      href: "/admin/logs",
+      icon: ScrollText,
+      badge: 0,
     },
   ];
 

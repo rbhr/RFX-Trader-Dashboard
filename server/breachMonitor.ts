@@ -21,6 +21,7 @@ import {
 import { notifyOwner } from "./_core/notification";
 import { socketEvents } from "./metacopierSocket";
 import { ENV } from "./_core/env";
+import { logEvent } from "./logStore";
 
 const MONITOR_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 // When the real-time socket pushes equity updates, run an extra check — but at
@@ -69,8 +70,10 @@ async function checkAllTraders(): Promise<void> {
           const existingBreach = await getActiveBreachByMagicNumberId(trader.id);
           if (existingBreach) continue; // Already recorded — skip
 
-          console.log(
-            `[BreachMonitor] Breach detected for trader ${trader.name} (Magic: ${trader.magicNumber}) — equity: $${equity.toFixed(2)}, limit: $${riskLimit.toFixed(2)}`
+          logEvent(
+            "breach",
+            `Breach: ${trader.name} (${trader.magicNumber}) equity $${equity.toFixed(2)} < limit $${riskLimit.toFixed(2)} — trades closed`,
+            "warn"
           );
 
           // Record the breach

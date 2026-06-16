@@ -1,6 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { getMagicNumbersByTelegramHandle, updateMagicNumber } from "./db";
 import { maybeActivateOnboarding } from "./onboarding";
+import { logEvent } from "./logStore";
 
 let bot: TelegramBot | null = null;
 let pollingStarted = false;
@@ -58,7 +59,7 @@ export function startTelegramPolling(): void {
             `Please set one in <b>Telegram → Settings → Username</b>, make sure that same handle is saved in your dashboard settings, then send /start again.`,
           { parse_mode: "HTML", disable_web_page_preview: true } as any
         );
-        console.log(`[Telegram] /start with no Telegram username (chat ID: ${chatId})`);
+        logEvent("telegram", `/start with no Telegram username set (chat ${chatId})`, "warn");
         return;
       }
       try {
@@ -90,7 +91,7 @@ export function startTelegramPolling(): void {
               );
 
           await pollingBot.sendMessage(chatId, welcomeMsg, { parse_mode: "HTML", disable_web_page_preview: true } as any);
-          console.log(`[Telegram] ${anyFirstLink ? 'Linked' : 'Re-linked'} chat ID ${chatId} to ${traders.length} trader(s) (@${username})`);
+          logEvent("telegram", `${anyFirstLink ? 'Linked' : 'Re-linked'} @${username} (chat ${chatId}) to ${traders.length} account(s): ${traders.map((t) => t.magicNumber).join(', ')}`);
 
           // Linking Telegram may complete onboarding → activate live copiers.
           // Idempotent (guarded by liveCopiersActivatedAt); safe to call every /start.
@@ -102,7 +103,7 @@ export function startTelegramPolling(): void {
             chatId,
             `👋 Hi @${username}! To link your Telegram to RFX Trader Dashboard, please save your Telegram handle in your dashboard settings first, then send /start again.`
           );
-          console.log(`[Telegram] /start from unknown handle @${username} (chat ID: ${chatId})`);
+          logEvent("telegram", `/start from unknown handle @${username} (chat ${chatId}) — no matching trader`, "warn");
         }
       } catch (err) {
         console.error("[Telegram] Error handling /start:", err);
