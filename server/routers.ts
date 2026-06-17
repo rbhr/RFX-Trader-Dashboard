@@ -888,6 +888,9 @@ export const appRouter = router({
         return payments.map(p => ({
           id: p.id,
           amount: parseFloat(p.amount),
+          networkFee: p.networkFee != null ? parseFloat(p.networkFee) : 0,
+          network: p.network ?? null,
+          narration: p.narration ?? null,
           transactionHash: p.transactionHash,
           paymentDate: p.paymentDate,
           createdAt: p.createdAt,
