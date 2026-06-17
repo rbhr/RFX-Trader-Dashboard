@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  TrendingUp, 
+import { PaginationBar, paginate, type PageSize } from "@/components/Pagination";
+import { TransmissionProofDialog, type ProofPayment } from "@/components/TransmissionProofDialog";
+import {
+  TrendingUp,
   DollarSign, 
   RefreshCw, 
   LogOut,
@@ -21,7 +23,8 @@ import {
   FileText,
   Copy,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  CreditCard
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -329,6 +332,34 @@ export default function Dashboard(props: {
     enabled: showTradeHistory,
     refetchInterval: 300000,
   });
+
+  // Pagination for the embedded trade-history + payments tables.
+  const [histPageSize, setHistPageSize] = useState<PageSize>(10);
+  const [histPage, setHistPage] = useState(0);
+  const [payPageSize, setPayPageSize] = useState<PageSize>(10);
+  const [payPage, setPayPage] = useState(0);
+  const [proofPayment, setProofPayment] = useState<ProofPayment | null>(null);
+
+  const sortedHistory = useMemo(
+    () =>
+      [...((allTimePositions as any[]) ?? [])]
+        .filter((p) => p.closeTime)
+        .sort(
+          (a, b) =>
+            new Date(b.closeTime).getTime() - new Date(a.closeTime).getTime()
+        ),
+    [allTimePositions]
+  );
+  const sortedPayments = useMemo(
+    () =>
+      [...(paymentHistory ?? [])].sort(
+        (a, b) =>
+          new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+      ),
+    [paymentHistory]
+  );
+  const histPaged = paginate(sortedHistory, histPageSize, histPage);
+  const paysPaged = paginate(sortedPayments, payPageSize, payPage);
 
   const { data: accountBalanceEquity } = trpc.trading.getAccountBalanceAndEquity.useQuery(viewAsInput, {
     refetchInterval: 60000,
@@ -860,7 +891,8 @@ export default function Dashboard(props: {
                   </Card>
                 ))}
               </div>
-            ) : allTimePositions && allTimePositions.length > 0 ? (
+            ) : sortedHistory.length > 0 ? (
+              <>
               <Card>
                 <Table>
                   <TableHeader>
@@ -881,7 +913,7 @@ export default function Dashboard(props: {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {allTimePositions.map((position: any, index: number) => {
+                    {histPaged.slice.map((position: any, index: number) => {
                       const totalPnL = (position.profit ?? 0) + (position.swap ?? 0) + (position.commission ?? 0);
                       const isPositive = totalPnL >= 0;
                       const tpHit = wasTPHit(position);
@@ -923,6 +955,14 @@ export default function Dashboard(props: {
                   </TableBody>
                 </Table>
               </Card>
+              <PaginationBar
+                total={histPaged.total}
+                pageSize={histPageSize}
+                setPageSize={setHistPageSize}
+                page={histPage}
+                setPage={setHistPage}
+              />
+              </>
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">
@@ -937,8 +977,109 @@ export default function Dashboard(props: {
           </div>
         )}
 
+        {/* Payments — shown alongside trade history (embedded / admin view) */}
+        {showTradeHistory && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Payments</h2>
+            {paymentsLoading ? (
+              <Card>
+                <CardContent className="p-4">
+                  <Skeleton className="h-6 w-full" />
+                </CardContent>
+              </Card>
+            ) : paysPaged.total > 0 ? (
+              <>
+                <Card>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Network</TableHead>
+                        <TableHead className="text-right">Fee</TableHead>
+                        <TableHead>Note</TableHead>
+                        <TableHead className="text-right">Transaction</TableHead>
+                        <TableHead className="text-right">Proof</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paysPaged.slice.map((p: any) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="text-xs">{formatDateTime(p.paymentDate)}</TableCell>
+                          <TableCell className="text-right font-semibold text-primary">
+                            {formatCurrency(p.amount)}
+                          </TableCell>
+                          <TableCell>
+                            {p.network ? (
+                              <Badge variant="outline" className="text-xs">{p.network}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">
+                            {p.networkFee ? formatCurrency(p.networkFee) : "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                            {p.narration || "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {p.transactionHash && !String(p.transactionHash).startsWith("PENDING-") ? (
+                              <a
+                                href={p.network === "ERC20"
+                                  ? `https://etherscan.io/tx/${p.transactionHash}`
+                                  : `https://tronscan.org/#/transaction/${p.transactionHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline"
+                              >
+                                {String(p.transactionHash).slice(0, 8)}…{String(p.transactionHash).slice(-6)}
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">Pending</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setProofPayment(p)}>
+                              Show Transmission Proof
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Card>
+                <PaginationBar
+                  total={paysPaged.total}
+                  pageSize={payPageSize}
+                  setPageSize={setPayPageSize}
+                  page={payPage}
+                  setPage={setPayPage}
+                />
+              </>
+            ) : (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="font-semibold mb-2">No Payments</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Payments to this trader will appear here.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
         </div>
       </div>
+
+      {/* Transmission Proof Dialog */}
+      <TransmissionProofDialog
+        payment={proofPayment}
+        open={!!proofPayment}
+        onOpenChange={(o) => !o && setProofPayment(null)}
+      />
 
       {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>

@@ -894,6 +894,8 @@ export const appRouter = router({
           transactionHash: p.transactionHash,
           paymentDate: p.paymentDate,
           createdAt: p.createdAt,
+          traderName: trader.name,
+          usdtAddress: trader.usdtAddress ?? null,
         }));
       }),
 
