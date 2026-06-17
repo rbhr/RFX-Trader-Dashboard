@@ -310,3 +310,17 @@ export const adminSettings = mysqlTable("admin_settings", {
   key: varchar("key", { length: 100 }).notNull().unique(),
   value: varchar("value", { length: 500 }).notNull(),
 });
+
+/**
+ * System event log (persistent) — backs the admin "System Logs" tab.
+ */
+export const logs = mysqlTable("logs", {
+  id: int("id").autoincrement().primaryKey(),
+  category: varchar("category", { length: 32 }).notNull(),
+  level: varchar("level", { length: 16 }).notNull().default("info"),
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Log = typeof logs.$inferSelect;
+export type InsertLog = typeof logs.$inferInsert;

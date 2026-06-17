@@ -39,6 +39,7 @@ import {
   bulkResolveRiskLimitBreaches,
   deleteRiskLimitBreach,
   clearResolvedRiskLimitBreaches,
+  getLogsPaged,
   getPreviousMagicNumbers,
   addPreviousMagicNumber,
   removePreviousMagicNumber,
@@ -73,7 +74,7 @@ import { maybeActivateOnboarding } from "./onboarding";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
-import { logEvent, getRecentLogs, type LogCategory } from "./logStore";
+import { logEvent, type LogCategory } from "./logStore";
 import {
   getWalletAddress as getTronWalletAddress,
   getUsdtBalance as getTronBalance,
@@ -2410,26 +2411,26 @@ export const appRouter = router({
       return { lastCheckedAt: getLastCheckedAt() };
     }),
 
-    // Recent system event log for the admin Logs tab (in-memory, newest first).
+    // Persistent system event log for the admin Logs tab — server-side
+    // pagination, latest first. "all" page size is capped to keep responses sane.
     getLogs: tradingProcedure
       .input(
-        z
-          .object({
-            category: z
-              .enum([
-                "onboarding",
-                "trailing",
-                "breach",
-                "telegram",
-                "metacopier",
-                "socket",
-                "payment",
-                "system",
-              ])
-              .optional(),
-            limit: z.number().min(1).max(2000).optional(),
-          })
-          .optional()
+        z.object({
+          category: z
+            .enum([
+              "onboarding",
+              "trailing",
+              "breach",
+              "telegram",
+              "metacopier",
+              "socket",
+              "payment",
+              "system",
+            ])
+            .optional(),
+          page: z.number().min(0).optional(),
+          pageSize: z.union([z.number().min(1).max(100), z.literal("all")]).optional(),
+        })
       )
       .query(async ({ ctx, input }) => {
         if (!ctx.tradingSession.magicNumber.isAdmin) {
@@ -2438,10 +2439,23 @@ export const appRouter = router({
             message: "Admin access required",
           });
         }
-        return getRecentLogs({
-          category: input?.category as LogCategory | undefined,
-          limit: input?.limit,
+        const ALL_CAP = 500;
+        const page = input.page ?? 0;
+        let limit: number;
+        let offset: number;
+        if (input.pageSize === "all") {
+          limit = ALL_CAP;
+          offset = 0;
+        } else {
+          limit = input.pageSize ?? 10;
+          offset = page * limit;
+        }
+        const { entries, total } = await getLogsPaged({
+          category: input.category as LogCategory | undefined,
+          limit,
+          offset,
         });
+        return { entries, total, allCap: ALL_CAP };
       }),
 
     getTrailingRiskLimitConfig: tradingProcedure.query(async ({ ctx }) => {

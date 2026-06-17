@@ -19,6 +19,8 @@ import {
   traderPreviousMasterAccounts,
   twoFactorCodes,
   adminSettings,
+  logs,
+  InsertLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -490,6 +492,43 @@ export async function deleteRiskLimitBreach(id: number): Promise<void> {
   if (!db) throw new Error("Database not available");
 
   await db.delete(riskLimitBreaches).where(eq(riskLimitBreaches.id, id));
+}
+
+// ---- System event log (persistent) --------------------------------------
+
+export async function createLog(data: InsertLog): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // text column is generous, but guard against pathologically long messages
+  const message =
+    data.message.length > 2000 ? data.message.slice(0, 2000) + "…" : data.message;
+  await db.insert(logs).values({ ...data, message });
+}
+
+export async function getLogsPaged(opts: {
+  category?: string;
+  limit: number;
+  offset: number;
+}): Promise<{ entries: (typeof logs.$inferSelect)[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { entries: [], total: 0 };
+
+  const where = opts.category ? eq(logs.category, opts.category) : undefined;
+  const entries = await db
+    .select()
+    .from(logs)
+    .where(where)
+    .orderBy(desc(logs.id)) // latest first
+    .limit(opts.limit)
+    .offset(opts.offset);
+
+  const countRows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(logs)
+    .where(where);
+  const total = Number(countRows[0]?.count ?? 0);
+
+  return { entries, total };
 }
 
 // Hard-delete all resolved (historical) breach records. Active breaches are

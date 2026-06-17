@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollText, RefreshCw } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
+import { PaginationBar, type PageSize } from "@/components/Pagination";
 
 type LogCategory =
   | "onboarding"
@@ -61,20 +62,25 @@ function levelClasses(level: string): string {
 
 export default function Logs() {
   const [category, setCategory] = useState<LogCategory | undefined>(undefined);
+  const [pageSize, setPageSize] = useState<PageSize>(10);
+  const [page, setPage] = useState(0);
 
-  const { data: logs, isLoading } = trpc.admin.getLogs.useQuery(
-    { category, limit: 500 },
+  const { data, isLoading } = trpc.admin.getLogs.useQuery(
+    { category, page, pageSize },
     { refetchInterval: 5000 }
   );
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return d.toLocaleTimeString([], {
+  const entries = data?.entries ?? [];
+  const total = data?.total ?? 0;
+
+  const formatTime = (ts: string | Date) =>
+    new Date(ts).toLocaleString([], {
+      month: "short",
+      day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
     });
-  };
 
   return (
     <AdminLayout>
@@ -84,8 +90,8 @@ export default function Logs() {
           <div>
             <h1 className="text-2xl font-bold">System Logs</h1>
             <p className="text-muted-foreground text-sm">
-              Live activity across onboarding, risk limits, Telegram, MetaCopier
-              and payouts. Newest first.
+              Persistent activity across onboarding, risk limits, Telegram,
+              MetaCopier and payouts. Newest first.
             </p>
           </div>
           <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
@@ -101,7 +107,10 @@ export default function Logs() {
               key={f.label}
               size="sm"
               variant={category === f.key ? "default" : "outline"}
-              onClick={() => setCategory(f.key)}
+              onClick={() => {
+                setCategory(f.key);
+                setPage(0);
+              }}
             >
               {f.label}
             </Button>
@@ -115,47 +124,53 @@ export default function Logs() {
               {FILTERS.find((f) => f.key === category)?.label ?? "All"} events
             </CardTitle>
             <CardDescription>
-              {logs ? `${logs.length} event${logs.length !== 1 ? "s" : ""}` : ""}
-              {" · in-memory (clears on restart)"}
+              {total} event{total !== 1 ? "s" : ""} · persistent
+              {pageSize === "all" ? " · “All” shows up to 500" : ""}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <p className="text-muted-foreground text-sm py-4">Loading logs…</p>
-            ) : !logs || logs.length === 0 ? (
+            ) : entries.length === 0 ? (
               <div className="text-muted-foreground py-6 text-center">
                 No events recorded yet.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-24">Time</TableHead>
-                    <TableHead className="w-32">Category</TableHead>
-                    <TableHead>Message</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="text-muted-foreground text-xs font-mono whitespace-nowrap">
-                        {formatTime(log.ts)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {CATEGORY_LABEL[log.category as LogCategory] ??
-                            log.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell
-                        className={`text-sm ${levelClasses(log.level)}`}
-                      >
-                        {log.message}
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-40">Time</TableHead>
+                      <TableHead className="w-32">Category</TableHead>
+                      <TableHead>Message</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {entries.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-muted-foreground text-xs font-mono whitespace-nowrap">
+                          {formatTime(log.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {CATEGORY_LABEL[log.category as LogCategory] ?? log.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={`text-sm ${levelClasses(log.level)}`}>
+                          {log.message}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <PaginationBar
+                  total={total}
+                  pageSize={pageSize}
+                  setPageSize={setPageSize}
+                  page={page}
+                  setPage={setPage}
+                />
+              </>
             )}
           </CardContent>
         </Card>
