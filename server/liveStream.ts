@@ -13,7 +13,7 @@
 
 import type { Express, Request, Response } from "express";
 import { getTradingSessionByToken, getMagicNumberById } from "./db";
-import { resolveViewPositions } from "./metacopier";
+import { resolveViewPositions, metaCopierService } from "./metacopier";
 import { socketEvents } from "./metacopierSocket";
 import { ENV } from "./_core/env";
 import { createDebug } from "./_core/debug";
@@ -68,8 +68,14 @@ export function registerLiveStreamRoutes(app: Express): void {
         masterAccountId,
       };
 
+      // Equity/balance come from the trader's own incubator account (not the
+      // positions-source master). Admin-overview has none → no account events.
+      const equityAccountId = trader.mcAccountId ?? undefined;
       const initial = await resolveViewPositions(plan);
-      const watched = new Set(initial.accountIds);
+      const watched = new Set([
+        ...initial.accountIds,
+        ...(equityAccountId ? [equityAccountId] : []),
+      ]);
       debug(
         `live stream OPEN: ${trader.name} admin=${trader.isAdmin} watching ${watched.size} account(s)`
       );
@@ -84,14 +90,28 @@ export function registerLiveStreamRoutes(app: Express): void {
 
       let lastSent = 0;
       let inFlight = false;
-      const send = async (preResolved?: import("./metacopier").Position[]) => {
+      const pushAll = async (
+        preResolved?: import("./metacopier").Position[]
+      ) => {
         if (inFlight) return;
         inFlight = true;
         try {
           const positions =
             preResolved ?? (await resolveViewPositions(plan)).positions;
           res.write(`event: positions\ndata: ${JSON.stringify(positions)}\n\n`);
-          debug(`live push: ${positions.length} positions → ${trader.name}`);
+          if (equityAccountId) {
+            const info =
+              await metaCopierService.getAccountInfoById(equityAccountId);
+            res.write(
+              `event: account\ndata: ${JSON.stringify({
+                balance: info.balance ?? null,
+                equity: info.equity ?? null,
+              })}\n\n`
+            );
+          }
+          debug(
+            `live push: ${positions.length} positions${equityAccountId ? " + account" : ""} → ${trader.name}`
+          );
           lastSent = Date.now();
         } catch {
           /* transient — client keeps its polled data */
@@ -103,7 +123,7 @@ export function registerLiveStreamRoutes(app: Express): void {
       const onUpdate = (payload: { accountId?: string }) => {
         if (!payload?.accountId || !watched.has(payload.accountId)) return;
         if (Date.now() - lastSent < 2000) return; // per-connection debounce
-        void send();
+        void pushAll();
       };
       socketEvents.on("update", onUpdate);
 
@@ -120,7 +140,7 @@ export function registerLiveStreamRoutes(app: Express): void {
         clearInterval(keepAlive);
       });
 
-      void send(initial.positions); // initial snapshot (reuse resolved positions)
+      void pushAll(initial.positions); // initial snapshot
     } catch {
       try {
         res.status(500).end();

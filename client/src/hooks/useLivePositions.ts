@@ -4,16 +4,24 @@ import { trpc } from "@/lib/trpc";
 type PositionInput =
   | { viewAsTraderId?: number; masterAccountId?: string }
   | undefined;
+type ViewAsInput = { viewAsTraderId?: number } | undefined;
 
 /**
- * Phase 2 — overlay live open positions onto the polled query cache via SSE.
+ * Phase 2 — overlay live data onto the polled query caches via SSE: open
+ * positions (getOpenPositions, keyed by the positions view) and the trader's
+ * account balance/equity (getAccountEquity / getAccountBalanceAndEquity, keyed
+ * by the view-as input).
  *
  * Purely additive: only connects when built with VITE_LIVE_STREAM=true (and the
  * server has MC_LIVE_STREAM=true). On any error the EventSource is closed and the
  * existing `refetchInterval` polling remains the source of truth, so this can
  * never regress the dashboard.
  */
-export function useLivePositions(input: PositionInput, enabled: boolean): void {
+export function useLivePositions(
+  input: PositionInput,
+  viewAsInput: ViewAsInput,
+  enabled: boolean
+): void {
   const utils = trpc.useUtils();
   const key = JSON.stringify(input ?? null);
 
@@ -44,8 +52,30 @@ export function useLivePositions(input: PositionInput, enabled: boolean): void {
     };
     es.addEventListener("positions", onPositions as EventListener);
 
+    const onAccount = (ev: MessageEvent) => {
+      try {
+        const acct = JSON.parse(ev.data) as {
+          balance: number | null;
+          equity: number | null;
+        };
+        // Equity/balance queries are keyed by the view-as input, not the
+        // positions input (which may include a master account).
+        utils.trading.getAccountEquity.setData(viewAsInput, acct.equity ?? null);
+        if (acct.balance != null && acct.equity != null) {
+          utils.trading.getAccountBalanceAndEquity.setData(viewAsInput, {
+            balance: acct.balance,
+            equity: acct.equity,
+          });
+        }
+      } catch {
+        /* ignore malformed payload — polling still updates the cache */
+      }
+    };
+    es.addEventListener("account", onAccount as EventListener);
+
     return () => {
       es.removeEventListener("positions", onPositions as EventListener);
+      es.removeEventListener("account", onAccount as EventListener);
       es.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

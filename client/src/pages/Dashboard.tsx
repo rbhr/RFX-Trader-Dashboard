@@ -257,7 +257,7 @@ export default function Dashboard(props: {
   // Phase 2: overlay live positions via SSE — own dashboard, admin overview,
   // admin view-as, and admin master-account selection all stream. Additive —
   // the 30s poll above remains the fallback.
-  useLivePositions(positionInput, !!selfSession);
+  useLivePositions(positionInput, viewAsInput, !!selfSession);
 
   // Realtime floating P&L derived from the (now live) open positions, so the
   // Floating and Today's-Total figures move with the market instead of waiting
