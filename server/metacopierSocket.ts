@@ -30,6 +30,13 @@ const SOCKET_URL =
 const HEARTBEAT_MS = 15000; // send a heartbeat well within the server's ~20s window
 const RECONNECT_BASE_MS = 5000;
 const RECONNECT_MAX_MS = 60000;
+// Watchdog: the server sends STOMP heartbeats ~every 20s, so prolonged inbound
+// silence means the link is dead even if the socket never fired 'close'. And a
+// reconnect attempt that never reaches CONNECTED within the timeout is treated
+// as failed and retried — this is what prevents a permanently-stuck reconnect.
+const WATCHDOG_INTERVAL_MS = 10000;
+const STALE_MS = 45000;
+const CONNECT_TIMEOUT_MS = 15000;
 
 export interface SocketAccountInfo {
   balance?: number;
@@ -88,6 +95,8 @@ let connected = false;
 let lastMessageAt = 0;
 let messageCount = 0;
 let recvBuffer = "";
+let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+let connectStartedAt = 0;
 
 function entry(accountId: string): CacheEntry {
   let e = cache.get(accountId);
@@ -232,6 +241,7 @@ function connect(): void {
   }
   recvBuffer = "";
   connected = false;
+  connectStartedAt = Date.now();
   let socket: WebSocket;
   try {
     socket = new WebSocket(SOCKET_URL);
@@ -285,6 +295,61 @@ function connect(): void {
   });
 }
 
+/** Tear down the current socket and immediately start a fresh connection. */
+function forceReconnect(reason: string): void {
+  debug(`forcing reconnect (${reason})`);
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  const old = ws;
+  ws = null;
+  connected = false;
+  try {
+    old?.close();
+  } catch {
+    /* noop */
+  }
+  reconnectAttempts = 0;
+  connect();
+}
+
+/**
+ * Self-healing watchdog. Catches the failure modes a plain close-handler misses:
+ *   - "stale": connected but no inbound data/heartbeat for STALE_MS (dead link).
+ *   - "stuck": a connect attempt that never reached CONNECTED within the timeout
+ *     and isn't otherwise scheduled to retry.
+ */
+function runWatchdog(): void {
+  if (!started) return;
+  const now = Date.now();
+  if (connected) {
+    if (lastMessageAt && now - lastMessageAt > STALE_MS) {
+      logEvent(
+        "socket",
+        `Real-time socket stale (no data ${Math.round((now - lastMessageAt) / 1000)}s) — reconnecting`,
+        "warn"
+      );
+      forceReconnect("stale");
+    }
+    return;
+  }
+  // Not connected: kick a reconnect if nothing is pending and we're not within a
+  // fresh connect attempt's grace window.
+  if (!reconnectTimer && now - connectStartedAt > CONNECT_TIMEOUT_MS) {
+    forceReconnect("stuck/idle");
+  }
+}
+
+/** Force an immediate reconnect (admin "force check"). */
+export function reconnectMetaCopierSocket(): void {
+  if (!started) {
+    startMetaCopierSocket();
+    return;
+  }
+  forceReconnect("manual");
+}
+
 /** Start the socket client (idempotent). No-op when disabled or already running. */
 export function startMetaCopierSocket(): void {
   if (!ENV.mcSocketEnabled) {
@@ -303,6 +368,8 @@ export function startMetaCopierSocket(): void {
   heartbeatTimer = setInterval(() => {
     if (connected) send("\n");
   }, HEARTBEAT_MS);
+  // Self-healing watchdog (stale link / stuck reconnect).
+  watchdogTimer = setInterval(runWatchdog, WATCHDOG_INTERVAL_MS);
   // Periodic cache visibility (debug "socket" only).
   setInterval(() => {
     debug(
@@ -316,6 +383,10 @@ export function stopMetaCopierSocket(): void {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
+  }
+  if (watchdogTimer) {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
   }
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);

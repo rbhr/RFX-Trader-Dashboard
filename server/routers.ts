@@ -75,6 +75,7 @@ import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
 import { logEvent, type LogCategory } from "./logStore";
+import { socketStatus, reconnectMetaCopierSocket } from "./metacopierSocket";
 import {
   getWalletAddress as getTronWalletAddress,
   getUsdtBalance as getTronBalance,
@@ -2457,6 +2458,23 @@ export const appRouter = router({
         });
         return { entries, total, allCap: ALL_CAP };
       }),
+
+    // Real-time MetaCopier socket status (for the Logs tab indicator).
+    getSocketStatus: tradingProcedure.query(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      return socketStatus();
+    }),
+
+    // Force an immediate socket reconnect (manual "force check").
+    reconnectSocket: tradingProcedure.mutation(async ({ ctx }) => {
+      if (!ctx.tradingSession.magicNumber.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      reconnectMetaCopierSocket();
+      return { ok: true };
+    }),
 
     getTrailingRiskLimitConfig: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {

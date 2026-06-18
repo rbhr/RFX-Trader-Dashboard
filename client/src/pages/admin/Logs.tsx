@@ -17,7 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ScrollText, RefreshCw } from "lucide-react";
+import { ScrollText, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { toast } from "sonner";
 import AdminLayout from "@/components/AdminLayout";
 import { PaginationBar, type PageSize } from "@/components/Pagination";
 
@@ -70,8 +71,28 @@ export default function Logs() {
     { refetchInterval: 5000 }
   );
 
+  const utils = trpc.useUtils();
+  const { data: socket } = trpc.admin.getSocketStatus.useQuery(undefined, {
+    refetchInterval: 10000,
+  });
+  const reconnect = trpc.admin.reconnectSocket.useMutation({
+    onSuccess: () => {
+      toast.success("Reconnect triggered");
+      setTimeout(() => {
+        utils.admin.getSocketStatus.invalidate();
+        utils.admin.getLogs.invalidate();
+      }, 2000);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const entries = data?.entries ?? [];
   const total = data?.total ?? 0;
+
+  const lastMsgAgo =
+    socket?.lastMessageAt != null
+      ? Math.round((Date.now() - socket.lastMessageAt) / 1000)
+      : null;
 
   const formatTime = (ts: string | Date) =>
     new Date(ts).toLocaleString([], {
@@ -94,10 +115,44 @@ export default function Logs() {
               MetaCopier and payouts. Newest first.
             </p>
           </div>
-          <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
-            <RefreshCw className="h-3 w-3" />
-            Auto-refresh 5s
-          </span>
+          <div className="ml-auto flex items-center gap-3">
+            {socket && (
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${
+                  socket.connected
+                    ? "bg-green-500/10 text-green-600"
+                    : "bg-destructive/10 text-destructive"
+                }`}
+                title={
+                  lastMsgAgo != null
+                    ? `Last data ${lastMsgAgo}s ago`
+                    : "No data yet"
+                }
+              >
+                {socket.connected ? (
+                  <Wifi className="h-3.5 w-3.5" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5" />
+                )}
+                Socket {socket.connected ? "connected" : "disconnected"}
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => reconnect.mutate()}
+              disabled={reconnect.isPending}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 mr-2 ${reconnect.isPending ? "animate-spin" : ""}`}
+              />
+              Reconnect
+            </Button>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <RefreshCw className="h-3 w-3" />
+              Auto-refresh 5s
+            </span>
+          </div>
         </div>
 
         {/* Filters */}
