@@ -134,6 +134,19 @@ export default function ProcessPayouts() {
   const processMutation = trpc.admin.processProfitSharePayout.useMutation();
   const setBaselineMutation = trpc.admin.setPayoutBaseline.useMutation();
 
+  // While a payout run is in progress, warn before closing/refreshing the tab —
+  // that would interrupt traders still queued (in-app navigation is safe; the
+  // loop keeps running).
+  useEffect(() => {
+    if (!processing) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [processing]);
+
   const onCycleChange = (c: PayoutCycle) => {
     setCycle(c);
     const w = defaultPayoutWindow(c);
@@ -465,6 +478,12 @@ export default function ProcessPayouts() {
                         Insufficient {!trc20Ok ? "TRC20" : ""}
                         {!trc20Ok && !erc20Ok ? " and " : ""}
                         {!erc20Ok ? "ERC20" : ""} balance for the selection
+                      </div>
+                    )}
+                    {processing && (
+                      <div className="text-xs text-amber-600 flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Processing — keep this tab open until it finishes.
                       </div>
                     )}
                   </div>
