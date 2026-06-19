@@ -396,8 +396,9 @@ export async function setProfitShareBaseline(
 }
 
 /**
- * Most recent Profit Share payment date for a trader (used for cycle waiting
- * period). Returns the payment's payoutPeriodTo, falling back to paymentDate.
+ * Latest covered-through date for a trader's profit-share payouts (used for the
+ * cycle waiting period). Uses payoutPeriodTo only — undated legacy/manual
+ * payments don't gate payouts — and ignores [TEST] testing-mode payouts.
  */
 export async function getLastProfitSharePaymentDate(
   magicNumberId: number
@@ -412,17 +413,16 @@ export async function getLastProfitSharePaymentDate(
       and(
         eq(payments.magicNumberId, magicNumberId),
         eq(payments.paymentType, "Profit Share"),
+        isNotNull(payments.payoutPeriodTo),
         // Testing-mode payouts are recorded as Profit Share with a [TEST]
         // narration — they must not gate real payouts' waiting period.
         sql`(${payments.narration} IS NULL OR ${payments.narration} NOT LIKE '[TEST]%')`
       )
     )
-    .orderBy(desc(payments.paymentDate))
+    .orderBy(desc(payments.payoutPeriodTo))
     .limit(1);
 
-  const last = rows[0];
-  if (!last) return null;
-  return last.payoutPeriodTo ?? last.paymentDate ?? null;
+  return rows[0]?.payoutPeriodTo ?? null;
 }
 
 export async function markNotificationAsRead(id: number, magicNumberId: number) {
