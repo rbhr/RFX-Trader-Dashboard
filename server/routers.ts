@@ -3061,6 +3061,9 @@ export const appRouter = router({
         const lastPaidMap = new Map<number, Date>();
         for (const p of allPayments) {
           if (p.paymentType !== "Profit Share") continue;
+          // Skip testing-mode payouts ([TEST] narration) — they must not gate
+          // real payouts' waiting period.
+          if (p.narration && p.narration.startsWith("[TEST]")) continue;
           const when = p.payoutPeriodTo ?? p.paymentDate;
           if (!when) continue;
           const prev = lastPaidMap.get(p.magicNumberId);

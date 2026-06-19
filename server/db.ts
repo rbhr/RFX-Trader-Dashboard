@@ -411,7 +411,10 @@ export async function getLastProfitSharePaymentDate(
     .where(
       and(
         eq(payments.magicNumberId, magicNumberId),
-        eq(payments.paymentType, "Profit Share")
+        eq(payments.paymentType, "Profit Share"),
+        // Testing-mode payouts are recorded as Profit Share with a [TEST]
+        // narration — they must not gate real payouts' waiting period.
+        sql`(${payments.narration} IS NULL OR ${payments.narration} NOT LIKE '[TEST]%')`
       )
     )
     .orderBy(desc(payments.paymentDate))
