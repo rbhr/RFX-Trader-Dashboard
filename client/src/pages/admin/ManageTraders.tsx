@@ -2011,6 +2011,21 @@ export default function ManageTraders() {
                   />
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-payoutCycle">Payout Cycle</Label>
+                <select
+                  id="edit-payoutCycle"
+                  value={formData.payoutCycle}
+                  onChange={e =>
+                    setFormData({ ...formData, payoutCycle: e.target.value })
+                  }
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="Weekly">Weekly</option>
+                  <option value="Fortnightly">Fortnightly</option>
+                  <option value="Self Service">Self Service</option>
+                </select>
+              </div>
               <div className="border-t pt-4 mt-2">
                 <h3 className="font-semibold mb-3">MT4/MT5 Account Details</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -2078,21 +2093,6 @@ export default function ManageTraders() {
                     <option value="New York">New York</option>
                     <option value="Berlin">Berlin</option>
                     <option value="Singapore">Singapore</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-payoutCycle">Payout Cycle</Label>
-                  <select
-                    id="edit-payoutCycle"
-                    value={formData.payoutCycle}
-                    onChange={e =>
-                      setFormData({ ...formData, payoutCycle: e.target.value })
-                    }
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="Weekly">Weekly</option>
-                    <option value="Fortnightly">Fortnightly</option>
-                    <option value="Self Service">Self Service</option>
                   </select>
                 </div>
                 <div className="space-y-2">
