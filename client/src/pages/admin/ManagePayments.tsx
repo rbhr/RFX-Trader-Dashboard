@@ -209,9 +209,9 @@ export default function ManagePayments() {
 
         <div className="grid gap-6">
           {/* Wallet Balances + Process Payouts */}
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 gap-6">
           {(walletInfo?.trc20 || walletInfo?.erc20) && (
-            <Card className="col-span-2">
+            <Card className="col-span-1">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Wallet className="w-5 h-5" />
@@ -290,7 +290,7 @@ export default function ManagePayments() {
             </Card>
           )}
 
-          <Card className={(walletInfo?.trc20 || walletInfo?.erc20) ? "col-span-1" : "col-span-3"}>
+          <Card className={(walletInfo?.trc20 || walletInfo?.erc20) ? "col-span-1" : "col-span-2"}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Banknote className="w-5 h-5" />
