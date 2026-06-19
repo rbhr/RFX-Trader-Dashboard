@@ -52,6 +52,11 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   mcAccountId: varchar("mcAccountId", { length: 100 }),
   liveAccountNumber: varchar("liveAccountNumber", { length: 50 }),
   manager: varchar("manager", { length: 100 }).default("RFX"),
+  payoutCycle: mysqlEnum("payoutCycle", [
+    "Weekly",
+    "Fortnightly",
+    "Self Service",
+  ]).default("Fortnightly"),
   telegramHandle: varchar("telegramHandle", { length: 100 }),
   telegramChatId: varchar("telegramChatId", { length: 30 }),
   // Profit Tracking
@@ -188,6 +193,11 @@ export const payments = mysqlTable("payments", {
   ),
   network: mysqlEnum("network", ["TRC20", "ERC20"]),
   narration: varchar("narration", { length: 500 }),
+  paymentType: varchar("paymentType", { length: 32 })
+    .notNull()
+    .default("Profit Share"),
+  payoutPeriodFrom: timestamp("payoutPeriodFrom"),
+  payoutPeriodTo: timestamp("payoutPeriodTo"),
   notificationSent: boolean("notificationSent").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

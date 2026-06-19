@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { paginate, PaginationBar, type PageSize } from "@/components/Pagination";
 import {
   Select,
   SelectContent,
@@ -20,7 +23,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2, Pencil, Check } from "lucide-react";
+import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2, Pencil, Check, Banknote } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,11 +36,15 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function ManagePayments() {
+  const [, setLocation] = useLocation();
+  const [payPage, setPayPage] = useState(0);
+  const [payPageSize, setPayPageSize] = useState<PageSize>(10);
   const [selectedTraderId, setSelectedTraderId] = useState<string>("");
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 16));
   const [amount, setAmount] = useState<string>("");
   const [networkFee, setNetworkFee] = useState<string>("0");
   const [narration, setNarration] = useState<string>("");
+  const [paymentType, setPaymentType] = useState<string>("Profit Share");
   const [transactionHash, setTransactionHash] = useState<string>("");
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
@@ -108,6 +115,7 @@ export default function ManagePayments() {
     setNarration("");
     setNetworkFee("0");
     setTransactionHash("");
+    setPaymentType("Profit Share");
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -136,6 +144,7 @@ export default function ManagePayments() {
           transactionHash,
           paymentDate: new Date(paymentDate),
           narration: narration || undefined,
+          paymentType,
         });
         toast.success("Payment recorded and trader notified");
       }
@@ -152,12 +161,17 @@ export default function ManagePayments() {
       toast.error("No payment history to export");
       return;
     }
-    const headers = ["Date", "Trader", "Magic Number", "Amount (USDT)", "Narration", "Network", "Network Fee (USDT)", "Transaction Hash"];
+    const fmtDate = (d: string | Date | null) =>
+      d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '';
+    const headers = ["Date", "Trader", "Magic Number", "Amount (USDT)", "Payment Type", "Period From", "Period To", "Narration", "Network", "Network Fee (USDT)", "Transaction Hash"];
     const rows = paymentHistory.map((p) => [
       new Date(p.paymentDate).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }),
       p.traderName,
       p.magicNumber,
       p.amount.toFixed(2),
+      p.paymentType || 'Profit Share',
+      fmtDate(p.payoutPeriodFrom),
+      fmtDate(p.payoutPeriodTo),
       p.narration || '',
       p.network || 'TRC20',
       (p.networkFee || 0).toFixed(2),
@@ -194,9 +208,10 @@ export default function ManagePayments() {
         </div>
 
         <div className="grid gap-6">
-          {/* Wallet Info Card */}
+          {/* Wallet Balances + Process Payouts */}
+          <div className="grid grid-cols-3 gap-6">
           {(walletInfo?.trc20 || walletInfo?.erc20) && (
-            <Card>
+            <Card className="col-span-2">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Wallet className="w-5 h-5" />
@@ -274,6 +289,25 @@ export default function ManagePayments() {
               </CardContent>
             </Card>
           )}
+
+          <Card className={(walletInfo?.trc20 || walletInfo?.erc20) ? "col-span-1" : "col-span-3"}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Banknote className="w-5 h-5" />
+                Process Payouts
+              </CardTitle>
+              <CardDescription>
+                Run weekly / fortnightly / ad-hoc payout batches
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" onClick={() => setLocation("/admin/payouts")}>
+                <Banknote className="w-4 h-4 mr-2" />
+                Process Payouts
+              </Button>
+            </CardContent>
+          </Card>
+          </div>
 
           <Card>
             <CardHeader>
@@ -361,14 +395,27 @@ export default function ManagePayments() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="narration">Narration</Label>
-                  <Input
-                    id="narration"
-                    placeholder="Optional payment narration"
-                    value={narration}
-                    onChange={(e) => setNarration(e.target.value)}
-                  />
+                  <Label htmlFor="paymentType">Payment Type</Label>
+                  <Select value={paymentType} onValueChange={setPaymentType}>
+                    <SelectTrigger id="paymentType">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Profit Share">Profit Share</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="narration">Narration</Label>
+                <Input
+                  id="narration"
+                  placeholder="Optional payment narration"
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                />
               </div>
 
               {paymentMode === "manual" && (
@@ -485,10 +532,11 @@ export default function ManagePayments() {
                   Loading payment history...
                 </div>
               ) : paymentHistory && paymentHistory.length > 0 ? (
+                <>
                 <div className="space-y-3">
-                  {paymentHistory.map((payment) => (
-                    <div 
-                      key={payment.id} 
+                  {paginate(paymentHistory, payPageSize, payPage).slice.map((payment) => (
+                    <div
+                      key={payment.id}
                       className="border rounded-lg p-4 cursor-pointer hover:bg-accent/50 transition-colors"
                       onClick={() => {
                         setSelectedPayment(payment);
@@ -497,7 +545,12 @@ export default function ManagePayments() {
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <div className="font-semibold">{payment.traderName} - {payment.magicNumber}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{payment.traderName} - {payment.magicNumber}</span>
+                            <Badge variant="secondary" className="text-xs font-normal">
+                              {payment.paymentType || "Profit Share"}
+                            </Badge>
+                          </div>
                           <div className="text-sm text-muted-foreground">
                             {new Date(payment.paymentDate).toLocaleDateString('en-US', {
                               year: 'numeric',
@@ -505,6 +558,13 @@ export default function ManagePayments() {
                               day: 'numeric'
                             })}
                           </div>
+                          {payment.payoutPeriodFrom && payment.payoutPeriodTo && (
+                            <div className="text-xs text-muted-foreground">
+                              Period: {new Date(payment.payoutPeriodFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {" – "}
+                              {new Date(payment.payoutPeriodTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
+                          )}
                         </div>
                         <div className="text-right">
                           <div className="font-semibold text-primary">{formatCurrency(payment.amount)}</div>
@@ -524,6 +584,14 @@ export default function ManagePayments() {
                     </div>
                   ))}
                 </div>
+                <PaginationBar
+                  total={paymentHistory.length}
+                  pageSize={payPageSize}
+                  setPageSize={setPayPageSize}
+                  page={payPage}
+                  setPage={setPayPage}
+                />
+                </>
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />

@@ -11,6 +11,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import ManageTraders from "./pages/admin/ManageTraders";
 import ManageMetaCopier from "./pages/admin/ManageMetaCopier";
 import ManagePayments from "./pages/admin/ManagePayments";
+import ProcessPayouts from "./pages/admin/ProcessPayouts";
 import RiskLimitBreaches from "./pages/admin/RiskLimitBreaches";
 import Logs from "./pages/admin/Logs";
 
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/admin/traders" component={ManageTraders} />
       <Route path="/admin/metacopier" component={ManageMetaCopier} />
       <Route path="/admin/payments" component={ManagePayments} />
+      <Route path="/admin/payouts" component={ProcessPayouts} />
       <Route path="/admin/risk-breaches" component={RiskLimitBreaches} />
       <Route path="/admin/logs" component={Logs} />
       <Route path="/404" component={NotFound} />

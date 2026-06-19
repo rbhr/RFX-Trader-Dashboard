@@ -416,9 +416,19 @@ async function recordPaymentAndNotify(params: {
   network?: "TRC20" | "ERC20";
   paymentDate: Date;
   narration?: string;
+  paymentType?: string;
+  payoutPeriodFrom?: Date;
+  payoutPeriodTo?: Date;
 }) {
-  const { magicNumberId, transactionHash, network, paymentDate, narration } =
-    params;
+  const {
+    magicNumberId,
+    transactionHash,
+    network,
+    paymentDate,
+    narration,
+    payoutPeriodFrom,
+    payoutPeriodTo,
+  } = params;
   // Round to cents before persisting into decimal(15,2) columns
   const amount = Math.round(params.amount * 100) / 100;
   const networkFee = Math.round((params.networkFee ?? 0) * 100) / 100;
@@ -431,6 +441,9 @@ async function recordPaymentAndNotify(params: {
     paymentDate,
     network: network ?? null,
     narration: narration ?? null,
+    paymentType: params.paymentType ?? "Profit Share",
+    payoutPeriodFrom: payoutPeriodFrom ?? null,
+    payoutPeriodTo: payoutPeriodTo ?? null,
     notificationSent: true,
   });
 
@@ -1640,6 +1653,7 @@ export const appRouter = router({
             mcAccountId: t.mcAccountId,
             liveAccountNumber: t.liveAccountNumber,
             manager: t.manager,
+            payoutCycle: t.payoutCycle,
             telegramHandle: t.telegramHandle,
             telegramConnected: !!t.telegramChatId,
             showMyTradesUrl: t.showMyTradesUrl || null,
@@ -1686,6 +1700,9 @@ export const appRouter = router({
           mtPassword: z.string().optional(),
           mtVersion: z.string().optional(),
           mcLocation: z.string().optional(),
+          payoutCycle: z
+            .enum(["Weekly", "Fortnightly", "Self Service"])
+            .optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -1707,6 +1724,7 @@ export const appRouter = router({
           mtPassword: input.mtPassword || null,
           mtVersion: input.mtVersion || null,
           mcLocation: input.mcLocation || null,
+          payoutCycle: input.payoutCycle || "Fortnightly",
         });
 
         return { success: true };
@@ -1727,6 +1745,9 @@ export const appRouter = router({
           mtPassword: z.string().optional(),
           mtVersion: z.string().optional(),
           mcLocation: z.string().optional(),
+          payoutCycle: z
+            .enum(["Weekly", "Fortnightly", "Self Service"])
+            .optional(),
           liveAccountNumber: z.string().optional(),
           telegramHandle: z.string().optional(),
           showMyTradesUrl: z.string().optional(),
@@ -1763,6 +1784,8 @@ export const appRouter = router({
         if (data.mtVersion !== undefined) updateData.mtVersion = data.mtVersion;
         if (data.mcLocation !== undefined)
           updateData.mcLocation = data.mcLocation;
+        if (data.payoutCycle !== undefined)
+          updateData.payoutCycle = data.payoutCycle;
         if (data.liveAccountNumber !== undefined)
           updateData.liveAccountNumber = data.liveAccountNumber;
         if (data.telegramHandle !== undefined)
@@ -2582,6 +2605,9 @@ export const appRouter = router({
           networkFee: parseFloat(p.networkFee || "0"),
           usdtAddress: trader?.usdtAddress || null,
           narration: p.narration || null,
+          paymentType: p.paymentType || "Profit Share",
+          payoutPeriodFrom: p.payoutPeriodFrom,
+          payoutPeriodTo: p.payoutPeriodTo,
         };
       });
     }),
@@ -2596,6 +2622,7 @@ export const appRouter = router({
           transactionHash: z.string().min(1),
           paymentDate: z.date(),
           narration: z.string().max(500).optional(),
+          paymentType: z.string().max(32).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -2615,6 +2642,7 @@ export const appRouter = router({
           network: (trader?.usdtNetwork as "TRC20" | "ERC20") ?? undefined,
           paymentDate: input.paymentDate,
           narration: input.narration,
+          paymentType: input.paymentType,
         });
 
         return { success: true };
