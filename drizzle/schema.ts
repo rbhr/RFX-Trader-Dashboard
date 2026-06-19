@@ -72,6 +72,12 @@ export const magicNumbers = mysqlTable("magic_numbers", {
     precision: 15,
     scale: 2,
   }).default("0.00"),
+  // High-water-mark baseline: cumulative realized profit already paid
+  // profit-share on. Payout = max(0, cumulativeProfit - baseline) x share%.
+  profitShareBaseline: decimal("profitShareBaseline", {
+    precision: 15,
+    scale: 2,
+  }).default("0.00"),
   // Trailing Risk Limit
   trailingRiskLimit: decimal("trailingRiskLimit", {
     precision: 15,

@@ -23,6 +23,8 @@ import {
   deleteCopierTemplate,
   createPayment,
   incrementLifetimeIncome,
+  setProfitShareBaseline,
+  getLastProfitSharePaymentDate,
   getPaymentsByMagicNumberId,
   getAllPayments,
   updatePaymentNotificationStatus,
@@ -101,6 +103,11 @@ const BCRYPT_ROUNDS = 12;
 
 // Trader IDs with a wallet payout currently being broadcast (double-send guard)
 const inFlightWalletPayments = new Set<number>();
+
+// In Testing Mode, payout sends are redirected here (a TRON/TRC20 wallet we
+// control) instead of the trader's real address, so the on-chain pipeline can
+// be exercised without paying traders or touching their accounting.
+const TEST_PAYOUT_ADDRESS = "TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9";
 
 async function generateAndSend2FACode(
   magicNumberId: number,
@@ -407,6 +414,44 @@ async function computeTraderProfitSummary(trader: {
   };
 }
 
+/**
+ * Cumulative REALIZED profit (profit+swap+commission of closed trades) for a
+ * trader's magic on their live account, from inception up to `to`. Reuses the
+ * same closed-trade source as the dashboard lifetime figure (so the numbers
+ * match), bounded by close time. No floating — payouts run at Saturday 11:00
+ * Adelaide when the market is closed.
+ */
+async function computeCumulativeRealizedProfit(
+  trader: {
+    id: number;
+    magicNumber: string;
+    liveAccountNumber: string | null;
+  },
+  to: Date
+): Promise<number> {
+  const closed = await fetchAggregatedLifetimePositions({
+    id: trader.id,
+    magicNumber: trader.magicNumber,
+    liveAccountNumber: trader.liveAccountNumber,
+    showAllData: false,
+  });
+  const toMs = to.getTime();
+  const relevant = closed.filter(
+    p => p.closeTime && new Date(p.closeTime).getTime() <= toMs
+  );
+  return calculatePnL(relevant);
+}
+
+const PAYOUT_CYCLE_WAIT_DAYS: Record<string, number> = {
+  Weekly: 7,
+  Fortnightly: 14,
+  "Ad-hoc": 0,
+};
+
+function daysBetween(a: Date, b: Date): number {
+  return Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
+}
+
 /** Shared helper: record a payment and send notifications. */
 async function recordPaymentAndNotify(params: {
   magicNumberId: number;
@@ -419,6 +464,10 @@ async function recordPaymentAndNotify(params: {
   paymentType?: string;
   payoutPeriodFrom?: Date;
   payoutPeriodTo?: Date;
+  /** Skip trader notifications (Telegram + in-app) — used for test payouts. */
+  silent?: boolean;
+  /** Skip incrementing the trader's lifetimeIncome — used for test payouts. */
+  skipLifetime?: boolean;
 }) {
   const {
     magicNumberId,
@@ -428,6 +477,8 @@ async function recordPaymentAndNotify(params: {
     narration,
     payoutPeriodFrom,
     payoutPeriodTo,
+    silent,
+    skipLifetime,
   } = params;
   // Round to cents before persisting into decimal(15,2) columns
   const amount = Math.round(params.amount * 100) / 100;
@@ -449,12 +500,18 @@ async function recordPaymentAndNotify(params: {
 
   const trader = await getMagicNumberById(magicNumberId);
   if (trader) {
-    await incrementLifetimeIncome(magicNumberId, amount);
+    if (!skipLifetime) {
+      await incrementLifetimeIncome(magicNumberId, amount);
+    }
 
     logEvent(
       "payment",
       `Paid $${amount.toFixed(2)}${network ? ` (${network})` : ""} to ${trader.name} (${trader.magicNumber}) — tx ${transactionHash.slice(0, 10)}…`
     );
+
+    if (silent) {
+      return;
+    }
 
     await createNotification({
       magicNumberId,
@@ -2962,6 +3019,377 @@ export const appRouter = router({
         } finally {
           inFlightWalletPayments.delete(input.magicNumberId);
         }
+      }),
+
+    // --- Profit-share payouts (high-water-mark) ---
+
+    // Preview the payout run: per eligible trader, cumulative realized profit
+    // up to `to`, their baseline, the shareable amount and payout owed.
+    previewPayouts: tradingProcedure
+      .input(
+        z.object({
+          cycle: z.enum(["Weekly", "Fortnightly", "Ad-hoc"]),
+          from: z.date(),
+          to: z.date(),
+        })
+      )
+      .query(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+
+        const { cycle, from, to } = input;
+        const all = await getAllMagicNumbers();
+
+        // Eligible: active real traders with a live account, never Self Service.
+        // Weekly/Fortnightly runs only include traders on that cycle; Ad-hoc
+        // includes every remaining (non-Self-Service) trader.
+        const eligible = all.filter(
+          t =>
+            t.isActive &&
+            !t.isAdmin &&
+            !!t.liveAccountNumber &&
+            t.payoutCycle !== "Self Service" &&
+            (cycle === "Ad-hoc" || t.payoutCycle === cycle)
+        );
+
+        // Last Profit-Share payment per trader (for the waiting-period check).
+        const allPayments = await getAllPayments();
+        const lastPaidMap = new Map<number, Date>();
+        for (const p of allPayments) {
+          if (p.paymentType !== "Profit Share") continue;
+          const when = p.payoutPeriodTo ?? p.paymentDate;
+          if (!when) continue;
+          const prev = lastPaidMap.get(p.magicNumberId);
+          if (!prev || new Date(when).getTime() > prev.getTime()) {
+            lastPaidMap.set(p.magicNumberId, new Date(when));
+          }
+        }
+
+        const waitDays = PAYOUT_CYCLE_WAIT_DAYS[cycle] ?? 0;
+
+        const CONCURRENCY = 3;
+        const rows: Array<{
+          id: number;
+          name: string;
+          magicNumber: string;
+          profitShare: number;
+          cumulativeProfit: number;
+          baseline: number;
+          shareableProfit: number;
+          payoutAmount: number;
+          usdtAddress: string | null;
+          usdtNetwork: string | null;
+          payoutCycle: string | null;
+          lastPayoutAt: Date | null;
+          payable: boolean;
+          reason: string | null;
+        }> = [];
+
+        async function buildRow(t: (typeof eligible)[number]) {
+          let cumulative = 0;
+          try {
+            cumulative = await computeCumulativeRealizedProfit(
+              {
+                id: t.id,
+                magicNumber: t.magicNumber,
+                liveAccountNumber: t.liveAccountNumber,
+              },
+              to
+            );
+          } catch (error) {
+            console.error(
+              `[Payouts] Failed to compute profit for ${t.name} (${t.magicNumber}):`,
+              (error as any)?.message || error
+            );
+          }
+
+          const profitShare = parseFloat(t.profitShare);
+          const baseline = parseFloat(t.profitShareBaseline ?? "0") || 0;
+          const shareableProfit = Math.max(0, cumulative - baseline);
+          const payoutAmount = Math.round(shareableProfit * profitShare * 100) / 100;
+
+          const lastPayoutAt = lastPaidMap.get(t.id) ?? null;
+          const waitOk =
+            cycle === "Ad-hoc" ||
+            !lastPayoutAt ||
+            daysBetween(lastPayoutAt, to) >= waitDays;
+
+          let payable = true;
+          let reason: string | null = null;
+          if (payoutAmount <= 0) {
+            payable = false;
+            reason = "Nothing owed";
+          } else if (!t.usdtAddress || !t.usdtNetwork) {
+            payable = false;
+            reason = "No USDT address set";
+          } else if (!waitOk) {
+            payable = false;
+            const nextDue = lastPayoutAt
+              ? new Date(
+                  lastPayoutAt.getTime() + waitDays * 24 * 60 * 60 * 1000
+                )
+              : null;
+            reason = nextDue
+              ? `Next due ${nextDue.toISOString().slice(0, 10)}`
+              : "Waiting period";
+          }
+
+          return {
+            id: t.id,
+            name: t.name,
+            magicNumber: t.magicNumber,
+            profitShare,
+            cumulativeProfit: Math.round(cumulative * 100) / 100,
+            baseline: Math.round(baseline * 100) / 100,
+            shareableProfit: Math.round(shareableProfit * 100) / 100,
+            payoutAmount,
+            usdtAddress: t.usdtAddress,
+            usdtNetwork: t.usdtNetwork,
+            payoutCycle: t.payoutCycle,
+            lastPayoutAt,
+            payable,
+            reason,
+          };
+        }
+
+        for (let i = 0; i < eligible.length; i += CONCURRENCY) {
+          const batch = eligible.slice(i, i + CONCURRENCY);
+          const results = await Promise.all(batch.map(buildRow));
+          rows.push(...results);
+        }
+
+        return rows;
+      }),
+
+    // Process one trader's profit-share payout: send USDT, record the payment,
+    // then raise the baseline. Called once per selected trader by the client.
+    processProfitSharePayout: tradingProcedure
+      .input(
+        z.object({
+          magicNumberId: z.number().int().positive(),
+          from: z.date(),
+          to: z.date(),
+          expectedPayoutAmount: z.number().positive(),
+          cycle: z.enum(["Weekly", "Fortnightly", "Ad-hoc"]),
+          testingMode: z.boolean(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+
+        if (inFlightWalletPayments.has(input.magicNumberId)) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "A payout for this trader is already in progress. Wait for it to finish before sending another.",
+          });
+        }
+        inFlightWalletPayments.add(input.magicNumberId);
+
+        try {
+          const trader = await getMagicNumberById(input.magicNumberId);
+          if (!trader) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+          }
+
+          // Recompute server-side — never trust the client's figure.
+          const cumulative = await computeCumulativeRealizedProfit(
+            {
+              id: trader.id,
+              magicNumber: trader.magicNumber,
+              liveAccountNumber: trader.liveAccountNumber,
+            },
+            input.to
+          );
+          const profitShare = parseFloat(trader.profitShare);
+          const baseline = parseFloat(trader.profitShareBaseline ?? "0") || 0;
+          const shareable = Math.max(0, cumulative - baseline);
+          const payout = Math.round(shareable * profitShare * 100) / 100;
+
+          if (payout <= 0) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "No profit share is owed for this trader.",
+            });
+          }
+          if (Math.abs(payout - input.expectedPayoutAmount) > 0.01) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: `Payout figure changed since preview (now $${payout.toFixed(2)}). Re-calculate before processing.`,
+            });
+          }
+
+          // Waiting period (Weekly/Fortnightly only).
+          if (input.cycle !== "Ad-hoc") {
+            const lastPaid = await getLastProfitSharePaymentDate(
+              input.magicNumberId
+            );
+            const waitDays = PAYOUT_CYCLE_WAIT_DAYS[input.cycle] ?? 0;
+            if (lastPaid && daysBetween(lastPaid, input.to) < waitDays) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: `Trader was paid less than ${waitDays} days ago — not yet due.`,
+              });
+            }
+          }
+
+          // Destination + network. Testing Mode redirects to our test wallet
+          // (TRC20) regardless of the trader's configured address/network.
+          let destination: string;
+          let network: "TRC20" | "ERC20";
+          if (input.testingMode) {
+            destination = TEST_PAYOUT_ADDRESS;
+            network = "TRC20";
+          } else {
+            if (!trader.usdtAddress || !trader.usdtNetwork) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Trader has no USDT address or network configured",
+              });
+            }
+            destination = trader.usdtAddress;
+            network = trader.usdtNetwork as "TRC20" | "ERC20";
+          }
+
+          const periodLabel = `${input.from.toISOString().slice(0, 10)} – ${input.to
+            .toISOString()
+            .slice(0, 10)}`;
+          const narration = input.testingMode
+            ? `[TEST] Profit share ${periodLabel}`
+            : `Profit share ${periodLabel}`;
+
+          // Test payouts must not notify the trader, touch lifetimeIncome, or
+          // raise the baseline.
+          const recordExtras = input.testingMode
+            ? { silent: true as const, skipLifetime: true as const }
+            : {};
+
+          let txHash: string;
+          try {
+            if (network === "TRC20") {
+              if (!isTronConfigured()) {
+                throw new Error("TRON wallet is not configured on this server");
+              }
+              txHash = await sendUsdt(destination, payout);
+            } else {
+              if (!isEvmConfigured()) {
+                throw new Error("EVM wallet is not configured on this server");
+              }
+              txHash = await sendUsdtErc20(destination, payout);
+            }
+          } catch (err: any) {
+            if (err instanceof TxPendingError) {
+              const recordedHash = err.txHash ?? `PENDING-${Date.now()}`;
+              await recordPaymentAndNotify({
+                magicNumberId: input.magicNumberId,
+                amount: payout,
+                transactionHash: recordedHash,
+                network,
+                paymentDate: new Date(),
+                narration,
+                paymentType: "Profit Share",
+                payoutPeriodFrom: input.from,
+                payoutPeriodTo: input.to,
+                ...recordExtras,
+              });
+              // Baseline is NOT raised here — confirmation is uncertain.
+              console.warn(
+                `[Payouts] Recorded unconfirmed payout ${recordedHash} for ${trader.name} — ${err.message}`
+              );
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `Payout was sent but confirmation timed out. It has been recorded${err.txHash ? "" : " as pending"} — verify on the block explorer. Baseline was not advanced; re-check before re-paying.`,
+              });
+            }
+            if (err instanceof TxFailedError) {
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `Transfer failed on-chain — no funds were sent. ${err.message}`,
+              });
+            }
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: err?.message ?? "On-chain transaction failed",
+            });
+          }
+
+          await recordPaymentAndNotify({
+            magicNumberId: input.magicNumberId,
+            amount: payout,
+            transactionHash: txHash,
+            network,
+            paymentDate: new Date(),
+            narration,
+            paymentType: "Profit Share",
+            payoutPeriodFrom: input.from,
+            payoutPeriodTo: input.to,
+            ...recordExtras,
+          });
+
+          // Raise the high-water-mark only for real payouts.
+          if (!input.testingMode) {
+            await setProfitShareBaseline(input.magicNumberId, cumulative);
+          }
+
+          return {
+            success: true,
+            txHash,
+            network,
+            payout,
+            newBaseline: input.testingMode ? baseline : cumulative,
+            testingMode: input.testingMode,
+          };
+        } finally {
+          inFlightWalletPayments.delete(input.magicNumberId);
+        }
+      }),
+
+    // Mark a trader as settled up to `to` WITHOUT paying — sets the baseline to
+    // their current cumulative profit. The start-at-zero escape hatch.
+    setPayoutBaseline: tradingProcedure
+      .input(
+        z.object({
+          magicNumberId: z.number().int().positive(),
+          to: z.date(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+
+        const trader = await getMagicNumberById(input.magicNumberId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+
+        const cumulative = await computeCumulativeRealizedProfit(
+          {
+            id: trader.id,
+            magicNumber: trader.magicNumber,
+            liveAccountNumber: trader.liveAccountNumber,
+          },
+          input.to
+        );
+        await setProfitShareBaseline(input.magicNumberId, cumulative);
+        logEvent(
+          "payment",
+          `Set profit-share baseline for ${trader.name} (${trader.magicNumber}) to $${cumulative.toFixed(2)} (no payout)`
+        );
+
+        return { success: true, baseline: Math.round(cumulative * 100) / 100 };
       }),
 
     // --- Previous Magic Numbers ---

@@ -381,6 +381,47 @@ export async function incrementLifetimeIncome(
     .where(eq(magicNumbers.id, magicNumberId));
 }
 
+/** Set a trader's profit-share high-water-mark baseline (cumulative profit already paid share on). */
+export async function setProfitShareBaseline(
+  magicNumberId: number,
+  amount: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(magicNumbers)
+    .set({ profitShareBaseline: amount.toFixed(2) })
+    .where(eq(magicNumbers.id, magicNumberId));
+}
+
+/**
+ * Most recent Profit Share payment date for a trader (used for cycle waiting
+ * period). Returns the payment's payoutPeriodTo, falling back to paymentDate.
+ */
+export async function getLastProfitSharePaymentDate(
+  magicNumberId: number
+): Promise<Date | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(payments)
+    .where(
+      and(
+        eq(payments.magicNumberId, magicNumberId),
+        eq(payments.paymentType, "Profit Share")
+      )
+    )
+    .orderBy(desc(payments.paymentDate))
+    .limit(1);
+
+  const last = rows[0];
+  if (!last) return null;
+  return last.payoutPeriodTo ?? last.paymentDate ?? null;
+}
+
 export async function markNotificationAsRead(id: number, magicNumberId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
