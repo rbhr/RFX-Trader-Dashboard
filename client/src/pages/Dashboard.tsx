@@ -844,7 +844,7 @@ export default function Dashboard(props: {
                         <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
                         <TableCell className="font-semibold">{position.symbol}</TableCell>
                         <TableCell>
-                          <Badge variant={position.type === "BUY" ? "default" : "destructive"} className="text-xs">
+                          <Badge className={`text-xs border-transparent text-white ${position.type === "BUY" ? "bg-blue-600" : "bg-red-600"}`}>
                             {position.type}
                           </Badge>
                         </TableCell>
@@ -929,7 +929,7 @@ export default function Dashboard(props: {
                           <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
                           <TableCell className="font-semibold">{position.symbol}</TableCell>
                           <TableCell>
-                            <Badge variant={position.type === "BUY" ? "default" : "destructive"} className="text-xs">
+                            <Badge className={`text-xs border-transparent text-white ${position.type === "BUY" ? "bg-blue-600" : "bg-red-600"}`}>
                               {position.type}
                             </Badge>
                           </TableCell>
