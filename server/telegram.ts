@@ -129,11 +129,18 @@ export function startTelegramPolling(): void {
 export async function sendTelegramMessage(
   telegramHandle: string,
   message: string,
-  chatId?: string | null
+  chatId?: string | null,
+  opts?: { logLabel?: string }
 ): Promise<boolean> {
+  const recipient = telegramRecipientLabel(telegramHandle, chatId);
+  // Sensitive sends (e.g. 2FA codes) pass an explicit logLabel so the code body
+  // is never persisted; everything else logs a sanitized content preview.
+  const summary = opts?.logLabel ?? previewTelegramMessage(message);
+
   const b = getBot();
   if (!b) {
     console.warn("[Telegram] Bot token not configured — skipping notification");
+    logEvent("telegram", `Not sent to ${recipient} (${summary}) — bot token not configured`, "warn");
     return false;
   }
 
@@ -142,14 +149,31 @@ export async function sendTelegramMessage(
     const targetId = chatId ?? null;
     if (!targetId) {
       console.warn(`[Telegram] No chat ID stored for handle: ${telegramHandle}. User must send /start to @RFXTraderBot first.`);
+      logEvent("telegram", `Not sent to ${recipient} (${summary}) — no chat ID; user must /start the bot`, "warn");
       return false;
     }
     await b.sendMessage(targetId, message, { parse_mode: "HTML" });
+    logEvent("telegram", `Sent to ${recipient}: ${summary}`);
     return true;
   } catch (err) {
     console.error(`[Telegram] Failed to send message to ${telegramHandle} (chat ID: ${chatId}):`, err);
+    logEvent("telegram", `Failed to send to ${recipient} (${summary}): ${err instanceof Error ? err.message : String(err)}`, "warn");
     return false;
   }
+}
+
+/** "@handle (chat 123)" / "@handle" / "chat 123" — for telegram log lines. */
+function telegramRecipientLabel(handle: string, chatId?: string | null): string {
+  const h = handle ? `@${handle}` : null;
+  if (h && chatId) return `${h} (chat ${chatId})`;
+  if (h) return h;
+  return `chat ${chatId ?? "unknown"}`;
+}
+
+/** Strip HTML, collapse whitespace, and cap length for a log-friendly preview. */
+function previewTelegramMessage(message: string): string {
+  const text = message.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
 }
 
 /**

@@ -136,7 +136,9 @@ async function generateAndSend2FACode(
     `<code>${code}</code>\n\n` +
     `This code expires in 5 minutes. If you didn't request this, ignore this message.`;
 
-  return sendTelegramMessage(telegramHandle, message, telegramChatId);
+  return sendTelegramMessage(telegramHandle, message, telegramChatId, {
+    logLabel: `verification code (${purposeLabel})`,
+  });
 }
 
 /**
