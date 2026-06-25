@@ -189,6 +189,27 @@ export function buildTrailingRiskLimitMessage(params: {
 }
 
 /**
+ * Build a "trade not copied to live" notification for a trader. Fired when an
+ * open trade on their incubator account is missing the SL/TP their copier
+ * requires, so it was never copied to live — we close it and tell them why.
+ */
+export function buildMissedTradeMessage(params: {
+  traderName: string;
+  magicNumber: string;
+  symbol: string;
+  missing: string;
+}): string {
+  const { traderName, magicNumber, symbol, missing } = params;
+  return (
+    `[Magic ${magicNumber}] ⚠️ <b>Trade Not Copied to Live</b>\n\n` +
+    `Hi ${traderName},\n\n` +
+    `Your <b>${symbol}</b> trade had no <b>${missing}</b>, so it was not copied ` +
+    `to your live account. It has been closed on your incubator account.\n\n` +
+    `Always set a stop-loss and take-profit so your trades copy to live.`
+  );
+}
+
+/**
  * Build a risk limit breach alert message for the admin.
  */
 export function buildAdminRiskLimitAlertMessage(params: {

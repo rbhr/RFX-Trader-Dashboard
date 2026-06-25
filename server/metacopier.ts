@@ -18,6 +18,9 @@ export interface Position {
   id: string;
   symbol: string;
   type: 'BUY' | 'SELL';
+  /** Raw MetaCopier direction/order kind, preserved for pending-order detection. */
+  dealType?: string;
+  orderType?: string;
   volume: number;
   openPrice: number;
   closePrice?: number;
@@ -53,6 +56,8 @@ function mapSocketPosition(p: SocketPositionDTO): Position {
     id: String(p.id),
     symbol: String(p.symbol ?? ''),
     type: dir.includes('sell') ? 'SELL' : 'BUY',
+    dealType: p.dealType != null ? String(p.dealType) : undefined,
+    orderType: p.orderType != null ? String(p.orderType) : undefined,
     volume: Number(p.volume ?? 0),
     openPrice: Number(p.openPrice ?? 0),
     closePrice: p.closePrice != null ? Number(p.closePrice) : undefined,
@@ -215,6 +220,18 @@ class MetaCopierService {
     }
 
     return positions.filter(p => String(p.magicNumber) === String(magicNumber));
+  }
+
+  /**
+   * Close a single open position on an account by its position id
+   * (DELETE /accounts/{accountId}/positions/{positionId}). Throws on failure so
+   * the caller can decide whether to notify/retry.
+   */
+  async closePosition(accountId: string, positionId: string): Promise<void> {
+    await this.fetchWithAuth(
+      `/accounts/${accountId}/positions/${positionId}`,
+      'DELETE'
+    );
   }
 
   async getHistoricalPositions(
@@ -662,6 +679,17 @@ class MetaCopierService {
   }
 
   /**
+   * List the features configured on a copier (e.g. type 31 "Skip position if SL
+   * or TP missing"). Returns [] on error so callers can treat it as "no rule".
+   */
+  async getCopierFeatures(accountId: string, copierId: string): Promise<any[]> {
+    return this.fetchWithAuth<any[]>(
+      `/accounts/${accountId}/copiers/${copierId}/features`,
+      'GET'
+    ).catch(() => [] as any[]);
+  }
+
+  /**
    * Add the "Skip position" feature (type 31) to a copier so positions are
    * skipped if either SL or TP is missing on the master. Idempotent: does not
    * add a second copy if a type-31 feature already exists.
@@ -670,10 +698,7 @@ class MetaCopierService {
     toAccountId: string,
     copierId: string
   ): Promise<void> {
-    const existing = await this.fetchWithAuth<any[]>(
-      `/accounts/${toAccountId}/copiers/${copierId}/features`,
-      'GET'
-    ).catch(() => [] as any[]);
+    const existing = await this.getCopierFeatures(toAccountId, copierId);
     if (existing.some(f => f?.type?.id === 31)) return;
 
     await this.fetchWithAuth(

@@ -30,6 +30,7 @@ type LogCategory =
   | "metacopier"
   | "socket"
   | "payment"
+  | "missed_trade"
   | "system";
 
 const FILTERS: { key: LogCategory | undefined; label: string }[] = [
@@ -41,6 +42,7 @@ const FILTERS: { key: LogCategory | undefined; label: string }[] = [
   { key: "metacopier", label: "MetaCopier" },
   { key: "socket", label: "Socket" },
   { key: "payment", label: "Payments" },
+  { key: "missed_trade", label: "Missed Trades" },
   { key: "system", label: "System" },
 ];
 
@@ -52,6 +54,7 @@ const CATEGORY_LABEL: Record<LogCategory, string> = {
   metacopier: "MetaCopier",
   socket: "Socket",
   payment: "Payment",
+  missed_trade: "Missed Trade",
   system: "System",
 };
 

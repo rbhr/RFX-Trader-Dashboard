@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { startTelegramPolling } from "../telegram";
 import { startBreachMonitor } from "../breachMonitor";
 import { startTrailingRiskLimitMonitor } from "../trailingRiskLimit";
+import { startMissedTradeMonitor } from "../missedTradeMonitor";
 import { startMetaCopierSocket } from "../metacopierSocket";
 import { registerLiveStreamRoutes } from "../liveStream";
 
@@ -87,6 +88,10 @@ async function startServer() {
 
   // Start trailing risk limit monitor (interval configurable via admin UI)
   startTrailingRiskLimitMonitor();
+
+  // Start missed-trade monitor — closes incubator trades missing SL/TP that the
+  // copier never copied to live, then notifies the trader (runs every 1 minute)
+  startMissedTradeMonitor();
 }
 
 startServer().catch(console.error);

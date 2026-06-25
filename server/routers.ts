@@ -2506,6 +2506,7 @@ export const appRouter = router({
               "metacopier",
               "socket",
               "payment",
+              "missed_trade",
               "system",
             ])
             .optional(),

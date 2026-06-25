@@ -17,6 +17,7 @@ export type LogCategory =
   | "metacopier"
   | "socket"
   | "payment"
+  | "missed_trade"
   | "system";
 
 export type LogLevel = "info" | "warn" | "error";
