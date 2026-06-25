@@ -95,6 +95,17 @@ function socketAccountInfo(accountId: string): AccountInfo | null {
   };
 }
 
+/**
+ * Normalize a raw REST position. The REST API does NOT return a `type` field —
+ * it encodes direction as `dealType` ("DealBuy"/"DealSell") / `orderType`
+ * ("Buy"/"Sell"). Without this, `position.type` is undefined downstream (empty
+ * badge, BUY/SELL comparisons always false). Mirror the socket mapper's logic.
+ */
+function mapRestPosition(p: any): Position {
+  const dir = String(p?.dealType ?? p?.orderType ?? p?.type ?? '').toLowerCase();
+  return { ...p, type: dir.includes('sell') ? 'SELL' : 'BUY' };
+}
+
 /** Open positions from the socket cache (mapped), or null to force a REST read. */
 function socketPositions(accountId: string): Position[] | null {
   if (!ENV.mcSocketEnabled) return null;
@@ -180,7 +191,7 @@ class MetaCopierService {
       const rest = await this.fetchWithAuth<Position[]>(
         `/accounts/${this.accountId}/positions`
       );
-      positions = Array.isArray(rest) ? rest : [];
+      positions = Array.isArray(rest) ? rest.map(mapRestPosition) : [];
     }
 
     if (showAll || !magicNumber) {
@@ -196,7 +207,7 @@ class MetaCopierService {
       const rest = await this.fetchWithAuth<Position[]>(
         `/accounts/${accountId}/positions`
       );
-      positions = Array.isArray(rest) ? rest : [];
+      positions = Array.isArray(rest) ? rest.map(mapRestPosition) : [];
     }
 
     if (!magicNumber) {
@@ -212,11 +223,12 @@ class MetaCopierService {
     magicNumber?: string,
     showAll = false
   ): Promise<Position[]> {
-    const positions = await this.fetchWithAuth<Position[]>(
+    const raw = await this.fetchWithAuth<Position[]>(
       `/accounts/${this.accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
     );
 
-    if (!Array.isArray(positions)) return [];
+    if (!Array.isArray(raw)) return [];
+    const positions = raw.map(mapRestPosition);
 
     if (showAll || !magicNumber) {
       return positions;
@@ -231,11 +243,12 @@ class MetaCopierService {
     stop: string,
     magicNumber?: string
   ): Promise<Position[]> {
-    const positions = await this.fetchWithAuth<Position[]>(
+    const raw = await this.fetchWithAuth<Position[]>(
       `/accounts/${accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
     );
 
-    if (!Array.isArray(positions)) return [];
+    if (!Array.isArray(raw)) return [];
+    const positions = raw.map(mapRestPosition);
 
     if (!magicNumber) {
       return positions;
