@@ -198,6 +198,14 @@
 - [ ] Add alerts for risk limit hits
 - [ ] Create notification preferences
 
+### AI Ops Terminal (Low Priority)
+- [ ] Natural-language admin console to run ad-hoc ops (DB lookups/diffs, MetaCopier copier edits, payout previews) without building bespoke UI for each — the kind of thing currently done by hand via Claude Code against the container
+- [ ] Recommended shape: **curated tool registry**, not raw SQL/JS eval (never give the LLM root on a money/live-trading system)
+- [ ] Read path: `runReadOnlyQuery(sql)` against a read-only DB user with statement timeout (covers ~all exploration/dry-run work)
+- [ ] Write path: narrow typed tools wrapping existing guarded procedures; every write is dry-run diff → human confirm → execute, with audit log (reuse `logEvent`)
+- [ ] Guardrails: admin-only, hard denylist (never touch demo slave `b94cabc8-946d-4a99-9b81-286f8553cc63`), rate limits, prompt-injection awareness (untrusted data like trader `narration` must not drive actions)
+- [ ] Cheapest first step: expose the same tools via a local **MCP server** and drive from Claude Code/desktop — gets the natural-language console with zero in-app UI to build; only add the in-app chat panel if other/non-technical admins need it
+
 ---
 
 ## 🐛 Known Issues
