@@ -24,6 +24,7 @@ import {
   createPayment,
   incrementLifetimeIncome,
   setProfitShareBaseline,
+  setProfitAdjustment,
   getLastProfitSharePaymentDate,
   getPaymentsByMagicNumberId,
   getAllPayments,
@@ -375,6 +376,7 @@ async function computeTraderProfitSummary(trader: {
   magicNumber: string;
   liveAccountNumber: string | null;
   showAllData: boolean;
+  profitAdjustment?: string | null;
 }): Promise<{ weekPnL: number; monthPnL: number; lifetimePnL: number }> {
   // One call for all closed positions (across history), one for open (current only)
   let liveAccountId: string | null = null;
@@ -398,6 +400,9 @@ async function computeTraderProfitSummary(trader: {
   ]);
 
   const floating = calculatePnL(open);
+  // Manual profit correction applies to the lifetime figure only (it's a
+  // lifetime-scope correction, not a this-week/this-month event).
+  const adjustment = parseFloat(trader.profitAdjustment ?? "0") || 0;
 
   const weekStart = new Date(getStartOfWeek()).getTime();
   const monthStart = new Date(getStartOfMonth()).getTime();
@@ -412,7 +417,7 @@ async function computeTraderProfitSummary(trader: {
   return {
     weekPnL: calculatePnL(weekClosed) + floating,
     monthPnL: calculatePnL(monthClosed) + floating,
-    lifetimePnL: calculatePnL(closed) + floating,
+    lifetimePnL: calculatePnL(closed) + floating + adjustment,
   };
 }
 
@@ -428,6 +433,7 @@ async function computeCumulativeRealizedProfit(
     id: number;
     magicNumber: string;
     liveAccountNumber: string | null;
+    profitAdjustment?: string | null;
   },
   to: Date
 ): Promise<number> {
@@ -441,7 +447,10 @@ async function computeCumulativeRealizedProfit(
   const relevant = closed.filter(
     p => p.closeTime && new Date(p.closeTime).getTime() <= toMs
   );
-  return calculatePnL(relevant);
+  // Manual profit correction is folded into cumulative realized profit so the
+  // payout math and the HWM baseline (raised to this value) stay self-consistent.
+  const adjustment = parseFloat(trader.profitAdjustment ?? "0") || 0;
+  return calculatePnL(relevant) + adjustment;
 }
 
 const PAYOUT_CYCLE_WAIT_DAYS: Record<string, number> = {
@@ -1572,10 +1581,15 @@ export const appRouter = router({
         ]);
 
         const floatingPnL = calculatePnL(openPositions);
+        // Manual profit correction applies to the all-time figure only (matches
+        // the payout-side cumulative and the admin per-trader lifetime view).
+        const profitAdjustmentValue =
+          parseFloat(trader.profitAdjustment ?? "0") || 0;
         const todayRealizedPnL = calculatePnL(todayPositions);
         const weekRealizedPnL = calculatePnL(weekPositions);
         const monthRealizedPnL = calculatePnL(monthPositions);
-        const allTimeRealizedPnL = calculatePnL(allTimePositions);
+        const allTimeRealizedPnL =
+          calculatePnL(allTimePositions) + profitAdjustmentValue;
         const todayTotalPnL = floatingPnL + todayRealizedPnL;
         const weekPnL = weekRealizedPnL + floatingPnL;
         const monthPnL = monthRealizedPnL + floatingPnL;
@@ -1642,6 +1656,7 @@ export const appRouter = router({
                 magicNumber: t.magicNumber,
                 liveAccountNumber: t.liveAccountNumber,
                 showAllData: t.showAllData,
+                profitAdjustment: t.profitAdjustment,
               })
                 .then(s => {
                   profitSummary.weekPnL = s.weekPnL;
@@ -3082,6 +3097,7 @@ export const appRouter = router({
           baseline: number;
           shareableProfit: number;
           payoutAmount: number;
+          profitAdjustment: number;
           usdtAddress: string | null;
           usdtNetwork: string | null;
           payoutCycle: string | null;
@@ -3098,6 +3114,7 @@ export const appRouter = router({
                 id: t.id,
                 magicNumber: t.magicNumber,
                 liveAccountNumber: t.liveAccountNumber,
+                profitAdjustment: t.profitAdjustment,
               },
               to
             );
@@ -3148,6 +3165,8 @@ export const appRouter = router({
             baseline: Math.round(baseline * 100) / 100,
             shareableProfit: Math.round(shareableProfit * 100) / 100,
             payoutAmount,
+            profitAdjustment:
+              Math.round((parseFloat(t.profitAdjustment ?? "0") || 0) * 100) / 100,
             usdtAddress: t.usdtAddress,
             usdtNetwork: t.usdtNetwork,
             payoutCycle: t.payoutCycle,
@@ -3208,6 +3227,7 @@ export const appRouter = router({
               id: trader.id,
               magicNumber: trader.magicNumber,
               liveAccountNumber: trader.liveAccountNumber,
+              profitAdjustment: trader.profitAdjustment,
             },
             input.to
           );
@@ -3381,6 +3401,7 @@ export const appRouter = router({
             id: trader.id,
             magicNumber: trader.magicNumber,
             liveAccountNumber: trader.liveAccountNumber,
+            profitAdjustment: trader.profitAdjustment,
           },
           input.to
         );
@@ -3391,6 +3412,48 @@ export const appRouter = router({
         );
 
         return { success: true, baseline: Math.round(cumulative * 100) / 100 };
+      }),
+
+    // Apply a manual ± profit correction (e.g. a missed / mis-valued copied
+    // trade). The delta is added to the trader's running profitAdjustment total,
+    // which folds into cumulative realized profit — so it flows through the next
+    // payout once and is then absorbed by the HWM baseline.
+    adjustProfit: tradingProcedure
+      .input(
+        z.object({
+          magicNumberId: z.number().int().positive(),
+          delta: z.number().finite(),
+          reason: z.string().max(500).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+
+        const trader = await getMagicNumberById(input.magicNumberId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+
+        const current = parseFloat(trader.profitAdjustment ?? "0") || 0;
+        const next = Math.round((current + input.delta) * 100) / 100;
+        await setProfitAdjustment(input.magicNumberId, next);
+
+        const sign = input.delta >= 0 ? "+" : "";
+        logEvent(
+          "payment",
+          `Profit adjustment — ${trader.name} (${trader.magicNumber}): $${current.toFixed(
+            2
+          )} → $${next.toFixed(2)} (${sign}${input.delta.toFixed(2)}). Reason: ${
+            input.reason?.trim() || "—"
+          }`
+        );
+
+        return { success: true, profitAdjustment: next };
       }),
 
     // --- Previous Magic Numbers ---

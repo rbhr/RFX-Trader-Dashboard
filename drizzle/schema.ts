@@ -78,6 +78,15 @@ export const magicNumbers = mysqlTable("magic_numbers", {
     precision: 15,
     scale: 2,
   }).default("0.00"),
+  // Manual profit correction (± dollars) added to cumulative realized profit for
+  // payout math and single-trader profit views. A running total, adjusted by
+  // delta from the Process Payouts screen; persists until changed. Because a
+  // payout raises the baseline to the (adjusted) cumulative, a correction is
+  // captured once and then absorbed by the HWM.
+  profitAdjustment: decimal("profitAdjustment", {
+    precision: 15,
+    scale: 2,
+  }).default("0.00"),
   // Trailing Risk Limit
   trailingRiskLimit: decimal("trailingRiskLimit", {
     precision: 15,

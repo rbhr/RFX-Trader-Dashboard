@@ -39,6 +39,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
@@ -66,6 +75,7 @@ type PayoutRow = {
   baseline: number;
   shareableProfit: number;
   payoutAmount: number;
+  profitAdjustment: number;
   usdtAddress: string | null;
   usdtNetwork: string | null;
   payoutCycle: string | null;
@@ -104,6 +114,9 @@ export default function ProcessPayouts() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [settleTarget, setSettleTarget] = useState<PayoutRow | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<PayoutRow | null>(null);
+  const [adjustDelta, setAdjustDelta] = useState<string>("");
+  const [adjustReason, setAdjustReason] = useState<string>("");
 
   const { data: walletInfo } = trpc.admin.getWalletInfo.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -133,6 +146,7 @@ export default function ProcessPayouts() {
 
   const processMutation = trpc.admin.processProfitSharePayout.useMutation();
   const setBaselineMutation = trpc.admin.setPayoutBaseline.useMutation();
+  const adjustProfitMutation = trpc.admin.adjustProfit.useMutation();
 
   // While a payout run is in progress, warn before closing/refreshing the tab —
   // that would interrupt traders still queued (in-app navigation is safe; the
@@ -262,6 +276,36 @@ export default function ProcessPayouts() {
       previewQuery.refetch();
     } catch (e: any) {
       toast.error(e?.message || "Failed to set baseline");
+    }
+  };
+
+  const openAdjust = (r: PayoutRow) => {
+    setAdjustDelta("");
+    setAdjustReason("");
+    setAdjustTarget(r);
+  };
+
+  const confirmAdjust = async () => {
+    if (!adjustTarget) return;
+    const delta = parseFloat(adjustDelta);
+    if (!Number.isFinite(delta) || delta === 0) {
+      toast.error("Enter a non-zero adjustment amount");
+      return;
+    }
+    const target = adjustTarget;
+    try {
+      const res = await adjustProfitMutation.mutateAsync({
+        magicNumberId: target.id,
+        delta,
+        reason: adjustReason.trim() || undefined,
+      });
+      toast.success(
+        `${target.name}: profit adjustment now ${fmtUsd(res.profitAdjustment)}`
+      );
+      setAdjustTarget(null);
+      previewQuery.refetch();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to adjust profit");
     }
   };
 
@@ -417,7 +461,7 @@ export default function ProcessPayouts() {
                       <TableHead className="text-right">Payout</TableHead>
                       <TableHead>Network</TableHead>
                       <TableHead>Last paid</TableHead>
-                      <TableHead className="w-20"></TableHead>
+                      <TableHead className="w-32"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -442,15 +486,26 @@ export default function ProcessPayouts() {
                         <TableCell>{networkLabel(r)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{fmtDate(r.lastPayoutAt)}</TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => setSettleTarget(r)}
-                            title="Set baseline to current cumulative profit without paying"
-                          >
-                            Settle
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => openAdjust(r)}
+                              title="Manually correct this trader's profit (± dollars)"
+                            >
+                              Adjust
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setSettleTarget(r)}
+                              title="Set baseline to current cumulative profit without paying"
+                            >
+                              Settle
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -525,7 +580,7 @@ export default function ProcessPayouts() {
                     <TableHead className="text-right">Baseline</TableHead>
                     <TableHead className="text-right">Shareable</TableHead>
                     <TableHead>Reason</TableHead>
-                    <TableHead className="w-20"></TableHead>
+                    <TableHead className="w-32"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -540,17 +595,28 @@ export default function ProcessPayouts() {
                       <TableCell className="text-right">{fmtUsd(r.shareableProfit)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{r.reason}</TableCell>
                       <TableCell>
-                        {r.shareableProfit > 0 && (
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 text-xs"
-                            onClick={() => setSettleTarget(r)}
-                            title="Set baseline to current cumulative profit without paying"
+                            onClick={() => openAdjust(r)}
+                            title="Manually correct this trader's profit (± dollars)"
                           >
-                            Settle
+                            Adjust
                           </Button>
-                        )}
+                          {r.shareableProfit > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setSettleTarget(r)}
+                              title="Set baseline to current cumulative profit without paying"
+                            >
+                              Settle
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -624,6 +690,79 @@ export default function ProcessPayouts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Adjust profit */}
+      <Dialog open={!!adjustTarget} onOpenChange={o => !o && setAdjustTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adjust profit — {adjustTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Apply a ± correction (e.g. a missed or mis-valued copied trade) to
+              this trader's profit. It flows through the next payout once, then the
+              high-water mark absorbs it — it isn't paid twice.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              Current adjustment:{" "}
+              <span className="font-medium text-foreground">
+                {adjustTarget ? fmtUsd(adjustTarget.profitAdjustment) : "—"}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="adjust-delta">Adjustment (± USD)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  id="adjust-delta"
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 100 or -50"
+                  className="pl-7"
+                  value={adjustDelta}
+                  onChange={e => setAdjustDelta(e.target.value)}
+                />
+              </div>
+              {adjustTarget &&
+                Number.isFinite(parseFloat(adjustDelta)) &&
+                parseFloat(adjustDelta) !== 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    New total:{" "}
+                    {fmtUsd(
+                      Math.round(
+                        (adjustTarget.profitAdjustment +
+                          parseFloat(adjustDelta)) *
+                          100
+                      ) / 100
+                    )}
+                  </p>
+                )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="adjust-reason">Reason (optional)</Label>
+              <Textarea
+                id="adjust-reason"
+                placeholder="e.g. Missed GBPUSD trade 2026-08-14, credited +$100"
+                value={adjustReason}
+                onChange={e => setAdjustReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjustTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmAdjust}
+              disabled={adjustProfitMutation.isPending}
+            >
+              {adjustProfitMutation.isPending ? "Saving…" : "Apply adjustment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
