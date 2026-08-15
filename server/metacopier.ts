@@ -172,7 +172,10 @@ class MetaCopierService {
             'Content-Type': 'application/json',
           },
           data,
-          timeout: 300000,
+          // Fail fast so a slow/hung MetaCopier call can't freeze a user-facing
+          // read for minutes (was 300000 = 5 min). 15s leaves headroom for the
+          // heavier history endpoints while still surfacing errors quickly.
+          timeout: 15000,
         });
         return response.data;
       } catch (error: any) {

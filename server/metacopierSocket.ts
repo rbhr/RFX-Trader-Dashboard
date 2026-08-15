@@ -27,7 +27,10 @@ const debug = createDebug("socket");
 
 const SOCKET_URL =
   process.env.METACOPIER_SOCKET_URL ?? "wss://api.metacopier.io/ws/api/v1";
-const HEARTBEAT_MS = 15000; // send a heartbeat well within the server's ~20s window
+// Send heartbeats at ~half the server's ~20s kill window so at least two land
+// inside any connected window — the old 15s period aliased against the ~15s
+// connected lifetime and whole windows went heartbeat-less, getting us dropped.
+const HEARTBEAT_MS = 8000;
 const RECONNECT_BASE_MS = 5000;
 const RECONNECT_MAX_MS = 60000;
 // Watchdog: the server sends STOMP heartbeats ~every 20s, so prolonged inbound
@@ -187,6 +190,7 @@ function processFrame(chunk: string): void {
     reconnectAttempts = 0;
     debug("CONNECTED — subscribing to all accounts");
     logEvent("socket", "Real-time socket connected — subscribed to all accounts");
+    startHeartbeat();
     send(
       frame("SUBSCRIBE", {
         id: "sub-0",
@@ -217,6 +221,21 @@ function send(text: string): void {
   } catch (e) {
     debug("send failed", String(e));
   }
+}
+
+/**
+ * Start (or restart) the outbound STOMP heartbeat, aligned to the CURRENT
+ * connection. Sends one immediately so the server sees liveness right after
+ * CONNECT, then every HEARTBEAT_MS. Called on every CONNECTED so heartbeats can
+ * never alias against the connection lifetime — the previous single global timer
+ * could skip an entire connected window and get us dropped.
+ */
+function startHeartbeat(): void {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  send("\n");
+  heartbeatTimer = setInterval(() => {
+    if (connected) send("\n");
+  }, HEARTBEAT_MS);
 }
 
 function scheduleReconnect(): void {
@@ -257,7 +276,7 @@ function connect(): void {
     send(
       frame("CONNECT", {
         "accept-version": "1.2",
-        "heart-beat": "20000,20000",
+        "heart-beat": "10000,10000",
         "api-key": key,
       })
     );
@@ -364,10 +383,8 @@ export function startMetaCopierSocket(): void {
   started = true;
   console.log("[socket] Starting MetaCopier real-time socket");
   connect();
-  // Outgoing heartbeat so the server doesn't drop us after ~20s idle.
-  heartbeatTimer = setInterval(() => {
-    if (connected) send("\n");
-  }, HEARTBEAT_MS);
+  // The outbound heartbeat is started on each CONNECTED (see startHeartbeat),
+  // so it stays aligned to the live connection rather than a fixed global phase.
   // Self-healing watchdog (stale link / stuck reconnect).
   watchdogTimer = setInterval(runWatchdog, WATCHDOG_INTERVAL_MS);
   // Periodic cache visibility (debug "socket" only).
