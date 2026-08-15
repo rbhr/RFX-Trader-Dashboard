@@ -5,6 +5,33 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [3.1.2] — 2026-08-15
+
+### Fixed
+
+- **Real-time socket reconnect flap.** The MetaCopier STOMP socket was
+  reconnecting ~120–180×/hour around the clock: the outbound heartbeat ran on a
+  single global 15s timer that aliased against the ~15s connected window, so
+  whole windows went heartbeat-less and the server dropped the link (~20s kill
+  window). Heartbeats now fire every 8s, started fresh and aligned on each
+  `CONNECTED` (with an immediate first beat), and the declared `heart-beat` is
+  `10000,10000` for real margin. The connection now holds indefinitely.
+
+### Performance
+
+- **Admin dashboard P&L speed.** Closed-position history was re-fetched from REST
+  on every load and every 30–60s poll, and the today/week/month/all-time windows
+  each looped the ~10 master accounts **serially** — one load fanned out to ~90
+  uncached, mostly-duplicate REST calls (all-time alone ~14s serial), risking
+  MetaCopier 429s. History is now served from a 30s coalesced cache keyed by
+  `(account, range)` — with the magic-number filter applied per caller so admin
+  and per-trader reads of the same window share one fetch — and the per-master
+  fan-out runs in parallel. Cold fan-out dropped from ~14s to ~1.9s; polled and
+  duplicate reads are near-instant.
+- **REST timeout cap.** The MetaCopier REST client timeout was cut from 5 minutes
+  to 15s so a slow or hung upstream call can no longer freeze a user-facing read
+  for minutes.
+
 ## [3.0.3] — 2026-06-25
 
 ### Added
