@@ -13,6 +13,12 @@ const API_BASE = 'https://api.metacopier.io/rest/api/v1';
 // entry transparently triggers a REST read.
 const INFO_TTL_MS = 120_000;
 const POS_TTL_MS = 45_000;
+// Closed-position history changes only when a trade closes, but the dashboard
+// re-derives today/week/month/all-time P&L across ~10 master accounts from it on
+// every load and on 30–60s polls — the same (account, range) window fetched many
+// times over. Cache the raw history briefly and coalesce concurrent identical
+// requests so that storm collapses to one REST call per window.
+const HISTORY_TTL_MS = 30_000;
 
 export interface Position {
   id: string;
@@ -128,6 +134,8 @@ class MetaCopierService {
   };
   private accountsCachePromise: Promise<any[]> | null = null;
   private static ACCOUNTS_CACHE_TTL = 30_000; // 30 seconds
+  private historyCache = new Map<string, { fetchedAt: number; data: Position[] }>();
+  private historyInflight = new Map<string, Promise<Position[]>>();
 
   constructor() {
     this.apiKey = process.env.METACOPIER_API_KEY || '';
@@ -237,23 +245,50 @@ class MetaCopierService {
     );
   }
 
+  /**
+   * Raw (unfiltered, mapped) closed-position history for an account+range,
+   * cached for HISTORY_TTL_MS and coalesced so the many procedures/polls that
+   * request the same window share a single REST call. The magic-number filter is
+   * applied by callers, so admin and per-trader reads of the same account+range
+   * hit the same cache entry.
+   */
+  private async getHistoryRaw(
+    accountId: string,
+    start: string,
+    stop: string
+  ): Promise<Position[]> {
+    const key = `${accountId}|${start}|${stop}`;
+    const hit = this.historyCache.get(key);
+    if (hit && Date.now() - hit.fetchedAt < HISTORY_TTL_MS) return hit.data;
+    const inflight = this.historyInflight.get(key);
+    if (inflight) return inflight;
+    const p = this.fetchWithAuth<Position[]>(
+      `/accounts/${accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
+    )
+      .then(raw => {
+        const positions = Array.isArray(raw) ? raw.map(mapRestPosition) : [];
+        this.historyCache.set(key, { fetchedAt: Date.now(), data: positions });
+        this.historyInflight.delete(key);
+        return positions;
+      })
+      .catch(err => {
+        this.historyInflight.delete(key);
+        throw err;
+      });
+    this.historyInflight.set(key, p);
+    return p;
+  }
+
   async getHistoricalPositions(
     start: string,
     stop: string,
     magicNumber?: string,
     showAll = false
   ): Promise<Position[]> {
-    const raw = await this.fetchWithAuth<Position[]>(
-      `/accounts/${this.accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
-    );
-
-    if (!Array.isArray(raw)) return [];
-    const positions = raw.map(mapRestPosition);
-
+    const positions = await this.getHistoryRaw(this.accountId, start, stop);
     if (showAll || !magicNumber) {
       return positions;
     }
-
     return positions.filter(p => String(p.magicNumber) === String(magicNumber));
   }
 
@@ -263,17 +298,10 @@ class MetaCopierService {
     stop: string,
     magicNumber?: string
   ): Promise<Position[]> {
-    const raw = await this.fetchWithAuth<Position[]>(
-      `/accounts/${accountId}/history/positions?start=${encodeURIComponent(start)}&stop=${encodeURIComponent(stop)}`
-    );
-
-    if (!Array.isArray(raw)) return [];
-    const positions = raw.map(mapRestPosition);
-
+    const positions = await this.getHistoryRaw(accountId, start, stop);
     if (!magicNumber) {
       return positions;
     }
-
     return positions.filter(p => String(p.magicNumber) === String(magicNumber));
   }
 

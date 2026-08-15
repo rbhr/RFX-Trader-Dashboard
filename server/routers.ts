@@ -1259,12 +1259,10 @@ export const appRouter = router({
         // Admin with no master selected: aggregate across all master accounts
         if (showAllData && trader.isAdmin) {
           const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const allPositions: import("./metacopier").Position[] = [];
-          for (const m of masters) {
-            const positions = await metaCopierService.getOpenPositionsFromAccount(m.id);
-            allPositions.push(...positions);
-          }
-          return allPositions;
+          const perMaster = await Promise.all(
+            masters.map(m => metaCopierService.getOpenPositionsFromAccount(m.id))
+          );
+          return perMaster.flat();
         }
 
         // If trader has a live account assigned, fetch from that account
@@ -1300,13 +1298,12 @@ export const appRouter = router({
         // Admin: aggregate across all master accounts
         if (showAllData && trader.isAdmin) {
           const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const all: import("./metacopier").Position[] = [];
-          for (const m of masters) {
-            all.push(...await metaCopierService.getHistoricalPositionsFromAccount(
+          const perMaster = await Promise.all(
+            masters.map(m => metaCopierService.getHistoricalPositionsFromAccount(
               m.id, getStartOfToday(), getEndOfToday()
-            ));
-          }
-          return all;
+            ))
+          );
+          return perMaster.flat();
         }
 
         // If trader has a live account assigned, fetch from that account
@@ -1345,13 +1342,12 @@ export const appRouter = router({
 
         if (showAllData && trader.isAdmin) {
           const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const all: import("./metacopier").Position[] = [];
-          for (const m of masters) {
-            all.push(...await metaCopierService.getHistoricalPositionsFromAccount(
+          const perMaster = await Promise.all(
+            masters.map(m => metaCopierService.getHistoricalPositionsFromAccount(
               m.id, getStartOfWeek(), getEndOfToday()
-            ));
-          }
-          return all;
+            ))
+          );
+          return perMaster.flat();
         }
 
         if (liveAccountNumber && !showAllData) {
@@ -1431,15 +1427,14 @@ export const appRouter = router({
         // Admin with no master selected: aggregate across all master accounts
         if (effectiveShowAll && trader.isAdmin) {
           const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const allPositions: import("./metacopier").Position[] = [];
-          for (const m of masters) {
-            const positions = await metaCopierService.getHistoricalPositionsFromAccount(
+          const perMaster = await Promise.all(
+            masters.map(m => metaCopierService.getHistoricalPositionsFromAccount(
               m.id,
               getAllTimeStart(),
               getEndOfToday()
-            );
-            allPositions.push(...positions);
-          }
+            ))
+          );
+          const allPositions = perMaster.flat();
           const seen = new Set<string>();
           return allPositions.filter(p => {
             if (seen.has(p.id)) return false;
@@ -1473,9 +1468,8 @@ export const appRouter = router({
           const aggregate = async (
             fetcher: (accountId: string) => Promise<import("./metacopier").Position[]>
           ) => {
-            const all: import("./metacopier").Position[] = [];
-            for (const m of masters) all.push(...await fetcher(m.id));
-            return all;
+            const perMaster = await Promise.all(masters.map(m => fetcher(m.id)));
+            return perMaster.flat();
           };
           const [
             openPositions,
