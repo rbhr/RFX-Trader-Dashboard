@@ -5,6 +5,24 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [3.1.4] — 2026-08-16
+
+### Added
+
+- **Manual profit adjustment ("Adjust Profit").** When a copied trade is missed
+  or mis-valued, an admin can apply a persistent ± correction to a trader's
+  profit from the **Process Payouts** screen (an "Adjust Profit" button per row,
+  alongside "Settle"). The delta is added to a running per-trader total and folds
+  into cumulative realized profit, so it flows through the *next* payout once and
+  is then absorbed by the high-water mark — never paid twice, and the HWM formula
+  is unchanged. A negative adjustment gates future payouts until re-earned (never
+  a negative send). The corrected figure shows in the trader's own **week, month
+  and all-time** P&L **and** the admin's view of that trader (ManageTraders grid,
+  "view as trader"), so both see the same number (today stays the pure live
+  intraday figure). Every change is written to the Payment logs with
+  old → new value and an optional reason. New `magic_numbers.profitAdjustment`
+  column (requires `db:push`).
+
 ## [3.1.2] — 2026-08-15
 
 ### Fixed

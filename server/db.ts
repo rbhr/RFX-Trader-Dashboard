@@ -395,6 +395,20 @@ export async function setProfitShareBaseline(
     .where(eq(magicNumbers.id, magicNumberId));
 }
 
+/** Set a trader's manual profit adjustment (running ± total added to cumulative realized profit). */
+export async function setProfitAdjustment(
+  magicNumberId: number,
+  amount: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(magicNumbers)
+    .set({ profitAdjustment: amount.toFixed(2) })
+    .where(eq(magicNumbers.id, magicNumberId));
+}
+
 /**
  * Latest covered-through date for a trader's profit-share payouts (used for the
  * cycle waiting period). Uses payoutPeriodTo only — undated legacy/manual
