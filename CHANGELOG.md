@@ -5,7 +5,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
-## [3.1.3] — 2026-08-15
+## [3.1.4] — 2026-08-16
 
 ### Added
 
