@@ -400,8 +400,10 @@ async function computeTraderProfitSummary(trader: {
   ]);
 
   const floating = calculatePnL(open);
-  // Manual profit correction applies to the lifetime figure only (it's a
-  // lifetime-scope correction, not a this-week/this-month event).
+  // Manual profit correction is shown in the week, month and lifetime figures
+  // (the accumulation windows admins act on) so the corrected number appears
+  // everywhere the trader's profit is summarised. Today is left as the pure
+  // live intraday figure.
   const adjustment = parseFloat(trader.profitAdjustment ?? "0") || 0;
 
   const weekStart = new Date(getStartOfWeek()).getTime();
@@ -415,8 +417,8 @@ async function computeTraderProfitSummary(trader: {
   );
 
   return {
-    weekPnL: calculatePnL(weekClosed) + floating,
-    monthPnL: calculatePnL(monthClosed) + floating,
+    weekPnL: calculatePnL(weekClosed) + floating + adjustment,
+    monthPnL: calculatePnL(monthClosed) + floating + adjustment,
     lifetimePnL: calculatePnL(closed) + floating + adjustment,
   };
 }
@@ -1581,13 +1583,17 @@ export const appRouter = router({
         ]);
 
         const floatingPnL = calculatePnL(openPositions);
-        // Manual profit correction applies to the all-time figure only (matches
-        // the payout-side cumulative and the admin per-trader lifetime view).
+        // Manual profit correction is folded into the week, month and all-time
+        // figures (matching the payout-side cumulative and the admin grid), so
+        // the corrected number appears everywhere the trader's profit is shown.
+        // Today is left as the pure live intraday figure.
         const profitAdjustmentValue =
           parseFloat(trader.profitAdjustment ?? "0") || 0;
         const todayRealizedPnL = calculatePnL(todayPositions);
-        const weekRealizedPnL = calculatePnL(weekPositions);
-        const monthRealizedPnL = calculatePnL(monthPositions);
+        const weekRealizedPnL =
+          calculatePnL(weekPositions) + profitAdjustmentValue;
+        const monthRealizedPnL =
+          calculatePnL(monthPositions) + profitAdjustmentValue;
         const allTimeRealizedPnL =
           calculatePnL(allTimePositions) + profitAdjustmentValue;
         const todayTotalPnL = floatingPnL + todayRealizedPnL;

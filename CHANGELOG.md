@@ -16,9 +16,10 @@ hash.
   into cumulative realized profit, so it flows through the *next* payout once and
   is then absorbed by the high-water mark — never paid twice, and the HWM formula
   is unchanged. A negative adjustment gates future payouts until re-earned (never
-  a negative send). The corrected figure shows in the trader's own all-time P&L
-  **and** the admin's view of that trader (ManageTraders grid, "view as trader"),
-  so both see the same number. Every change is written to the Payment logs with
+  a negative send). The corrected figure shows in the trader's own **week, month
+  and all-time** P&L **and** the admin's view of that trader (ManageTraders grid,
+  "view as trader"), so both see the same number (today stays the pure live
+  intraday figure). Every change is written to the Payment logs with
   old → new value and an optional reason. New `magic_numbers.profitAdjustment`
   column (requires `db:push`).
 
