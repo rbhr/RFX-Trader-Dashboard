@@ -2,18 +2,6 @@
 
 Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for end-to-end type safety.
 
-## Commands
-
-```bash
-pnpm dev          # Start dev server (Express + Vite HMR) on port 3000
-pnpm build        # Build frontend (Vite) + bundle server (esbuild)
-pnpm start        # Run production build
-pnpm test         # Run backend tests (Vitest)
-pnpm check        # TypeScript type checking (no emit)
-pnpm format       # Format code with Prettier
-pnpm db:push      # Generate + apply database migrations (Drizzle Kit)
-```
-
 ## Architecture
 
 - **Frontend**: React 19, Wouter (routing), TanStack Query (server state), shadcn/ui + Tailwind CSS
@@ -21,16 +9,6 @@ pnpm db:push      # Generate + apply database migrations (Drizzle Kit)
 - **Services**: MetaCopier API integration, Telegram bot, server-side breach monitor (1-min interval), trailing risk-limit monitor, custodial USDT payout wallets (TRC20 + ERC20)
 - **Auth**: JWT cookies — trader auth via magic number + bcrypt-hashed password (12 rounds), with Telegram-delivered 2FA for login/password reset/change; admin auth via OAuth
 - **Traders**: each `magic_numbers` row has a `manager` (e.g. `RFX`, `RFX - Zarab`) and a `liveAccountNumber` (the MetaCopier master/live account their trades copy to)
-
-## Project Structure
-
-```
-client/src/       React frontend (pages, components, hooks, contexts)
-server/           Express backend (routers.ts, db.ts, services)
-server/_core/     Server bootstrap (Express init, tRPC config, env vars)
-shared/           Shared types and constants
-drizzle/          Database schema (schema.ts) and migration files
-```
 
 ## Key Files
 

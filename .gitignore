@@ -132,3 +132,6 @@ update-copiers.mjs
 update-guardrails.mjs
 update-trader-telegram.mjs
 zarab-switch-live.mjs
+
+# graphify knowledge-graph output (generated locally)
+graphify-out/
