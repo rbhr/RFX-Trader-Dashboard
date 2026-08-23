@@ -28,7 +28,7 @@
 
 - [ ] Provision an isolated test database (e.g. `rfx_trader_test` schema, or an ephemeral MySQL container for tests)
 - [ ] Add `.env.test` (gitignored) with `TEST_DATABASE_URL` pointing at it — the guard already prefers `TEST_DATABASE_URL` over `DATABASE_URL`
-- [ ] Run `pnpm db:push` against the test DB to create the schema (Docker: `docker exec -it rfx-app pnpm db:push` with the test URL)
+- [ ] Run `pnpm db:push` against the test DB to create the schema (Docker: `docker exec -it rfx-trader-dashboard pnpm db:push` with the test URL)
 - [ ] Seed minimal fixtures if any tests assume pre-existing rows (e.g. admin.traders "List Traders" expects `length > 0`)
 - [ ] Verify full suite passes against the test DB (guard allows it; prod stays untouched)
 - [ ] Document the test-DB setup in CLAUDE.md / README

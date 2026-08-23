@@ -136,21 +136,21 @@ DEBUG=
 
 ## Deployment
 
-Runs as Docker Compose (`rfx-app`, `mysql`, `caddy`) on Oracle Cloud. Caddy provides automatic HTTPS for **tradersdash.rftrust.co**.
+Runs as Docker Compose on Oracle Cloud: service `rfx-app` (container `rfx-trader-dashboard`) and `dashboard-mysql` (container `rfx-dash-db`). TLS and routing come from the shared edge Caddy in the parent folder, which serves **tradersdash.rfx.capital** and **tradersdash.rftrust.co** and reaches this app over the external `rfx_edge` network.
 
 ```bash
 # Pull + rebuild app (injects git short hash as BUILD_HASH for the version footer)
 git pull origin main && BUILD_HASH=$(git rev-parse --short HEAD) docker compose up -d --build rfx-app
 
 # Apply DB migrations
-docker exec -it rfx-app pnpm db:push
+docker exec -it rfx-trader-dashboard pnpm db:push
 
 # View logs
-docker logs rfx-app --tail 50 -f
+docker logs rfx-trader-dashboard --tail 50 -f
 ```
 
 > Note: MySQL is only reachable on the internal Docker network. Run DB/MetaCopier scripts inside the app container, e.g.:
-> `docker exec -w /app -i rfx-app node --input-type=module < script.mjs`
+> `docker exec -w /app -i rfx-trader-dashboard node --input-type=module < script.mjs`
 
 ### Logs & debugging
 
@@ -159,10 +159,10 @@ Logs are **quiet by default** — verbose per-request lines (e.g. `[Auth] Missin
 ```bash
 # Follow logs and filter to a topic. 2>&1 merges stderr (where many logs go);
 # --line-buffered makes grep emit matches in real time instead of in chunks.
-docker logs rfx-app -f 2>&1 | grep --line-buffered Onboarding
+docker logs rfx-trader-dashboard -f 2>&1 | grep --line-buffered Onboarding
 
 # Invert to hide noise instead
-docker logs rfx-app -f 2>&1 | grep --line-buffered -ivE 'session|cookie'
+docker logs rfx-trader-dashboard -f 2>&1 | grep --line-buffered -ivE 'session|cookie'
 ```
 
 Turn verbose logging on by setting `DEBUG` in `.env`, then restart (it's read once at startup):

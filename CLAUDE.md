@@ -2,18 +2,6 @@
 
 Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for end-to-end type safety.
 
-## Commands
-
-```bash
-pnpm dev          # Start dev server (Express + Vite HMR) on port 3000
-pnpm build        # Build frontend (Vite) + bundle server (esbuild)
-pnpm start        # Run production build
-pnpm test         # Run backend tests (Vitest)
-pnpm check        # TypeScript type checking (no emit)
-pnpm format       # Format code with Prettier
-pnpm db:push      # Generate + apply database migrations (Drizzle Kit)
-```
-
 ## Architecture
 
 - **Frontend**: React 19, Wouter (routing), TanStack Query (server state), shadcn/ui + Tailwind CSS
@@ -21,16 +9,6 @@ pnpm db:push      # Generate + apply database migrations (Drizzle Kit)
 - **Services**: MetaCopier API integration, Telegram bot, server-side breach monitor (1-min interval), trailing risk-limit monitor, custodial USDT payout wallets (TRC20 + ERC20)
 - **Auth**: JWT cookies — trader auth via magic number + bcrypt-hashed password (12 rounds), with Telegram-delivered 2FA for login/password reset/change; admin auth via OAuth
 - **Traders**: each `magic_numbers` row has a `manager` (e.g. `RFX`, `RFX - Zarab`) and a `liveAccountNumber` (the MetaCopier master/live account their trades copy to)
-
-## Project Structure
-
-```
-client/src/       React frontend (pages, components, hooks, contexts)
-server/           Express backend (routers.ts, db.ts, services)
-server/_core/     Server bootstrap (Express init, tRPC config, env vars)
-shared/           Shared types and constants
-drizzle/          Database schema (schema.ts) and migration files
-```
 
 ## Key Files
 
@@ -45,14 +23,21 @@ drizzle/          Database schema (schema.ts) and migration files
 
 ## Deployment
 
-- **Runtime**: Docker Compose (rfx-app, mysql, caddy) on Oracle Cloud
-- **Domain**: tradersdash.rftrust.co (Caddy auto-HTTPS)
+- **Runtime**: Docker Compose on Oracle Cloud — service `rfx-app` (container
+  `rfx-trader-dashboard`) + `dashboard-mysql` (container `rfx-dash-db`). TLS and hostname
+  routing are handled by the shared edge Caddy in the parent folder (`/home/rfx`), which
+  `include`s this stack; this stack no longer runs its own Caddy or Portainer.
+- **Domains**: tradersdash.rfx.capital and tradersdash.rftrust.co → `rfx-trader-dashboard:3000`
+  over the external `rfx_edge` network. The container name is what the edge Caddyfile targets —
+  renaming it breaks routing.
 - **Pull + rebuild app** (full deploy command — injects git short hash as BUILD_HASH for the version footer):
   ```bash
   git pull origin main && BUILD_HASH=$(git rev-parse --short HEAD) docker compose up -d --build rfx-app
   ```
-- **DB migrations**: `docker exec -it rfx-app pnpm db:push`
-- **View logs**: `docker logs rfx-app --tail 50 -f`
+- **DB migrations**: `docker exec -it rfx-trader-dashboard pnpm db:push`
+- **View logs**: `docker logs rfx-trader-dashboard --tail 50 -f`
+- **DB shell**: `docker compose exec dashboard-mysql mysql -urfx -p rfx_trader`
+  (MySQL data is bind-mounted at `data/mysql` on the host, so it survives container recreation.)
 
 ## User Preferences
 

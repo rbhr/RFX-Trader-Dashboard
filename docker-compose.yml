@@ -1,36 +1,26 @@
-volumes:
-  portainer_data:
-  caddy_data:
-  caddy_config:
+# RFX Trader Dashboard — app + MySQL only.
+#
+# TLS and hostname routing are handled by the shared edge Caddy defined in the
+# parent folder (../docker-compose.yml), which also `include`s this file. The
+# app joins the external rfx_edge network so that Caddy can reach it by name as
+# rfx-trader-dashboard:3000.
+#
+# Operate the whole platform from the parent folder, or just this stack from
+# here:
+#   docker compose up -d --build rfx-app
 
 services:
-  portainer:
-    command: "-H unix:///var/run/docker.sock"
-    container_name: portainer
-    environment:
-      - TZ=Australia/Adelaide
-      - CAP_HOST_MANAGEMENT=1
-    image: portainer/portainer-ce:latest
-    ports:
-      - "9000:9000"
-    restart: always
-    volumes:
-      - portainer_data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /etc/localtime:/etc/localtime
-      - /var/lib/docker/volumes:/var/lib/docker/volumes
-      - /:/host
-
   rfx-app:
     build:
       context: .
       args:
         BUILD_HASH: ${BUILD_HASH:-dev}
         VITE_LIVE_STREAM: ${VITE_LIVE_STREAM:-false}
-    container_name: rfx-app
+    # The edge Caddy proxies tradersdash.* to this container name.
+    container_name: rfx-trader-dashboard
     restart: unless-stopped
     depends_on:
-      mysql:
+      dashboard-mysql:
         condition: service_healthy
     env_file: .env
     environment:
@@ -41,10 +31,15 @@ services:
       - "3000:3000"
     networks:
       - internal
+      - rfx_edge # reachable by the edge Caddy as rfx-trader-dashboard:3000
 
-  mysql:
+  # Renamed from "mysql" so it doesn't collide with the website stack's MySQL
+  # when both are included into one project from the parent folder. The app
+  # still connects to it as "mysql" via the network alias below, so
+  # DATABASE_URL is unchanged.
+  dashboard-mysql:
     image: mysql:8.0
-    container_name: rfx-mysql
+    container_name: rfx-dash-db
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -59,24 +54,15 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - internal
+      internal:
+        aliases:
+          - mysql
 
-  caddy:
-    image: caddy:2-alpine
-    container_name: rfx-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - rfx-app
-    networks:
-      - internal
-
+  # NOTE: TLS / reverse proxy and Portainer are now defined once in the parent
+  # folder's docker-compose.yml. This stack no longer runs its own copies —
+  # they collided by name with the edge stack's services when included.
 
 networks:
   internal:
+  rfx_edge:
+    external: true
