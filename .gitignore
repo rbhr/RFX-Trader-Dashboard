@@ -133,5 +133,5 @@ update-guardrails.mjs
 update-trader-telegram.mjs
 zarab-switch-live.mjs
 
-# Graph analysis tool output
+# graphify knowledge-graph output (generated locally)
 graphify-out/
