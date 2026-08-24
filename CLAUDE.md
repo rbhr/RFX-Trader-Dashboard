@@ -30,9 +30,16 @@ Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for e
 - **Domains**: tradersdash.rfx.capital and tradersdash.rftrust.co → `rfx-trader-dashboard:3000`
   over the external `rfx_edge` network. The container name is what the edge Caddyfile targets —
   renaming it breaks routing.
-- **Pull + rebuild app** (full deploy command — injects git short hash as BUILD_HASH for the version footer):
+- **Pull + rebuild app** (full deploy command — injects git short hash as BUILD_HASH for the version
+  footer). **Run it from `/home/rfx`, not from this folder.** This stack is `include`d by the parent
+  compose file, so it is no longer a standalone project: running compose here uses project name
+  `rfx-trader-dashboard` instead of `rfx` and tries to create a *second* MySQL against the same
+  `data/mysql` bind mount. Docker refuses on the container-name clash, and that clash is the only
+  thing standing between you and two mysqld processes on one data directory.
   ```bash
-  git pull origin main && BUILD_HASH=$(git rev-parse --short HEAD) docker compose up -d --build rfx-app
+  git -C RFX-Trader-Dashboard pull origin main && \
+    BUILD_HASH=$(git -C RFX-Trader-Dashboard rev-parse --short HEAD) \
+    docker compose up -d --build rfx-app
   ```
 - **DB migrations**: `docker exec -it rfx-trader-dashboard pnpm db:push`
 - **View logs**: `docker logs rfx-trader-dashboard --tail 50 -f`

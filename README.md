@@ -139,8 +139,15 @@ DEBUG=
 Runs as Docker Compose on Oracle Cloud: service `rfx-app` (container `rfx-trader-dashboard`) and `dashboard-mysql` (container `rfx-dash-db`). TLS and routing come from the shared edge Caddy in the parent folder, which serves **tradersdash.rfx.capital** and **tradersdash.rftrust.co** and reaches this app over the external `rfx_edge` network.
 
 ```bash
-# Pull + rebuild app (injects git short hash as BUILD_HASH for the version footer)
-git pull origin main && BUILD_HASH=$(git rev-parse --short HEAD) docker compose up -d --build rfx-app
+# Pull + rebuild app (injects git short hash as BUILD_HASH for the version footer).
+# Run from /home/rfx, NOT from this folder: this stack is included by the parent
+# compose file, so running compose here uses project "rfx-trader-dashboard"
+# instead of "rfx" and tries to create a second MySQL against the same
+# data/mysql bind mount. The container-name clash is all that prevents two
+# mysqld processes opening one data directory.
+cd /home/rfx && git -C RFX-Trader-Dashboard pull origin main && \
+  BUILD_HASH=$(git -C RFX-Trader-Dashboard rev-parse --short HEAD) \
+  docker compose up -d --build rfx-app
 
 # Apply DB migrations
 docker exec -it rfx-trader-dashboard pnpm db:push
