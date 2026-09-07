@@ -19,6 +19,8 @@ import {
 import { logEvent } from "./logStore";
 
 const DEFAULT_INTERVAL_MINUTES = 5;
+/** MetaCopier riskType id for the absolute "Actual" limit the trailing logic owns. */
+const RISK_TYPE_ACTUAL = 4;
 let monitorTimeout: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 let lastCheckedAt: Date | null = null;
@@ -61,8 +63,13 @@ async function checkTrailingRiskLimits(): Promise<void> {
         const balance = accountInfo?.balance;
         if (balance == null || balance === 0) continue;
 
+        // Only ever trail the "Actual" limit (riskType 1 is "Balance-equity
+        // daily" and is configured as a percentage). Matching on
+        // `absoluteRiskLimit != null` used to pick whichever limit the API
+        // returned first — 0.0 is not null — so on accounts that list the
+        // daily limit first the trailing stopout was written into that one.
         const activeLimit = limits?.find(
-          (l: any) => l.active && l.absoluteRiskLimit != null
+          (l: any) => l.active && l.riskType?.id === RISK_TYPE_ACTUAL
         );
         if (!activeLimit) continue;
 

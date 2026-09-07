@@ -209,7 +209,10 @@
 ---
 
 ## 🐛 Known Issues
-None - All critical bugs resolved in v1.0
+- [ ] **`git: not found` on container startup** — something shells out to `git` at runtime, but the
+  production image contains neither git nor a `.git` directory, so every boot logs
+  `/bin/sh: 1: git: not found`. Harmless (the version footer uses the `BUILD_HASH` build arg baked
+  in at build time), but it should either be guarded or dropped so boot logs stay clean.
 
 ---
 
