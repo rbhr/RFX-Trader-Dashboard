@@ -5,6 +5,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [3.1.5] — 2026-09-07
+
+### Fixed
+
+- **Trailing risk limit wrote into the wrong MetaCopier limit.** The trailing
+  monitor selected its target with `absoluteRiskLimit != null`, and `0.0` is not
+  null, so it took whichever active limit the API happened to return first. On
+  accounts that list the "Balance-equity daily" limit (riskType 1) ahead of the
+  "Actual" limit (riskType 4), the trailing stopout was written into the daily
+  limit — leaving the intended limit stale and putting a balance-minus-buffer
+  figure on a limit configured as a percentage. It now matches on
+  `riskType.id === 4` and never touches any other limit type. The 14 affected
+  accounts had the stray absolute value on their daily limit reset to 0.
+
+### Changed
+
+- **Manage Traders manager filter.** Replaced the hardcoded `HubbFX` option,
+  which matched no traders, with `RFX - Group 2`.
+
 ## [3.1.4] — 2026-08-16
 
 ### Added
