@@ -912,7 +912,7 @@ export default function ManageTraders() {
             >
               <option value="all">All Managers</option>
               <option value="RFX">RFX</option>
-              <option value="HubbFX">HubbFX</option>
+              <option value="RFX - Group 2">RFX - Group 2</option>
             </select>
             {/* Broadcast message button */}
             <Button
