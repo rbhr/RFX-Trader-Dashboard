@@ -1966,10 +1966,38 @@ export const appRouter = router({
           trader.mtAccount
         );
 
+        // An account created directly in MetaCopier has no stored id, and
+        // everything downstream (dashboard panels, breach/trailing/missed-trade
+        // monitors) keys off mcAccountId — so link it here. Refuse if another
+        // trader already holds that id rather than silently double-linking.
+        let linked = false;
+        let linkedToOther: string | undefined;
+        if (status.exists && status.accountId) {
+          const holder = (await getAllMagicNumbers()).find(
+            t => t.mcAccountId === status.accountId && t.id !== trader.id
+          );
+          if (holder) {
+            linkedToOther = `${holder.name} (${holder.magicNumber})`;
+            console.warn(
+              `[checkMetaCopierStatus] Not linking ${status.accountId} to ${trader.name}: already linked to ${linkedToOther}`
+            );
+          } else {
+            await updateMagicNumber(trader.id, {
+              mcAccountId: status.accountId,
+            });
+            linked = true;
+            console.log(
+              `[checkMetaCopierStatus] Linked ${trader.name} (${trader.magicNumber}) to MC account ${status.accountId}`
+            );
+          }
+        }
+
         return {
           exists: status.exists,
           accountId: status.accountId,
           mtAccount: trader.mtAccount,
+          linked,
+          linkedToOther,
         };
       }),
 

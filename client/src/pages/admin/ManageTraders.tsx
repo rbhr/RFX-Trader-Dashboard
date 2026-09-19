@@ -314,6 +314,8 @@ export default function ManageTraders() {
     exists: boolean;
     accountId?: string;
     mtAccount?: string;
+    linked?: boolean;
+    linkedToOther?: string;
   } | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<keyof Trader | "copyRate" | null>(
@@ -554,6 +556,7 @@ export default function ManageTraders() {
     onSuccess: data => {
       setMcStatus(data);
       setMcStatusDialogOpen(true);
+      if (data.linked) utils.admin.listTraders.invalidate();
     },
     onError: error => {
       toast.error(error.message);
@@ -2531,6 +2534,17 @@ export default function ManageTraders() {
                         {mcStatus.accountId && (
                           <p className="text-xs text-muted-foreground mt-2">
                             Account ID: {mcStatus.accountId}
+                          </p>
+                        )}
+                        {mcStatus.linked && (
+                          <p className="text-sm text-success mt-2">
+                            Linked to this trader
+                          </p>
+                        )}
+                        {mcStatus.linkedToOther && (
+                          <p className="text-sm text-destructive mt-2">
+                            Not linked — this account is already linked to{" "}
+                            {mcStatus.linkedToOther}
                           </p>
                         )}
                       </div>
