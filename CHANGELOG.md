@@ -5,6 +5,60 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.0] — 2026-09-19
+
+### Added
+
+- **Trading controls in Edit Trader.** Max daily loss (%), daily profit limit
+  (%), max total lots, max open trades and a "News trading allowed" checkbox
+  (default off). All five live in MetaCopier, not our database: the dialog reads
+  them on open and writes back only the fields the admin changed. Max daily loss
+  is the "Balance-equity daily" risk limit; the daily profit limit is feature 10
+  with pause-instead-of-close; max total lots is Trade Guardrails with
+  *aggregate per symbol* forced on; news trading is the News filter (feature 49)
+  on every live copier, never the demo routing copier. Settings mirror
+  "RFX - Bisma - 81279" and her copier into "01 exness Master 8220".
+- **Max daily loss on the trader dashboard.** Shows today's dollar allowance and
+  the equity at which the daily limit closes all trades, measured from the
+  balance MetaCopier recorded at rollover.
+- **Why trades are not being copied.** The dashboard now says "due to News" when
+  the copier is active but its news filter is inside a blackout (with the symbol,
+  event and end time), and "by your Administrator" when the copier is disabled.
+  The blackout comes from MetaCopier's news-filter preview for the symbols the
+  trader used in the last 30 days; the project id it needs is read from
+  `GET /apiKeys/current`.
+- New incubator accounts get aggregate-per-symbol guardrails, a 4% max daily loss
+  and a 5% daily profit limit; new live copiers get the news filter.
+
+### Changed
+
+- **Edit Trader rearranged** into Trader, Profit Share & Payouts, Trading
+  Account, Risk Controls, Lifetime Metrics, history and ShowMyTrades.
+- **Dashboard wording.** "Maximum lots open at the same time" and "maximum trades
+  open at the same time" replace the per-trade wording, and falling below the
+  risk limit now reads as a permanent breach — on the dashboard, in the breach
+  Telegram message and in both in-app breach notifications, none of which still
+  tell the trader to ask an admin to re-enable trading.
+- **Onboarding complete now also notifies in-app.** It was the one
+  trader-facing Telegram message without an in-app twin. The notification
+  leaves out the MT login details, since notifications are stored in plain text.
+- **Profit share box** is titled Weekly or Fortnightly Profit Share after the
+  trader's payout cycle.
+
+### Fixed
+
+- **Profit share box ignored earlier losses.** It showed the share of any
+  positive week, even when cumulative profit was still below the high-water
+  mark. It now uses the payout formula, `max(0, cumulative − baseline) × share`,
+  so it reads $0 until earlier losses are recovered.
+- **Risk limit read from, and written to, the wrong MetaCopier limit.** The same
+  first-active-limit selection fixed in the trailing monitor in 3.1.5 was still
+  in the dashboard's risk limit, the breach monitor and the admin Risk Limit
+  field, whose save path took `limits.find(l => l.active)`. On an account that
+  lists its daily limit first, the dashboard and breach monitor used the daily
+  limit's figure and an admin edit wrote the dollar stopout into the daily limit.
+  All four now share `findActualRiskLimit` (riskType 4).
+
 ## [3.1.5] — 2026-09-07
 
 ### Fixed
