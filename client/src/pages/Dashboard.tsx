@@ -301,10 +301,14 @@ export default function Dashboard(props: {
       ? Math.max(0, displayAllTime - pnlSummary.profitShareBaseline) *
         (pnlSummary.profitSharePercent ?? 0)
       : pnlSummary?.weeklyProfitShare ?? 0;
+  // The cycle comes from the session, not the P&L summary: the summary is slow
+  // and absent while loading or after a failed fetch, which left the title on
+  // its "Profit Share" fallback.
+  const payoutCycle = session?.payoutCycle ?? pnlSummary?.payoutCycle;
   const profitShareTitle =
-    pnlSummary?.payoutCycle === "Weekly"
+    payoutCycle === "Weekly"
       ? "Weekly Profit Share"
-      : pnlSummary?.payoutCycle === "Fortnightly"
+      : payoutCycle === "Fortnightly"
         ? "Fortnightly Profit Share"
         : "Profit Share";
 
@@ -715,9 +719,9 @@ export default function Dashboard(props: {
                       <div className="space-y-1">
                         <p className="text-base font-bold text-red-600">
                           Your trades are not being copied into the Live Account{' '}
-                          {copierInfo.notCopiedReason === "news" ? "due to News" : "by your Administrator"}.
+                          {copierInfo.notCopiedReason === "news" ? "due to News" : "- Disabled by your Administrator"}.
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-red-600">
                           If you place trades now, they are not counted toward profit share since they are not executed in the Live Account.
                         </p>
                         {copierInfo.newsBlock && (
@@ -749,9 +753,9 @@ export default function Dashboard(props: {
                     {dailyLossLimit && (
                       <p className="text-sm text-muted-foreground">
                         Your maximum daily loss today:{' '}
-                        <span className="font-bold text-green-600">{formatCurrency(dailyLossLimit.maxLossAmount)}</span>.
+                        <span className="font-bold text-red-600">{formatCurrency(dailyLossLimit.maxLossAmount)}</span>.
                         If the equity in your incubator account drops below{' '}
-                        <span className="font-bold text-green-600">{formatCurrency(dailyLossLimit.breachEquity)}</span>,
+                        <span className="font-bold text-red-600">{formatCurrency(dailyLossLimit.breachEquity)}</span>,
                         all trades will be closed and you can resume trading after rollover.
                       </p>
                     )}

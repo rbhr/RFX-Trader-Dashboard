@@ -949,6 +949,7 @@ export const appRouter = router({
           magicNumber: trader.magicNumber,
           name: trader.name,
           profitShare: parseFloat(trader.profitShare),
+          payoutCycle: trader.payoutCycle ?? null,
           showAllData: trader.showAllData,
           isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
           isViewedTraderAdmin: trader.isAdmin || false,

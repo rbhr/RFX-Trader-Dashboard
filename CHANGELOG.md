@@ -43,7 +43,12 @@ hash.
   trader-facing Telegram message without an in-app twin. The notification
   leaves out the MT login details, since notifications are stored in plain text.
 - **Profit share box** is titled Weekly or Fortnightly Profit Share after the
-  trader's payout cycle.
+  trader's payout cycle, read from the session query rather than the slower P&L
+  summary so the title is right while the figures are still loading.
+- **Trader dashboard emphasis.** The max daily loss amount and its breach equity
+  are bold red. A disabled copier reads "- Disabled by your Administrator", and
+  the line warning that trades placed now do not count toward profit share is
+  red.
 
 ### Fixed
 
