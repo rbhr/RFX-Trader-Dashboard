@@ -13,6 +13,7 @@ import {
   createNotification,
 } from "./db";
 import { metaCopierService } from "./metacopier";
+import { findActualRiskLimit } from "./tradingControls";
 import {
   sendTelegramMessage,
   buildRiskLimitBreachMessage,
@@ -57,11 +58,10 @@ async function checkAllTraders(): Promise<void> {
         const equity = accountInfo?.equity;
         if (equity == null || equity === 0) continue; // Skip null/zero — zero usually means API returned bad data
 
-        // Find the first active absolute risk limit
-        const activeLimit = limits?.find(
-          (l: any) => l.active && l.absoluteRiskLimit != null
-        );
-        if (!activeLimit) continue;
+        // Only the absolute "Actual" limit is a permanent breach. The daily
+        // loss limit also closes all trades, but lifts again at rollover.
+        const activeLimit = findActualRiskLimit(limits);
+        if (!activeLimit?.absoluteRiskLimit) continue;
 
         const riskLimit = activeLimit.absoluteRiskLimit as number;
 
@@ -87,7 +87,7 @@ async function checkAllTraders(): Promise<void> {
           await createNotification({
             magicNumberId: trader.id,
             title: `[Magic ${trader.magicNumber}] ⚠️ Risk Limit Breached`,
-            message: `Your incubator account equity dropped to $${equity.toFixed(2)}, below your risk limit of $${riskLimit.toFixed(2)}. All trades have been closed. Please contact an admin to re-enable trading.`,
+            message: `Your incubator account equity dropped to $${equity.toFixed(2)}, below your risk limit of $${riskLimit.toFixed(2)}. All trades have been closed and your account is permanently breached.`,
             type: "warning",
           });
 

@@ -293,13 +293,20 @@ export default function Dashboard(props: {
     liveFloating != null
       ? (pnlSummary?.allTimeRealizedPnL ?? 0) + liveFloating
       : pnlSummary?.allTimePnL ?? 0;
-  // Weekly profit share tracks the live week P&L (only on positive weeks).
-  const displayWeeklyProfitShare =
-    liveFloating != null
-      ? displayWeek > 0
-        ? displayWeek * (pnlSummary?.profitSharePercent ?? 0)
-        : 0
+  // Profit share accrues only above the high-water mark (profit already paid
+  // on), the same way the payout run works it out — so a winning week that has
+  // not yet recovered earlier losses shows $0. Tracks live floating P&L.
+  const displayProfitShare =
+    liveFloating != null && pnlSummary?.profitShareBaseline != null
+      ? Math.max(0, displayAllTime - pnlSummary.profitShareBaseline) *
+        (pnlSummary.profitSharePercent ?? 0)
       : pnlSummary?.weeklyProfitShare ?? 0;
+  const profitShareTitle =
+    pnlSummary?.payoutCycle === "Weekly"
+      ? "Weekly Profit Share"
+      : pnlSummary?.payoutCycle === "Fortnightly"
+        ? "Fortnightly Profit Share"
+        : "Profit Share";
 
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,
@@ -319,6 +326,10 @@ export default function Dashboard(props: {
   });
 
   const { data: riskLimit } = trpc.trading.getRiskLimit.useQuery(viewAsInput, {
+    refetchInterval: 300000,
+  });
+
+  const { data: dailyLossLimit } = trpc.trading.getDailyLossLimit.useQuery(viewAsInput, {
     refetchInterval: 300000,
   });
 
@@ -700,10 +711,22 @@ export default function Dashboard(props: {
               <CardContent className="space-y-2">
                 {copierInfo ? (
                   <>
-                    {!copierInfo.isActive ? (
-                      <p className="text-sm font-bold text-green-600">
-                        Your trades are not being copied into the Live Account
-                      </p>
+                    {copierInfo.notCopiedReason ? (
+                      <div className="space-y-1">
+                        <p className="text-base font-bold text-red-600">
+                          Your trades are not being copied into the Live Account{' '}
+                          {copierInfo.notCopiedReason === "news" ? "due to News" : "by your Administrator"}.
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          If you place trades now, they are not counted toward profit share since they are not executed in the Live Account.
+                        </p>
+                        {copierInfo.newsBlock && (
+                          <p className="text-sm text-muted-foreground">
+                            {copierInfo.newsBlock.symbols.join(", ")}: {copierInfo.newsBlock.title}, until{' '}
+                            {new Date(copierInfo.newsBlock.untilUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         {copierInfo.scaleType === 3 ? (
@@ -718,16 +741,25 @@ export default function Dashboard(props: {
                       </p>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      Your maximum open trades: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
+                      Your maximum trades open at the same time: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Your maximum lot size per trade: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
+                      Your maximum lots open at the same time: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
                     </p>
+                    {dailyLossLimit && (
+                      <p className="text-sm text-muted-foreground">
+                        Your maximum daily loss today:{' '}
+                        <span className="font-bold text-green-600">{formatCurrency(dailyLossLimit.maxLossAmount)}</span>.
+                        If the equity in your incubator account drops below{' '}
+                        <span className="font-bold text-green-600">{formatCurrency(dailyLossLimit.breachEquity)}</span>,
+                        all trades will be closed and you can resume trading after rollover.
+                      </p>
+                    )}
                     {riskLimit != null && (
                       <p className="text-sm text-muted-foreground">
                         If the equity in your incubator account drops below{' '}
                         <span className="font-bold text-green-600">${riskLimit.toLocaleString()}</span>,
-                        all trades will be closed. You will need to message an admin to re-enable trading.
+                        all trades will be closed and your account is permanently breached.
                       </p>
                     )}
                     <div className="border-t pt-2 mt-2 space-y-1">
@@ -775,9 +807,9 @@ export default function Dashboard(props: {
             isLoading={pnlLoading}
           />
           <PnLCard
-            title="Weekly Profit Share"
-            value={displayWeeklyProfitShare}
-            subtitle={`${((pnlSummary?.profitSharePercent ?? 0) * 100).toFixed(0)}% of positive weekly P&L`}
+            title={profitShareTitle}
+            value={displayProfitShare}
+            subtitle={`${((pnlSummary?.profitSharePercent ?? 0) * 100).toFixed(0)}% of profit since your last payout, after earlier losses`}
             icon={Percent}
             isLoading={pnlLoading}
           />

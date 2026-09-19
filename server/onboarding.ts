@@ -1,6 +1,10 @@
 import bcrypt from "bcrypt";
 
-import { getMagicNumberById, updateMagicNumber } from "./db";
+import {
+  getMagicNumberById,
+  updateMagicNumber,
+  createNotification,
+} from "./db";
 import { enableTraderLiveCopiers } from "./metacopier";
 import { sendTelegramMessage } from "./telegram";
 import { logEvent } from "./logStore";
@@ -104,6 +108,20 @@ export async function maybeActivateOnboarding(traderId: number): Promise<void> {
         `[Onboarding] ${who}: activated but failed to deliver login details:`,
         e
       );
+    }
+
+    // In-app twin of the Telegram message — without the login details: a
+    // notification is stored in plain text and the MT password must not be.
+    try {
+      await createNotification({
+        magicNumberId: trader.id,
+        title: `[Magic ${trader.magicNumber}] Onboarding Complete`,
+        message:
+          "Your onboarding is complete and your trades are now being copied into the Live Account. Your MT login details have been sent to you on Telegram.",
+        type: "info",
+      });
+    } catch (e) {
+      console.error(`[Onboarding] ${who}: in-app notification failed:`, e);
     }
 
     logEvent(

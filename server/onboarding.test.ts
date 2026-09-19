@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 vi.mock("./db", () => ({
   getMagicNumberById: vi.fn(),
   updateMagicNumber: vi.fn(),
+  createNotification: vi.fn(),
 }));
 vi.mock("./metacopier", () => ({
   enableTraderLiveCopiers: vi.fn(),
@@ -12,7 +13,11 @@ vi.mock("./telegram", () => ({
   sendTelegramMessage: vi.fn(),
 }));
 
-import { getMagicNumberById, updateMagicNumber } from "./db";
+import {
+  getMagicNumberById,
+  updateMagicNumber,
+  createNotification,
+} from "./db";
 import { enableTraderLiveCopiers } from "./metacopier";
 import { sendTelegramMessage } from "./telegram";
 import { maybeActivateOnboarding, buildLoginDetailsMessage } from "./onboarding";
@@ -59,6 +64,12 @@ describe("maybeActivateOnboarding", () => {
     expect(sendTelegramMessage).toHaveBeenCalledTimes(1);
     const [, msg] = vi.mocked(sendTelegramMessage).mock.calls[0];
     expect(msg).toContain("LOGIN DETAILS");
+
+    // The in-app twin is stored in plain text, so it must not carry the password.
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    const note = vi.mocked(createNotification).mock.calls[0][0];
+    expect(note.magicNumberId).toBe(1);
+    expect(JSON.stringify(note)).not.toContain("RFX2026-Richard");
   });
 
   it("is a no-op if already activated (one-way)", async () => {
@@ -71,6 +82,7 @@ describe("maybeActivateOnboarding", () => {
     expect(enableTraderLiveCopiers).not.toHaveBeenCalled();
     expect(updateMagicNumber).not.toHaveBeenCalled();
     expect(sendTelegramMessage).not.toHaveBeenCalled();
+    expect(createNotification).not.toHaveBeenCalled();
   });
 
   it("skips when Telegram not linked", async () => {

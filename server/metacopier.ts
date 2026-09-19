@@ -5,6 +5,20 @@ import {
   getCachedPositions,
   type SocketPositionDTO,
 } from './metacopierSocket';
+import {
+  DAILY_PROFIT_TARGET_DEFAULTS,
+  DAILY_RESET_TIME,
+  DEFAULT_DAILY_LOSS_PERCENT,
+  DEFAULT_DAILY_PROFIT_PERCENT,
+  FEATURE_DAILY_PROFIT_TARGET,
+  FEATURE_NEWS_FILTER,
+  NEWS_FILTER_DEFAULTS,
+  TRADE_GUARDRAILS_DEFAULTS,
+  findActiveNewsBlock,
+  findDailyRiskLimit,
+  type NewsBlock,
+  type NewsWindow,
+} from './tradingControls';
 
 const API_BASE = 'https://api.metacopier.io/rest/api/v1';
 
@@ -19,6 +33,9 @@ const POS_TTL_MS = 45_000;
 // times over. Cache the raw history briefly and coalesce concurrent identical
 // requests so that storm collapses to one REST call per window.
 const HISTORY_TTL_MS = 30_000;
+// Blackout windows are published days ahead and only shift when a release is
+// rescheduled, so the news-filter preview is safe to reuse for a few minutes.
+const NEWS_PREVIEW_TTL_MS = 5 * 60_000;
 
 export interface Position {
   id: string;
@@ -136,6 +153,13 @@ class MetaCopierService {
   private static ACCOUNTS_CACHE_TTL = 30_000; // 30 seconds
   private historyCache = new Map<string, { fetchedAt: number; data: Position[] }>();
   private historyInflight = new Map<string, Promise<Position[]>>();
+  private projectIdPromise: Promise<string> | null = null;
+  private newsPreviewCache = new Map<
+    string,
+    { fetchedAt: number; data: Array<{ symbol: string; windows: NewsWindow[] }> }
+  >();
+  private eventCategoryCache = new Map<string, string | null>();
+  private newsFilterSettingCache = new Map<string, { fetchedAt: number; setting: any | null }>();
 
   constructor() {
     this.apiKey = process.env.METACOPIER_API_KEY || '';
@@ -394,6 +418,14 @@ class MetaCopierService {
       
       // Add risk limit: Actual, Absolute $300, fulfil in 1 second, close all
       await this.addRiskLimit(accountId);
+
+      // Add max daily loss: Balance-equity daily, close all, resumes at rollover
+      try {
+        await this.setDailyLossLimit(accountId, DEFAULT_DAILY_LOSS_PERCENT);
+      } catch (error: any) {
+        // Don't throw - account is created, the limit can be set from Edit Trader
+        console.error('[MetaCopier] Error adding daily loss limit:', error?.message);
+      }
       
       return {
         success: true,
@@ -457,12 +489,19 @@ class MetaCopierService {
         'POST',
         {
           type: { id: 37 },
+          setting: { ...TRADE_GUARDRAILS_DEFAULTS, maxLotSizeThreshold: 0.01 }
+        }
+      );
+
+      // Daily profit limit (type 10)
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features`,
+        'POST',
+        {
+          type: { id: FEATURE_DAILY_PROFIT_TARGET },
           setting: {
-            maxLotSizeThreshold: 0.01,
-            enabled: true,
-            aggregatePerSymbol: false,
-            maxOpenTimeSeconds: 0,
-            symbolsConfiguration: {}
+            ...DAILY_PROFIT_TARGET_DEFAULTS,
+            dailyProfitTarget: DEFAULT_DAILY_PROFIT_PERCENT,
           }
         }
       );
@@ -631,6 +670,8 @@ class MetaCopierService {
     fromAccountId: string;
     toAccountId: string;
     status?: 'ACTIVE' | 'DISABLED' | 'MANAGE';
+    /** Live copiers only: block new trades around high-impact news. */
+    newsFilter?: boolean;
   }): Promise<{ success: boolean; copierId?: string; fromAccountShortId?: string; message?: string }> {
     try {
       const response = await this.fetchWithAuth<any>(
@@ -689,6 +730,17 @@ class MetaCopierService {
         } catch (e) {
           console.warn(
             `[MetaCopier] Failed to add skip-position feature on copier ${copierId}:`,
+            e
+          );
+        }
+      }
+
+      if (copierId && params.newsFilter) {
+        try {
+          await this.setCopierNewsFilter(params.toAccountId, copierId, true);
+        } catch (e) {
+          console.warn(
+            `[MetaCopier] Failed to add news filter on copier ${copierId}:`,
             e
           );
         }
@@ -890,6 +942,210 @@ class MetaCopierService {
   }
 
   /**
+   * Create or update one account feature, changing only the keys in `changes`.
+   * Unlike getAccountFeatures this throws if the read fails — treating a failed
+   * read as "no feature yet" would POST a duplicate.
+   */
+  async upsertAccountFeature(
+    accountId: string,
+    typeId: number,
+    changes: Record<string, unknown>,
+    defaults: Record<string, unknown>
+  ): Promise<void> {
+    const features =
+      (await this.fetchWithAuth<any[]>(`/accounts/${accountId}/features`, 'GET')) || [];
+    const existing = features.find((f: any) => f?.type?.id === typeId);
+    if (existing) {
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/features/${existing.id}`,
+        'PUT',
+        { type: { id: typeId }, setting: { ...existing.setting, ...changes } }
+      );
+    } else {
+      await this.fetchWithAuth(`/accounts/${accountId}/features`, 'POST', {
+        type: { id: typeId },
+        setting: { ...defaults, ...changes },
+      });
+    }
+  }
+
+  /**
+   * Set the max daily loss ("Balance-equity daily" risk limit) as a percentage
+   * of the balance at the daily reset. 0 switches the limit off. Leaves the
+   * absolute "Actual" limit alone.
+   */
+  async setDailyLossLimit(accountId: string, percent: number): Promise<void> {
+    const limits =
+      (await this.fetchWithAuth<any[]>(`/accounts/${accountId}/riskLimits`, 'GET')) || [];
+    const existing = findDailyRiskLimit(limits);
+    const riskLimit = Math.round(percent * 100) / 10000; // 4 -> 0.04
+
+    if (existing) {
+      await this.fetchWithAuth(
+        `/accounts/${accountId}/riskLimits/${existing.id}`,
+        'PUT',
+        { ...existing, riskLimit, active: percent > 0 }
+      );
+    } else if (percent > 0) {
+      await this.fetchWithAuth(`/accounts/${accountId}/riskLimits`, 'POST', {
+        riskType: { id: 1 }, // Balance-equity daily
+        resetTime: DAILY_RESET_TIME,
+        riskLimit,
+        absoluteRiskLimit: 0,
+        fulfillSeconds: 1,
+        closeAllOpenPositions: true,
+        active: true,
+      });
+    }
+  }
+
+  /** Raw /information payload, including riskLimitsStatus (not on the socket). */
+  async getAccountInformationRaw(accountId: string): Promise<any> {
+    return this.fetchWithAuth<any>(`/accounts/${accountId}/information`);
+  }
+
+  /**
+   * Switch the news filter (type 49) on a copier on or off. Off keeps the
+   * feature and its settings and only clears `enableNewsFilter`.
+   */
+  async setCopierNewsFilter(
+    toAccountId: string,
+    copierId: string,
+    enabled: boolean
+  ): Promise<void> {
+    const base = `/accounts/${toAccountId}/copiers/${copierId}/features`;
+    const features = (await this.fetchWithAuth<any[]>(base, 'GET')) || [];
+    const existing = features.find((f: any) => f?.type?.id === FEATURE_NEWS_FILTER);
+    this.newsFilterSettingCache.delete(copierId);
+    if (existing) {
+      if (!!existing.setting?.enableNewsFilter === enabled) return;
+      await this.fetchWithAuth(`${base}/${existing.id}`, 'PUT', {
+        type: { id: FEATURE_NEWS_FILTER },
+        setting: { ...existing.setting, enableNewsFilter: enabled },
+      });
+    } else if (enabled) {
+      await this.fetchWithAuth(base, 'POST', {
+        type: { id: FEATURE_NEWS_FILTER },
+        setting: NEWS_FILTER_DEFAULTS,
+      });
+    }
+  }
+
+  /**
+   * The copier's news filter settings if the filter is switched on, else null.
+   * Cached briefly: the trader dashboard asks on every copier-info poll.
+   */
+  async getEnabledNewsFilterSetting(toAccountId: string, copierId: string): Promise<any | null> {
+    const cached = this.newsFilterSettingCache.get(copierId);
+    if (cached && Date.now() - cached.fetchedAt < NEWS_PREVIEW_TTL_MS) {
+      return cached.setting;
+    }
+    const features =
+      (await this.fetchWithAuth<any[]>(
+        `/accounts/${toAccountId}/copiers/${copierId}/features`,
+        'GET'
+      )) || [];
+    const filter = features.find((f: any) => f?.type?.id === FEATURE_NEWS_FILTER);
+    const setting = filter?.setting?.enableNewsFilter ? filter.setting : null;
+    this.newsFilterSettingCache.set(copierId, { fetchedAt: Date.now(), setting });
+    return setting;
+  }
+
+  /** The project this API key belongs to; needed by the calendar endpoints. */
+  private getProjectId(): Promise<string> {
+    if (!this.projectIdPromise) {
+      this.projectIdPromise = this.fetchWithAuth<any>('/apiKeys/current')
+        .then(key => {
+          if (!key?.projectId) throw new Error('API key has no projectId');
+          return key.projectId as string;
+        })
+        .catch(err => {
+          this.projectIdPromise = null;
+          throw err;
+        });
+    }
+    return this.projectIdPromise;
+  }
+
+  /**
+   * The news blackout in force right now for a copier whose news filter has
+   * these settings, or null. `symbols` are the symbols the trader uses.
+   */
+  async getActiveNewsBlock(symbols: string[], setting: any): Promise<NewsBlock | null> {
+    // Callers pass most-traded first; cap, then sort so the cache key is stable.
+    const wanted = Array.from(new Set(symbols)).slice(0, 20).sort();
+    if (wanted.length === 0) return null;
+
+    const events = setting?.events ?? {};
+    const query = new URLSearchParams({
+      symbols: wanted.join(','),
+      impact: events.minImpact ?? 'HIGH',
+      before: String(setting?.blackoutBeforeMinutes ?? 15),
+      after: String(setting?.blackoutAfterMinutes ?? 15),
+      includeHolidays: String(!!events.includeHolidays),
+      includeGlobalEvents: String(!!events.includeGlobalEvents),
+      days: '2',
+    }).toString();
+
+    const projectId = await this.getProjectId();
+    let cached = this.newsPreviewCache.get(query);
+    if (!cached || Date.now() - cached.fetchedAt >= NEWS_PREVIEW_TTL_MS) {
+      const preview = await this.fetchWithAuth<any>(
+        `/projects/${projectId}/newsFilter/preview?${query}`
+      );
+      cached = {
+        fetchedAt: Date.now(),
+        data: (preview?.symbols ?? []).map((s: any) => ({
+          symbol: s.symbol,
+          windows: s.windows ?? [],
+        })),
+      };
+      this.newsPreviewCache.set(query, cached);
+    }
+
+    // The preview cannot filter by category, so drop blacklisted events here —
+    // only for windows open right now, which keeps the lookups to a handful.
+    const blacklist: string[] = events.categoryBlacklist ?? [];
+    const now = Date.now();
+    const live: Array<{ symbol: string; windows: NewsWindow[] }> = [];
+    for (const s of cached.data) {
+      const windows: NewsWindow[] = [];
+      for (const w of s.windows) {
+        const open =
+          new Date(w.blackoutFromUtc).getTime() <= now &&
+          now < new Date(w.blackoutToUtc).getTime();
+        if (!open) continue;
+        if (
+          blacklist.length > 0 &&
+          blacklist.includes((await this.getEventCategory(projectId, w.eventId)) ?? '')
+        ) {
+          continue;
+        }
+        windows.push(w);
+      }
+      live.push({ symbol: s.symbol, windows });
+    }
+    return findActiveNewsBlock(live, now);
+  }
+
+  /** Calendar category of an event, or null if it cannot be read. */
+  private async getEventCategory(projectId: string, eventId: string): Promise<string | null> {
+    if (this.eventCategoryCache.has(eventId)) {
+      return this.eventCategoryCache.get(eventId) ?? null;
+    }
+    try {
+      const event = await this.fetchWithAuth<any>(
+        `/projects/${projectId}/economicCalendar/${eventId}`
+      );
+      const category = (event?.category as string | undefined) ?? null;
+      this.eventCategoryCache.set(eventId, category);
+      return category;
+    } catch {
+      return null; // unknown: keep the window rather than hide a real blackout
+    }
+  }
+
+  /**
    * Get all accounts with a specific label
    */
   async getAccountsByLabel(label: string): Promise<any[]> {
@@ -995,6 +1251,15 @@ export const metaCopierService = new MetaCopierService();
 // The fixed demo/slave account used for magic-number routing. Its copiers must
 // never be toggled by trader-facing flows.
 const SLAVE_ACCOUNT_ID = 'b94cabc8-946d-4a99-9b81-286f8553cc63';
+
+/**
+ * Every LIVE copier fed by this incubator account — all copiers that copy from
+ * it except the one into the demo/slave account (magic routing only).
+ */
+export async function getTraderLiveCopiers(mcAccountId: string): Promise<any[]> {
+  const copiers = await metaCopierService.getCopiersBySourceAccount(mcAccountId);
+  return copiers.filter(c => c.toAccountId !== SLAVE_ACCOUNT_ID);
+}
 
 /**
  * Enable (set ACTIVE) all LIVE copiers where this trader is the source — every

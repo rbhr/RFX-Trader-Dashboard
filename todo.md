@@ -36,7 +36,7 @@
 ---
 
 ## 📰 MetaCopier News Filter / News Protection
-**Status:** 🔵 Researched 2026-09-17, nothing configured yet. MetaCopier shipped the economic calendar plus both news features on 2026-09-06 (PRO plan). No copier or account of ours uses either.
+**Status:** 🟡 News filter chosen and wired into the dashboard 2026-09-19. Reference config is the copier "RFX - Bisma - 81279" → "01 exness Master 8220" (HIGH impact, 60 min before/after, blocks modifications, `bnd` category excluded). Edit Trader has a "News trading allowed" checkbox (default off) that switches the filter on every live copier; new live copiers get it automatically. Remaining copiers still need it switched on — per trader from Edit Trader, or with a backfill script. MetaCopier shipped the economic calendar plus both news features on 2026-09-06 (PRO plan).
 
 **Goal:** block new trades around high-impact releases *without* closing positions that are already open.
 
@@ -50,7 +50,7 @@ Preferred account-level alternatives (RR asked for account level; none is news-d
 - **Do not** use the account `tradingDisabled` flag: read-only mode blocks closes and modifications too, so a trader could not exit during the block.
 
 - [ ] Confirm whether a copier paused by a maintenance window still copies **closes**. If it does not, a trader exiting during the window leaves the live position open — test on a demo master before any live use.
-- [ ] Get the MetaCopier **project ID** (not exposed by the API key; `GET /projects` 404s). Needed for every calendar endpoint: `economicCalendar`, `.../exposure`, `newsFilter/preview`, `newsFilter/backtest`, `newsFilter/symbolMapping`, `marketNews`, `bankHolidays`.
+- [x] Get the MetaCopier **project ID** — `GET /apiKeys/current` returns it (`GET /projects` 404s). `metaCopierService` caches it. Needed for every calendar endpoint: `economicCalendar`, `.../exposure`, `newsFilter/preview`, `newsFilter/backtest`, `newsFilter/symbolMapping`, `marketNews`, `bankHolidays`.
 - [ ] Run `POST /projects/{projectId}/newsFilter/backtest` over a trader's closed trades to see what a filter would have cost or saved before switching anything on.
 - [ ] Check how `server/missedTradeMonitor.ts` treats a filtered trade — it exists on the trader's account but not on live, which may look like a missed copy (it can close positions).
 - [ ] Decide scope: 36 live copiers into `RFX Master` accounts (23 on `01 exness Master 8220`, 6 on `02 exness Master 8234`, 6 on `03 exness Master 8230`, 1 on `042 exness Master - Samad`). The 29 on `exness Demo` are magic-number routing, not live money.

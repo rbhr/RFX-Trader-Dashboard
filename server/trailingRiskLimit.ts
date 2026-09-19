@@ -17,10 +17,9 @@ import {
   buildTrailingRiskLimitMessage,
 } from "./telegram";
 import { logEvent } from "./logStore";
+import { findActualRiskLimit } from "./tradingControls";
 
 const DEFAULT_INTERVAL_MINUTES = 5;
-/** MetaCopier riskType id for the absolute "Actual" limit the trailing logic owns. */
-const RISK_TYPE_ACTUAL = 4;
 let monitorTimeout: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 let lastCheckedAt: Date | null = null;
@@ -68,9 +67,7 @@ async function checkTrailingRiskLimits(): Promise<void> {
         // `absoluteRiskLimit != null` used to pick whichever limit the API
         // returned first — 0.0 is not null — so on accounts that list the
         // daily limit first the trailing stopout was written into that one.
-        const activeLimit = limits?.find(
-          (l: any) => l.active && l.riskType?.id === RISK_TYPE_ACTUAL
-        );
+        const activeLimit = findActualRiskLimit(limits);
         if (!activeLimit) continue;
 
         const currentAbsoluteLimit = activeLimit.absoluteRiskLimit as number;

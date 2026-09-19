@@ -191,8 +191,7 @@ export function buildRiskLimitBreachMessage(params: {
     `Hi ${traderName},\n\n` +
     `Your incubator account equity has dropped to <b>$${equity.toFixed(2)}</b>, ` +
     `which is below your risk limit of <b>$${riskLimit.toFixed(2)}</b>.\n\n` +
-    `<b>All trades have been closed.</b>\n\n` +
-    `Please message an admin to re-enable trading on your account.`
+    `<b>All trades have been closed and your account is permanently breached.</b>`
   );
 }
 
@@ -248,7 +247,7 @@ export function buildAdminRiskLimitAlertMessage(params: {
     `Trader <b>${traderName}</b> (Magic: ${magicNumber}) has breached their risk limit.\n\n` +
     `• Equity at breach: <b>$${equity.toFixed(2)}</b>\n` +
     `• Risk limit: <b>$${riskLimit.toFixed(2)}</b>\n\n` +
-    `All trades have been closed. The trader has been notified and must contact an admin to re-enable trading.`
+    `All trades have been closed and the account is permanently breached. The trader has been notified.`
   );
 }
 

@@ -60,6 +60,22 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
+interface TraderControlsForm {
+  dailyLossPercent: string;
+  dailyProfitPercent: string;
+  maxTotalLots: string;
+  maxOpenTrades: string;
+  newsTradingAllowed: boolean;
+}
+
+const EMPTY_CONTROLS: TraderControlsForm = {
+  dailyLossPercent: "",
+  dailyProfitPercent: "",
+  maxTotalLots: "",
+  maxOpenTrades: "",
+  newsTradingAllowed: false,
+};
+
 interface Trader {
   id: number;
   magicNumber: string;
@@ -331,6 +347,12 @@ export default function ManageTraders() {
   );
   const [riskLimitLoading, setRiskLimitLoading] = useState(false);
 
+  // Trading controls held in MetaCopier. `controlsBaseline` is what MetaCopier
+  // had when the dialog loaded, so only fields the admin changed are written.
+  const [controls, setControls] = useState(EMPTY_CONTROLS);
+  const [controlsBaseline, setControlsBaseline] =
+    useState<TraderControlsForm | null>(null);
+
   // Broadcast dialog state
   const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
   const [broadcastTitle, setBroadcastTitle] = useState("");
@@ -424,6 +446,35 @@ export default function ManageTraders() {
   const utils = trpc.useUtils();
   const { data: traders, isLoading } = trpc.admin.listTraders.useQuery();
 
+  const { data: traderControls, isFetching: controlsFetching } =
+    trpc.admin.getTraderControls.useQuery(
+      { traderId: selectedTrader?.id ?? 0 },
+      { enabled: editDialogOpen && !!selectedTrader?.mcAccountId, staleTime: 0 }
+    );
+
+  // Fill the controls once per dialog open; the baseline doubles as the
+  // "already loaded" flag so a background refetch can't clobber typing. Wait
+  // for the fetch to settle — reopening a trader serves the cached copy first.
+  useEffect(() => {
+    if (
+      !editDialogOpen ||
+      !traderControls ||
+      controlsFetching ||
+      controlsBaseline
+    ) {
+      return;
+    }
+    const loaded: TraderControlsForm = {
+      dailyLossPercent: traderControls.dailyLossPercent?.toString() ?? "",
+      dailyProfitPercent: traderControls.dailyProfitPercent?.toString() ?? "",
+      maxTotalLots: traderControls.maxTotalLots?.toString() ?? "",
+      maxOpenTrades: traderControls.maxOpenTrades?.toString() ?? "",
+      newsTradingAllowed: traderControls.newsTradingAllowed,
+    };
+    setControls(loaded);
+    setControlsBaseline(loaded);
+  }, [editDialogOpen, traderControls, controlsFetching, controlsBaseline]);
+
   const broadcastMutation = trpc.admin.broadcastMessage.useMutation({
     onSuccess: data => {
       toast.success(
@@ -515,6 +566,16 @@ export default function ManageTraders() {
     },
     onError: error => {
       toast.error(`Risk limit update failed: ${error.message}`);
+    },
+  });
+
+  const updateControls = trpc.admin.updateTraderControls.useMutation({
+    onSuccess: () => {
+      utils.admin.getTraderControls.invalidate();
+      toast.success("Trading controls updated in MetaCopier");
+    },
+    onError: error => {
+      toast.error(`Trading controls update failed: ${error.message}`);
     },
   });
 
@@ -611,6 +672,8 @@ export default function ManageTraders() {
     setRiskLimitValue("");
     setRiskLimitBaseline(null);
     setRiskLimitLoading(false);
+    setControls(EMPTY_CONTROLS);
+    setControlsBaseline(null);
     setFormData({
       magicNumber: trader.magicNumber,
       name: trader.name,
@@ -794,6 +857,42 @@ export default function ManageTraders() {
         mcAccountId: selectedTrader.mcAccountId,
         absoluteRiskLimit: Number(riskLimitValue),
       });
+    }
+
+    // Same rule for the MetaCopier trading controls: send only what changed.
+    // A cleared percentage switches that control off (0).
+    if (selectedTrader.mcAccountId && controlsBaseline) {
+      const changes: {
+        dailyLossPercent?: number;
+        dailyProfitPercent?: number;
+        maxTotalLots?: number;
+        maxOpenTrades?: number;
+        newsTradingAllowed?: boolean;
+      } = {};
+      if (controls.dailyLossPercent !== controlsBaseline.dailyLossPercent) {
+        changes.dailyLossPercent = parseFloat(controls.dailyLossPercent) || 0;
+      }
+      if (controls.dailyProfitPercent !== controlsBaseline.dailyProfitPercent) {
+        changes.dailyProfitPercent =
+          parseFloat(controls.dailyProfitPercent) || 0;
+      }
+      const lots = parseFloat(controls.maxTotalLots);
+      if (controls.maxTotalLots !== controlsBaseline.maxTotalLots && lots > 0) {
+        changes.maxTotalLots = lots;
+      }
+      const trades = parseInt(controls.maxOpenTrades, 10);
+      if (
+        controls.maxOpenTrades !== controlsBaseline.maxOpenTrades &&
+        trades > 0
+      ) {
+        changes.maxOpenTrades = trades;
+      }
+      if (controls.newsTradingAllowed !== controlsBaseline.newsTradingAllowed) {
+        changes.newsTradingAllowed = controls.newsTradingAllowed;
+      }
+      if (Object.keys(changes).length > 0) {
+        updateControls.mutate({ traderId: selectedTrader.id, ...changes });
+      }
     }
   };
 
@@ -1942,95 +2041,127 @@ export default function ManageTraders() {
             <DialogHeader>
               <DialogTitle>Edit Trader</DialogTitle>
               <DialogDescription>
-                Update trader details and MT4/MT5 configuration
+                Update trader details, trading account and risk controls
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <Label htmlFor="edit-magicNumber">Magic Number</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      aria-label="Edit magic number"
-                      onClick={() => {
-                        if (magicUnlocked) {
-                          setMagicUnlocked(false);
-                        } else {
-                          setMagicConfirmOpen(true);
-                        }
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+              {/* Trader */}
+              <div>
+                <h3 className="font-semibold mb-3">Trader</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1">
+                      <Label htmlFor="edit-magicNumber">Magic Number</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        aria-label="Edit magic number"
+                        onClick={() => {
+                          if (magicUnlocked) {
+                            setMagicUnlocked(false);
+                          } else {
+                            setMagicConfirmOpen(true);
+                          }
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <Input
+                      id="edit-magicNumber"
+                      value={formData.magicNumber}
+                      disabled={!magicUnlocked}
+                      className={magicUnlocked ? "" : "bg-muted"}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          magicNumber: e.target.value,
+                        })
+                      }
+                    />
                   </div>
-                  <Input
-                    id="edit-magicNumber"
-                    value={formData.magicNumber}
-                    disabled={!magicUnlocked}
-                    className={magicUnlocked ? "" : "bg-muted"}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        magicNumber: e.target.value,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">Name</Label>
+                    <Input
+                      id="edit-name"
+                      value={formData.name}
+                      onChange={e =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Name</Label>
-                  <Input
-                    id="edit-name"
-                    value={formData.name}
-                    onChange={e =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-password">New Password (optional)</Label>
-                  <PasswordInput
-                    id="edit-password"
-                    value={formData.password}
-                    onChange={value =>
-                      setFormData({ ...formData, password: value })
-                    }
-                    placeholder="Leave blank to keep current"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-profitShare">Profit Share (%)</Label>
-                  <PercentInput
-                    id="edit-profitShare"
-                    fraction={formData.profitShare}
-                    onFraction={fraction =>
-                      setFormData({ ...formData, profitShare: fraction })
-                    }
-                  />
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-password">
+                      New Password (optional)
+                    </Label>
+                    <PasswordInput
+                      id="edit-password"
+                      value={formData.password}
+                      onChange={value =>
+                        setFormData({ ...formData, password: value })
+                      }
+                      placeholder="Leave blank to keep current"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-telegramHandle">Telegram Handle</Label>
+                    <Input
+                      id="edit-telegramHandle"
+                      value={formData.telegramHandle}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          telegramHandle: e.target.value,
+                        })
+                      }
+                      placeholder="@username"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-payoutCycle">Payout Cycle</Label>
-                <select
-                  id="edit-payoutCycle"
-                  value={formData.payoutCycle}
-                  onChange={e =>
-                    setFormData({ ...formData, payoutCycle: e.target.value })
-                  }
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="Weekly">Weekly</option>
-                  <option value="Fortnightly">Fortnightly</option>
-                  <option value="Self Service">Self Service</option>
-                </select>
-              </div>
+
+              {/* Profit share & payouts */}
               <div className="border-t pt-4 mt-2">
-                <h3 className="font-semibold mb-3">MT4/MT5 Account Details</h3>
+                <h3 className="font-semibold mb-3">Profit Share &amp; Payouts</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-profitShare">Profit Share (%)</Label>
+                    <PercentInput
+                      id="edit-profitShare"
+                      fraction={formData.profitShare}
+                      onFraction={fraction =>
+                        setFormData({ ...formData, profitShare: fraction })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-payoutCycle">Payout Cycle</Label>
+                    <select
+                      id="edit-payoutCycle"
+                      value={formData.payoutCycle}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          payoutCycle: e.target.value,
+                        })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="Weekly">Weekly</option>
+                      <option value="Fortnightly">Fortnightly</option>
+                      <option value="Self Service">Self Service</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trading account */}
+              <div className="border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-3">Trading Account</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-mtAccount">MT Account Number</Label>
@@ -2082,120 +2213,250 @@ export default function ManageTraders() {
                     </select>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-mcLocation">MetaCopier Location</Label>
-                  <select
-                    id="edit-mcLocation"
-                    value={formData.mcLocation}
-                    onChange={e =>
-                      setFormData({ ...formData, mcLocation: e.target.value })
-                    }
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="London">London</option>
-                    <option value="New York">New York</option>
-                    <option value="Berlin">Berlin</option>
-                    <option value="Singapore">Singapore</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-mcLocation">MetaCopier Location</Label>
+                    <select
+                      id="edit-mcLocation"
+                      value={formData.mcLocation}
+                      onChange={e =>
+                        setFormData({ ...formData, mcLocation: e.target.value })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="London">London</option>
+                      <option value="New York">New York</option>
+                      <option value="Berlin">Berlin</option>
+                      <option value="Singapore">Singapore</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-liveAccountNumber">
+                      Live Account Number
+                    </Label>
+                    <select
+                      id="edit-liveAccountNumber"
+                      value={formData.liveAccountNumber}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          liveAccountNumber: e.target.value,
+                        })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Select Live Account</option>
+                      {rfxMasterAccounts?.map((account: any) => (
+                        <option
+                          key={account.id}
+                          value={account.loginAccountNumber}
+                        >
+                          {account.alias} ({account.loginAccountNumber})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-liveAccountNumber">
-                    Live Account Number
-                  </Label>
-                  <select
-                    id="edit-liveAccountNumber"
-                    value={formData.liveAccountNumber}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        liveAccountNumber: e.target.value,
-                      })
-                    }
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Select Live Account</option>
-                    {rfxMasterAccounts?.map((account: any) => (
-                      <option
-                        key={account.id}
-                        value={account.loginAccountNumber}
-                      >
-                        {account.alias} ({account.loginAccountNumber})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-telegramHandle">Telegram Handle</Label>
-                  <Input
-                    id="edit-telegramHandle"
-                    value={formData.telegramHandle}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        telegramHandle: e.target.value,
-                      })
-                    }
-                    placeholder="@username"
-                  />
-                </div>
-                {selectedTrader?.mcAccountId && (
+              </div>
+
+              {/* Risk controls (all held in MetaCopier) */}
+              <div className="border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-3">Risk Controls</h3>
+                {selectedTrader?.mcAccountId ? (
                   <>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-riskLimit">Risk Limit ($)</Label>
-                      <RiskLimitField
-                        mcAccountId={selectedTrader.mcAccountId}
-                        value={riskLimitValue}
-                        onChange={setRiskLimitValue}
-                        onBaseline={setRiskLimitBaseline}
-                        loading={riskLimitLoading}
-                        setLoading={setRiskLimitLoading}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Absolute equity risk limit. If equity drops below this
-                        value, all trades are closed.
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-trailingRiskLimit">
-                        Trailing Risk Limit ($)
-                      </Label>
-                      <div className="flex items-center gap-3">
-                        <Input
-                          id="edit-trailingRiskLimit"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="e.g. 300"
-                          value={formData.trailingRiskLimit}
-                          onChange={e =>
-                            setFormData({
-                              ...formData,
-                              trailingRiskLimit: e.target.value,
-                            })
-                          }
-                          className="flex-1"
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-riskLimit">Risk Limit ($)</Label>
+                        <RiskLimitField
+                          mcAccountId={selectedTrader.mcAccountId}
+                          value={riskLimitValue}
+                          onChange={setRiskLimitValue}
+                          onBaseline={setRiskLimitBaseline}
+                          loading={riskLimitLoading}
+                          setLoading={setRiskLimitLoading}
                         />
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={formData.trailingRiskLimitEnabled}
-                            onCheckedChange={checked =>
+                        <p className="text-xs text-muted-foreground">
+                          Absolute equity floor. Below it all trades are closed
+                          and the account is permanently breached.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-trailingRiskLimit">
+                          Trailing Risk Limit ($)
+                        </Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            id="edit-trailingRiskLimit"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="e.g. 300"
+                            value={formData.trailingRiskLimit}
+                            onChange={e =>
                               setFormData({
                                 ...formData,
-                                trailingRiskLimitEnabled: checked,
+                                trailingRiskLimit: e.target.value,
                               })
                             }
+                            className="flex-1"
                           />
-                          <span className="text-sm text-muted-foreground">
-                            Trailing
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={formData.trailingRiskLimitEnabled}
+                              onCheckedChange={checked =>
+                                setFormData({
+                                  ...formData,
+                                  trailingRiskLimitEnabled: checked,
+                                })
+                              }
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              Trailing
+                            </span>
+                          </div>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          Buffer below balance. When enabled, the risk limit
+                          trails upward as balance grows (only when no open
+                          trades).
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-dailyLoss">Max Daily Loss (%)</Label>
+                        <Input
+                          id="edit-dailyLoss"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={controls.dailyLossPercent}
+                          placeholder={controlsBaseline ? "Off" : "Loading..."}
+                          disabled={!controlsBaseline}
+                          onChange={e =>
+                            setControls({
+                              ...controls,
+                              dailyLossPercent: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Of the balance at rollover. Closes all trades; trading
+                          resumes after the next rollover. Blank turns it off.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-dailyProfit">
+                          Daily Profit Limit (%)
+                        </Label>
+                        <Input
+                          id="edit-dailyProfit"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={controls.dailyProfitPercent}
+                          placeholder={controlsBaseline ? "Off" : "Loading..."}
+                          disabled={!controlsBaseline}
+                          onChange={e =>
+                            setControls({
+                              ...controls,
+                              dailyProfitPercent: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Once reached, new trades are blocked until the next
+                          day; open trades keep running. Blank turns it off.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-maxTotalLots">Max Total Lots</Label>
+                        <Input
+                          id="edit-maxTotalLots"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={controls.maxTotalLots}
+                          placeholder={controlsBaseline ? "Not set" : "Loading..."}
+                          disabled={!controlsBaseline}
+                          onChange={e =>
+                            setControls({
+                              ...controls,
+                              maxTotalLots: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Total lots open at the same time, per symbol.
+                          {traderControls &&
+                            traderControls.maxTotalLots != null &&
+                            !traderControls.lotsAggregated && (
+                              <span className="text-destructive">
+                                {" "}
+                                Currently applied per trade in MetaCopier —
+                                saving a new value switches it to the total.
+                              </span>
+                            )}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-maxOpenTrades">Max Open Trades</Label>
+                        <Input
+                          id="edit-maxOpenTrades"
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={controls.maxOpenTrades}
+                          placeholder={controlsBaseline ? "Not set" : "Loading..."}
+                          disabled={!controlsBaseline}
+                          onChange={e =>
+                            setControls({
+                              ...controls,
+                              maxOpenTrades: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Trades open at the same time.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="edit-newsTrading"
+                          checked={controls.newsTradingAllowed}
+                          disabled={
+                            !controlsBaseline ||
+                            traderControls?.liveCopierCount === 0
+                          }
+                          onCheckedChange={checked =>
+                            setControls({
+                              ...controls,
+                              newsTradingAllowed: checked === true,
+                            })
+                          }
+                        />
+                        <Label htmlFor="edit-newsTrading" className="cursor-pointer">
+                          News trading allowed
+                        </Label>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Buffer below balance. When enabled, risk limit trails
-                        upward as balance grows (only when no open trades).
+                        {traderControls?.liveCopierCount === 0
+                          ? "No live copier yet — the news filter is added when the live copier is created."
+                          : "Unticked: new trades are not copied to the Live Account from 60 minutes before to 60 minutes after high-impact news."}
                       </p>
                     </div>
                   </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Risk controls are held in MetaCopier. Create or link the
+                    trader's MetaCopier account to set them.
+                  </p>
                 )}
               </div>
               <div className="border-t pt-4 mt-2">
@@ -2419,7 +2680,7 @@ export default function ManageTraders() {
               </div>
 
               {/* ShowMyTrades URL */}
-              <div className="border rounded-lg p-4 space-y-3">
+              <div className="border-t pt-4 mt-2">
                 <h3 className="font-semibold mb-3">ShowMyTrades</h3>
                 <div className="space-y-2">
                   <Label htmlFor="showMyTradesUrl">ShowMyTrades URL</Label>

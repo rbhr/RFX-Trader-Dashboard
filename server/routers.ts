@@ -64,7 +64,22 @@ import {
   getStartOfWeek,
   getStartOfMonth,
   getAllTimeStart,
+  getTraderLiveCopiers,
 } from "./metacopier";
+import {
+  DAILY_PROFIT_TARGET_DEFAULTS,
+  FEATURE_DAILY_PROFIT_TARGET,
+  FEATURE_MAX_OPEN_POSITIONS,
+  FEATURE_NEWS_FILTER,
+  FEATURE_TRADE_GUARDRAILS,
+  MAX_OPEN_POSITIONS_DEFAULTS,
+  TRADE_GUARDRAILS_DEFAULTS,
+  computeAccruedProfitShare,
+  computeDailyLossLimit,
+  findActualRiskLimit,
+  findDailyRiskLimit,
+  type NewsBlock,
+} from "./tradingControls";
 import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
 import {
@@ -261,6 +276,60 @@ async function resolveTrader(
     throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
   }
   return trader;
+}
+
+// Symbols a trader uses, for the news blackout check. Changes slowly, and the
+// copier-info query that needs it polls every minute, so keep it a while.
+const TRADER_SYMBOLS_TTL_MS = 10 * 60_000;
+const traderSymbolsCache = new Map<
+  string,
+  { fetchedAt: number; symbols: string[] }
+>();
+
+async function getTraderSymbols(mcAccountId: string): Promise<string[]> {
+  const cached = traderSymbolsCache.get(mcAccountId);
+  if (cached && Date.now() - cached.fetchedAt < TRADER_SYMBOLS_TTL_MS) {
+    return cached.symbols;
+  }
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  since.setUTCHours(0, 0, 0, 0);
+  const [open, closed] = await Promise.all([
+    metaCopierService.getOpenPositionsFromAccount(mcAccountId),
+    metaCopierService.getHistoricalPositionsFromAccount(
+      mcAccountId,
+      since.toISOString(),
+      getEndOfToday()
+    ),
+  ]);
+  // Most-traded first, so the 20-symbol cap on the preview drops the rarest.
+  const counts = new Map<string, number>();
+  for (const p of [...open, ...closed]) {
+    if (p.symbol) counts.set(p.symbol, (counts.get(p.symbol) ?? 0) + 1);
+  }
+  const symbols = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([symbol]) => symbol);
+  traderSymbolsCache.set(mcAccountId, { fetchedAt: Date.now(), symbols });
+  return symbols;
+}
+
+/**
+ * The news blackout currently stopping this copier from opening trades, or
+ * null — also null when the copier has no news filter switched on.
+ */
+async function getCopierNewsBlock(
+  toAccountId: string,
+  copierId: string,
+  mcAccountId: string | null
+): Promise<NewsBlock | null> {
+  if (!mcAccountId) return null;
+  const setting = await metaCopierService.getEnabledNewsFilterSetting(
+    toAccountId,
+    copierId
+  );
+  if (!setting) return null;
+  const symbols = await getTraderSymbols(mcAccountId);
+  return metaCopierService.getActiveNewsBlock(symbols, setting);
 }
 
 /**
@@ -1055,11 +1124,36 @@ export const appRouter = router({
           return null;
         }
 
+        // A disabled copier is an admin decision. An active one still skips
+        // new trades while its news filter is inside a blackout window.
+        let notCopiedReason: "admin" | "news" | null = traderCopier.active
+          ? null
+          : "admin";
+        let newsBlock: NewsBlock | null = null;
+        if (traderCopier.active) {
+          try {
+            newsBlock = await getCopierNewsBlock(
+              liveAccountId,
+              traderCopier.id,
+              trader.mcAccountId
+            );
+            if (newsBlock) notCopiedReason = "news";
+          } catch (error) {
+            // The calendar is advisory here — never fail the panel over it.
+            console.warn(
+              "[Router] News blackout check failed:",
+              (error as any)?.message || error
+            );
+          }
+        }
+
         return {
           scaleType: traderCopier.scaleType?.id || traderCopier.scaleType,
           multiplier: traderCopier.multiplier,
           fixedLotSize: traderCopier.fixedLotSize,
           isActive: traderCopier.active,
+          notCopiedReason,
+          newsBlock,
           liveAccountNumber,
         };
       }),
@@ -1095,7 +1189,8 @@ export const appRouter = router({
         }
       }),
 
-    // Get max lot size per trade from Trade Guardrails feature (type 37)
+    // Max lots open at the same time, from Trade Guardrails (type 37). With
+    // aggregatePerSymbol on, the threshold caps the total per symbol.
     getMaxLotSize: tradingProcedure
       .input(viewAsInput)
       .query(async ({ ctx, input }) => {
@@ -1138,16 +1233,41 @@ export const appRouter = router({
         try {
           const limits =
             await metaCopierService.getAccountRiskLimits(mcAccountId);
-          // Find the first active absolute risk limit
-          const activeLimit = limits.find(
-            (l: any) => l.active && l.absoluteRiskLimit != null
-          );
-          if (activeLimit) {
+          const activeLimit = findActualRiskLimit(limits);
+          if (activeLimit?.absoluteRiskLimit) {
             return activeLimit.absoluteRiskLimit as number;
           }
           return null;
         } catch (error) {
           console.error("[Router] Error fetching risk limit:", error);
+          return null;
+        }
+      }),
+
+    // Today's max daily loss: the dollar amount and the equity at which the
+    // daily limit closes all trades until rollover.
+    getDailyLossLimit: tradingProcedure
+      .input(viewAsInput)
+      .query(async ({ ctx, input }) => {
+        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
+        const { mcAccountId } = trader;
+
+        if (!mcAccountId) {
+          return null;
+        }
+
+        try {
+          const [limits, info] = await Promise.all([
+            metaCopierService.getAccountRiskLimits(mcAccountId),
+            metaCopierService.getAccountInformationRaw(mcAccountId),
+          ]);
+          return computeDailyLossLimit(
+            limits,
+            info?.riskLimitsStatus,
+            info?.balance
+          );
+        } catch (error) {
+          console.error("[Router] Error fetching daily loss limit:", error);
           return null;
         }
       }),
@@ -1218,8 +1338,8 @@ export const appRouter = router({
         // In-app notification for the trader
         await createNotification({
           magicNumberId: trader.id,
-          title: `[Magic ${trader.magicNumber}] Risk Limit Breached — Trading Disabled`,
-          message: `Your incubator account equity dropped to $${input.equity.toFixed(2)}, below your risk limit of $${input.riskLimit.toFixed(2)}. All trades have been closed. Please contact an admin to re-enable trading.`,
+          title: `[Magic ${trader.magicNumber}] Risk Limit Breached — Account Permanently Breached`,
+          message: `Your incubator account equity dropped to $${input.equity.toFixed(2)}, below your risk limit of $${input.riskLimit.toFixed(2)}. All trades have been closed and your account is permanently breached.`,
           type: "error",
         });
 
@@ -1602,7 +1722,15 @@ export const appRouter = router({
         const allTimePnL = allTimeRealizedPnL + floatingPnL;
 
         const profitShareValue = parseFloat(profitShare);
-        const weeklyProfitShare = weekPnL > 0 ? weekPnL * profitShareValue : 0;
+        // Share accrues only on profit above the high-water mark, exactly as
+        // the payout run computes it — a good week after losses shows $0.
+        const profitShareBaseline =
+          parseFloat(trader.profitShareBaseline ?? "0") || 0;
+        const weeklyProfitShare = computeAccruedProfitShare(
+          allTimePnL,
+          profitShareBaseline,
+          profitShareValue
+        );
 
         return {
           floatingPnL,
@@ -1618,6 +1746,8 @@ export const appRouter = router({
           allTimePnL,
           weeklyProfitShare,
           profitSharePercent: profitShareValue,
+          profitShareBaseline,
+          payoutCycle: trader.payoutCycle ?? null,
         };
       }),
   }),
@@ -2156,6 +2286,7 @@ export const appRouter = router({
                   fromAccountId: mcAccountId,
                   toAccountId: liveAccount.accountId,
                   status: "DISABLED",
+                  newsFilter: true,
                 });
                 if (!liveCopierResult.success) {
                   warnings.push(
@@ -2388,9 +2519,7 @@ export const appRouter = router({
         const limits = await metaCopierService.getAccountRiskLimits(
           input.mcAccountId
         );
-        const activeLimit = limits.find(
-          (l: any) => l.active && l.absoluteRiskLimit != null
-        );
+        const activeLimit = findActualRiskLimit(limits);
         return activeLimit
           ? {
               id: activeLimit.id,
@@ -2418,7 +2547,10 @@ export const appRouter = router({
         const limits = await metaCopierService.getAccountRiskLimits(
           input.mcAccountId
         );
-        const activeLimit = limits.find((l: any) => l.active);
+        // Only ever the "Actual" limit: `find(l => l.active)` used to take the
+        // daily limit when MetaCopier listed it first and wrote the dollar
+        // stopout into it.
+        const activeLimit = findActualRiskLimit(limits);
 
         if (activeLimit?.id) {
           // Update existing limit via PUT
@@ -2435,6 +2567,163 @@ export const appRouter = router({
           );
         }
         return { success: true };
+      }),
+
+    // Trading controls held in MetaCopier for one trader: max daily loss,
+    // daily profit limit, news trading, total open lots and max open trades.
+    getTraderControls: adminProcedure
+      .input(z.object({ traderId: z.number() }))
+      .query(async ({ input }) => {
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+        if (!trader.mcAccountId) return null;
+
+        const [features, limits, liveCopiers] = await Promise.all([
+          metaCopierService.getAccountFeatures(trader.mcAccountId),
+          metaCopierService.getAccountRiskLimits(trader.mcAccountId),
+          getTraderLiveCopiers(trader.mcAccountId),
+        ]);
+        const setting = (typeId: number) =>
+          features.find((f: any) => f?.type?.id === typeId)?.setting;
+
+        const dailyLimit = findDailyRiskLimit(limits);
+        const guardrails = setting(FEATURE_TRADE_GUARDRAILS);
+
+        // News trading is allowed unless every live copier filters it out.
+        const newsFilters = await Promise.all(
+          liveCopiers.map(async c => {
+            const copierFeatures = await metaCopierService.getCopierFeatures(
+              c.toAccountId,
+              c.id
+            );
+            return !!copierFeatures.find(
+              (f: any) => f?.type?.id === FEATURE_NEWS_FILTER
+            )?.setting?.enableNewsFilter;
+          })
+        );
+
+        return {
+          dailyLossPercent:
+            dailyLimit?.active && dailyLimit.riskLimit
+              ? Math.round(dailyLimit.riskLimit * 10000) / 100
+              : null,
+          dailyProfitPercent:
+            (setting(FEATURE_DAILY_PROFIT_TARGET)?.dailyProfitTarget as
+              | number
+              | undefined) || null,
+          maxTotalLots:
+            guardrails?.enabled && guardrails.maxLotSizeThreshold
+              ? (guardrails.maxLotSizeThreshold as number)
+              : null,
+          // False means the threshold is still applied per trade, not in total.
+          lotsAggregated: !!guardrails?.aggregatePerSymbol,
+          maxOpenTrades:
+            (setting(FEATURE_MAX_OPEN_POSITIONS)?.maxOpenPositions as
+              | number
+              | undefined) || null,
+          newsTradingAllowed:
+            liveCopiers.length === 0 || newsFilters.some(on => !on),
+          liveCopierCount: liveCopiers.length,
+        };
+      }),
+
+    // Write trading controls to MetaCopier. Only the fields present are
+    // touched, so the client sends just what the admin changed; 0 switches a
+    // percentage control off.
+    updateTraderControls: adminProcedure
+      .input(
+        z.object({
+          traderId: z.number(),
+          dailyLossPercent: z.number().min(0).max(100).optional(),
+          dailyProfitPercent: z.number().min(0).max(100).optional(),
+          maxTotalLots: z.number().positive().optional(),
+          maxOpenTrades: z.number().int().positive().optional(),
+          newsTradingAllowed: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+        const { mcAccountId } = trader;
+        if (!mcAccountId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Trader has no MetaCopier account",
+          });
+        }
+
+        const changed: string[] = [];
+        if (input.dailyLossPercent !== undefined) {
+          await metaCopierService.setDailyLossLimit(
+            mcAccountId,
+            input.dailyLossPercent
+          );
+          changed.push(`max daily loss ${input.dailyLossPercent}%`);
+        }
+        if (input.dailyProfitPercent !== undefined) {
+          await metaCopierService.upsertAccountFeature(
+            mcAccountId,
+            FEATURE_DAILY_PROFIT_TARGET,
+            { dailyProfitTarget: input.dailyProfitPercent },
+            DAILY_PROFIT_TARGET_DEFAULTS
+          );
+          changed.push(`daily profit limit ${input.dailyProfitPercent}%`);
+        }
+        if (input.maxTotalLots !== undefined) {
+          // Always aggregate: the limit is total open lots, not lots per trade.
+          await metaCopierService.upsertAccountFeature(
+            mcAccountId,
+            FEATURE_TRADE_GUARDRAILS,
+            {
+              maxLotSizeThreshold: input.maxTotalLots,
+              enabled: true,
+              aggregatePerSymbol: true,
+            },
+            TRADE_GUARDRAILS_DEFAULTS
+          );
+          changed.push(`max total lots ${input.maxTotalLots}`);
+        }
+        if (input.maxOpenTrades !== undefined) {
+          await metaCopierService.upsertAccountFeature(
+            mcAccountId,
+            FEATURE_MAX_OPEN_POSITIONS,
+            { maxOpenPositions: input.maxOpenTrades },
+            MAX_OPEN_POSITIONS_DEFAULTS
+          );
+          changed.push(`max open trades ${input.maxOpenTrades}`);
+        }
+        if (input.newsTradingAllowed !== undefined) {
+          const liveCopiers = await getTraderLiveCopiers(mcAccountId);
+          if (liveCopiers.length === 0) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Trader has no live copier to apply the news setting to",
+            });
+          }
+          for (const c of liveCopiers) {
+            await metaCopierService.setCopierNewsFilter(
+              c.toAccountId,
+              c.id,
+              !input.newsTradingAllowed
+            );
+          }
+          changed.push(
+            `news trading ${input.newsTradingAllowed ? "allowed" : "blocked"} on ${liveCopiers.length} live copier(s)`
+          );
+        }
+
+        if (changed.length > 0) {
+          logEvent(
+            "metacopier",
+            `Trading controls for ${trader.name} (${trader.magicNumber}): ${changed.join(", ")}`
+          );
+        }
+        return { success: true, changed };
       }),
 
     // Get all risk limit breach records (admin)
