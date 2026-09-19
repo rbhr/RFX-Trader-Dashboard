@@ -35,6 +35,42 @@
 
 ---
 
+## 📰 MetaCopier News Filter / News Protection
+**Status:** 🔵 Researched 2026-09-17, nothing configured yet. MetaCopier shipped the economic calendar plus both news features on 2026-09-06 (PRO plan). No copier or account of ours uses either.
+
+**Goal:** block new trades around high-impact releases *without* closing positions that are already open.
+
+What the two features do:
+- **News filter** — copier level, type id **49**. Skips new opens on a symbol while a calendar event for its currencies is inside the blackout window. Never blocks a close. This is the only feature that reads the calendar itself and the only one that blocks opens without closing.
+- **News protection** — account level, type id **50**. Closes positions before a release and optionally reopens them. Closing is all it does; there is no block-only mode.
+
+Preferred account-level alternatives (RR asked for account level; none is news-driven, so we would have to schedule the timing ourselves):
+- **Trading windows** (account & copier) with `closePositionsAtWindowEnd: false` — blocks opens, leaves positions running. Default for that field is **true**, so it closes everything unless set. Windows are recurring clock times + `activeDays`, so a news-driven schedule means rewriting the account's windows from the calendar each day.
+- **Maintenance window** (project level) with `maintenanceAction: PAUSE_COPIERS` + `closePositionStrategy: DO_NOT_CLOSE` — takes real start/end datetimes, restores each copier's prior state afterwards, but is project-wide (filterable only by broker regex and account type).
+- **Do not** use the account `tradingDisabled` flag: read-only mode blocks closes and modifications too, so a trader could not exit during the block.
+
+- [ ] Confirm whether a copier paused by a maintenance window still copies **closes**. If it does not, a trader exiting during the window leaves the live position open — test on a demo master before any live use.
+- [ ] Get the MetaCopier **project ID** (not exposed by the API key; `GET /projects` 404s). Needed for every calendar endpoint: `economicCalendar`, `.../exposure`, `newsFilter/preview`, `newsFilter/backtest`, `newsFilter/symbolMapping`, `marketNews`, `bankHolidays`.
+- [ ] Run `POST /projects/{projectId}/newsFilter/backtest` over a trader's closed trades to see what a filter would have cost or saved before switching anything on.
+- [ ] Check how `server/missedTradeMonitor.ts` treats a filtered trade — it exists on the trader's account but not on live, which may look like a missed copy (it can close positions).
+- [ ] Decide scope: 36 live copiers into `RFX Master` accounts (23 on `01 exness Master 8220`, 6 on `02 exness Master 8234`, 6 on `03 exness Master 8230`, 1 on `042 exness Master - Samad`). The 29 on `exness Demo` are magic-number routing, not live money.
+- [ ] If going ahead at copier level: backfill script (one `POST /accounts/{accountId}/copiers/{copierId}/features` per copier, dry run first, skip copiers that already have it), plus add the same call to `createMetaCopierAccount` in `server/routers.ts` so new traders get it automatically.
+- [ ] Do **not** use MetaCopier account templates for the backfill — applying one overwrites the account's whole copier and feature config, including per-trader custom magic numbers.
+
+Starting config if we go with the News filter:
+```json
+{ "type": { "id": 49 }, "setting": {
+  "enableNewsFilter": true,
+  "blackoutBeforeMinutes": 5, "blackoutAfterMinutes": 5,
+  "skipMarketOrders": true, "skipPendingOrders": true, "blockModifications": false,
+  "logSkippedTrades": true,
+  "events": { "minImpact": "HIGH", "includeGlobalEvents": false }
+}}
+```
+Notes: XAUUSD maps to USD only, so `HIGH` blocks around every major USD release (NFP, CPI, FOMC) — narrow with `eventTitleWhitelist` if that is too broad. A skipped open is never caught up, so the trade never reaches live and never counts toward dashboard P&L or payouts; traders need to know that. Skipped trades are logged to MetaCopier's account log and its own notification channels, not to our Telegram.
+
+---
+
 ## 🎉 RELEASE MILESTONE - v1.0 (Checkpoint: aba08dbd)
 **Date:** February 15, 2026
 **Status:** ✅ Stable - All Core Features Working
