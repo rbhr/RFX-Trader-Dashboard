@@ -48,7 +48,30 @@ export function startTelegramPolling(): void {
     const username = msg.from?.username;
     const text = msg.text?.trim();
 
-    if (text === "/start") {
+    // "/start", but also "/start <payload>" (what a t.me deep link sends) and
+    // "/start@RFXTraderBot" — an exact match silently ignored both.
+    const isStart = /^\/start(@\w+)?(\s|$)/i.test(text ?? "");
+
+    // Anything else used to get no reply and no log line, which from the
+    // outside is indistinguishable from the bot being down.
+    if (!isStart) {
+      const who = username ? `@${username}` : "no username";
+      try {
+        await pollingBot.sendMessage(
+          chatId,
+          translate(toLanguage(msg.from?.language_code), "telegram.help")
+        );
+        logEvent(
+          "telegram",
+          `Message from ${who} (chat ${chatId}): "${(text ?? "[non-text]").slice(0, 60)}" — replied with /start help`
+        );
+      } catch (err) {
+        console.error("[Telegram] Error replying with help:", err);
+      }
+      return;
+    }
+
+    if (isStart) {
       // A Telegram account with no public @username can't be matched to a
       // dashboard handle. Without this branch the /start is silently dropped
       // (no link, no reply, no log) — tell the user how to fix it instead.
@@ -104,15 +127,33 @@ export function startTelegramPolling(): void {
         }
       } catch (err) {
         console.error("[Telegram] Error handling /start:", err);
+        logEvent(
+          "telegram",
+          `/start from @${username} (chat ${chatId}) failed: ${err instanceof Error ? err.message : String(err)}`,
+          "error"
+        );
       }
     }
   });
 
+  let conflictCount = 0;
   pollingBot.on("polling_error", (err) => {
-    // 409 Conflict is expected during dev hot-reloads; suppress to avoid log noise
-    if (!err.message.includes('409')) {
-      console.error("[Telegram] Polling error:", err.message);
+    // A 409 Conflict means another process is polling with the same bot token
+    // and is taking some of the updates. One or two during a redeploy are
+    // normal; a steady stream means a second bot instance is running somewhere.
+    if (err.message.includes('409')) {
+      conflictCount++;
+      if (conflictCount === 5 || conflictCount % 200 === 0) {
+        logEvent(
+          "telegram",
+          `Polling conflict x${conflictCount}: another process is polling @RFXTraderBot with the same token and may be swallowing /start messages`,
+          "warn"
+        );
+      }
+      return;
     }
+    console.error("[Telegram] Polling error:", err.message);
+    logEvent("telegram", `Polling error: ${err.message}`, "warn");
   });
 
   console.log("[Telegram] Bot polling started — listening for /start messages");

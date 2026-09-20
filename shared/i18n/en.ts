@@ -306,6 +306,8 @@ export const en = {
       "✅ <b>Welcome to RFX Trader Dashboard!</b>\n\nYour Telegram is now linked to {count} account(s):\n{accounts}\n\n• 📊 <b>Dashboard:</b> {dashboardLink}\n\nYou'll receive payment confirmations, risk limit alerts, and important updates here. Welcome aboard! 🚀",
     startRelinked:
       "✅ <b>Re-linked!</b>\n\nYour Telegram is connected to {count} account(s):\n{accounts}\n\n• 📊 <b>Dashboard:</b> {dashboardLink}\n\nNotifications will continue to be delivered here.",
+    help:
+      "👋 This bot sends your RFX Trader Dashboard notifications. To link this chat to your account, send /start.",
     startUnknown:
       "👋 Hi @{username}! To link your Telegram to RFX Trader Dashboard, please save your Telegram handle in your dashboard settings first, then send /start again.",
   },

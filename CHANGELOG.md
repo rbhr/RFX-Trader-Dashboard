@@ -80,6 +80,11 @@ hash.
   lists its daily limit first, the dashboard and breach monitor used the daily
   limit's figure and an admin edit wrote the dollar stopout into the daily limit.
   All four now share `findActualRiskLimit` (riskType 4).
+- **@RFXTraderBot ignored anything that was not exactly `/start`.** `/start <payload>` (what a
+  t.me deep link sends), `/start@RFXTraderBot` and any other text got no reply and no log line,
+  which looks the same as the bot being down. It now accepts the `/start` variants, answers
+  other messages with a short pointer to `/start` (en/ur/ar), logs a failed `/start` as an
+  error, and logs repeated polling conflicts, which mean a second bot instance is running.
 - **Dashboard header overflowed on narrow windows.** With the language selector added, the
   six header controls no longer fit on one row and the last ones were pushed off-screen. The
   Dashboard and History headers now wrap.
