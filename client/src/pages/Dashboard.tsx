@@ -519,7 +519,9 @@ export default function Dashboard(props: {
       {!embedded && (
       <div className="border-b bg-card">
         <div className="container py-4">
-          <div className="flex items-center justify-between">
+          {/* Wraps rather than overflows: six header controls no longer fit on
+              one row on a narrow window, and the last ones were pushed off-screen. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                 <TrendingUp className="w-5 h-5 text-primary" />
@@ -554,7 +556,7 @@ export default function Dashboard(props: {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <LanguageSelector />
               {session?.showMyTradesUrl && (
                 <Button

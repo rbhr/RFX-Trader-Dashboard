@@ -80,6 +80,9 @@ hash.
   lists its daily limit first, the dashboard and breach monitor used the daily
   limit's figure and an admin edit wrote the dollar stopout into the daily limit.
   All four now share `findActualRiskLimit` (riskType 4).
+- **Dashboard header overflowed on narrow windows.** With the language selector added, the
+  six header controls no longer fit on one row and the last ones were pushed off-screen. The
+  Dashboard and History headers now wrap.
 - **Max open trades / max total lots could not be set to 0 in Edit Trader.** The dialog and
   the server both rejected 0, so the save was silently skipped. 0 (or a cleared field) now
   saves as MetaCopier's "no limit", and the trader dashboard says "no limit" rather than
