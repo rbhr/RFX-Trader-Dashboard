@@ -65,6 +65,7 @@ import {
   getStartOfMonth,
   getAllTimeStart,
   getTraderLiveCopiers,
+  type CopyScaling,
 } from "./metacopier";
 import {
   DAILY_PROFIT_TARGET_DEFAULTS,
@@ -646,6 +647,160 @@ async function recordPaymentAndNotify(params: {
       }
     }
   }
+}
+
+// Reusable demo/slave account for magic-number routing.
+const DEMO_SLAVE_ACCOUNT_ID = "b94cabc8-946d-4a99-9b81-286f8553cc63";
+
+const copyScalingInput = z.object({
+  mode: z.enum(["multiplier", "fixed"]),
+  // Free-form to 2 decimals: 1.0, 0.5, 0.15 as a multiplier; 0.1, 0.05 as lots.
+  value: z.number().positive().max(1000),
+});
+
+/**
+ * Make sure a copier runs from the trader's incubator account into a master
+ * account. An existing one only has its lot sizing updated — never its active
+ * state; a new one is created with the news filter on unless told otherwise.
+ */
+async function ensureLiveCopier(opts: {
+  mcAccountId: string;
+  liveAccountNumber: string;
+  scaling?: CopyScaling;
+  /** State of a newly created copier. Existing copiers keep theirs. */
+  status: "ACTIVE" | "DISABLED";
+  newsFilter?: boolean;
+}): Promise<{ created: boolean; masterAlias: string }> {
+  const master = await metaCopierService.getAccountByLoginNumber(
+    opts.liveAccountNumber
+  );
+  if (!master) {
+    throw new Error(
+      `master account ${opts.liveAccountNumber} not found in MetaCopier`
+    );
+  }
+  const { id: masterId, alias: masterAlias } = master;
+  const existing = (await metaCopierService.getCopiersByAccount(masterId)).find(
+    (c: any) => c.fromAccountId === opts.mcAccountId
+  );
+  if (existing) {
+    if (opts.scaling) {
+      await metaCopierService.setCopierScaling(masterId, existing.id, opts.scaling);
+    }
+    return { created: false, masterAlias };
+  }
+  const result = await metaCopierService.createCopier({
+    fromAccountId: opts.mcAccountId,
+    toAccountId: masterId,
+    status: opts.status,
+    newsFilter: opts.newsFilter ?? true,
+    scaling: opts.scaling,
+  });
+  if (!result.success) {
+    throw new Error(result.message || "copier creation failed");
+  }
+  return { created: true, masterAlias };
+}
+
+/**
+ * Link a dashboard trader to their MetaCopier account and make it usable:
+ * persist the link, ensure the demo copier (No scaling, 1x) that yields the
+ * trader's real magic number, adopt that magic, ensure a copier into their
+ * master account, then rename and label the account. Idempotent, and each step
+ * fails into `warnings` rather than aborting the rest.
+ */
+async function linkTraderToMetaCopier(
+  trader: NonNullable<Awaited<ReturnType<typeof getMagicNumberById>>>,
+  mcAccountId: string,
+  opts: { freshlyCreated: boolean; scaling?: CopyScaling }
+): Promise<{ magicForName: string | number; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Persist mcAccountId IMMEDIATELY, before any copier work, so the trader
+  // stays linked to the account even if a later step fails. This is the core
+  // fix for orphaned accounts (MC created, DB never updated).
+  await updateMagicNumber(trader.id, { mcAccountId });
+
+  // Ensure the demo copier exists and obtain the real magic number. Reuse an
+  // existing demo copier if present (idempotent), else create one.
+  let realMagic: string | number | undefined;
+  try {
+    const sourceCopiers =
+      await metaCopierService.getCopiersBySourceAccount(mcAccountId);
+    const demo = sourceCopiers.find(
+      (c: any) => c.toAccountId === DEMO_SLAVE_ACCOUNT_ID
+    );
+    if (demo) {
+      realMagic = demo.fromAccountShortId ?? demo.customMagicNumber;
+    } else {
+      const copierResult = await metaCopierService.createCopier({
+        fromAccountId: mcAccountId,
+        toAccountId: DEMO_SLAVE_ACCOUNT_ID,
+      });
+      if (copierResult.success && copierResult.fromAccountShortId) {
+        realMagic = copierResult.fromAccountShortId;
+      } else {
+        warnings.push("could not retrieve magic number (demo copier)");
+      }
+    }
+  } catch (error: any) {
+    warnings.push(`demo copier step failed: ${error.message}`);
+  }
+
+  // If we obtained the real magic, set it and reset the login password to the
+  // new default (the magic) — only when it actually changed.
+  if (
+    realMagic !== undefined &&
+    String(realMagic) !== String(trader.magicNumber)
+  ) {
+    await updateMagicNumber(trader.id, {
+      magicNumber: String(realMagic),
+      password: await hashPassword(String(realMagic)),
+    });
+  }
+  // Trailing risk-limit defaults only for brand-new accounts — don't clobber
+  // an existing trader's configured limit when repairing.
+  if (opts.freshlyCreated) {
+    await updateMagicNumber(trader.id, {
+      trailingRiskLimit: "1000",
+      trailingRiskLimitEnabled: true,
+    });
+  }
+
+  // Ensure a copier into the master account when one is configured. A new one
+  // starts disabled: onboarding switches it on.
+  if (trader.liveAccountNumber) {
+    try {
+      await ensureLiveCopier({
+        mcAccountId,
+        liveAccountNumber: trader.liveAccountNumber,
+        scaling: opts.scaling,
+        status: "DISABLED",
+      });
+    } catch (error: any) {
+      warnings.push(`live copier step failed: ${error.message}`);
+    }
+  }
+
+  // Rename MC account to "RFX - <name> - <magic>".
+  const magicForName = realMagic ?? trader.magicNumber;
+  try {
+    await metaCopierService.updateAccountName(
+      mcAccountId,
+      `RFX - ${trader.name} - ${magicForName}`
+    );
+  } catch (error: any) {
+    warnings.push(`rename failed: ${error.message}`);
+  }
+
+  // Add "RFX Trader" label.
+  try {
+    await metaCopierService.addAccountLabel(mcAccountId, "RFX Trader");
+  } catch (error: any) {
+    warnings.push(`label failed: ${error.message}`);
+  }
+
+  return { magicForName, warnings };
 }
 
 export const appRouter = router({
@@ -1956,6 +2111,8 @@ export const appRouter = router({
           payoutCycle: z
             .enum(["Weekly", "Fortnightly", "Self Service"])
             .optional(),
+          liveAccountNumber: z.string().optional(),
+          copyScaling: copyScalingInput.optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -1968,6 +2125,7 @@ export const appRouter = router({
 
         const hashedPassword = await hashPassword(input.password);
         await createMagicNumber({
+          liveAccountNumber: input.liveAccountNumber || null,
           magicNumber: input.magicNumber,
           name: input.name,
           password: hashedPassword,
@@ -1980,7 +2138,125 @@ export const appRouter = router({
           payoutCycle: input.payoutCycle || "Fortnightly",
         });
 
-        return { success: true };
+        // An account made in MetaCopier first and only now becoming a trader's:
+        // link it straight away — demo copier and real magic number, then the
+        // copier into the chosen master — instead of leaving it to a second step.
+        if (input.mtAccount) {
+          try {
+            const existing = await metaCopierService.checkAccountExists(
+              input.mtAccount
+            );
+            const trader = await getMagicNumberByNumber(input.magicNumber);
+            // Never double-link: another trader may already own that account.
+            const holder =
+              existing.exists && existing.accountId
+                ? (await getAllMagicNumbers()).find(
+                    t =>
+                      t.mcAccountId === existing.accountId &&
+                      t.id !== trader?.id
+                  )
+                : undefined;
+            if (holder) {
+              return {
+                success: true,
+                linked: false,
+                magicNumber: input.magicNumber,
+                warnings: [
+                  `MetaCopier account for MT ${input.mtAccount} is already linked to ${holder.name} (${holder.magicNumber}) — not linked`,
+                ],
+              };
+            }
+            if (existing.exists && existing.accountId && trader) {
+              const { magicForName, warnings } = await linkTraderToMetaCopier(
+                trader,
+                existing.accountId,
+                { freshlyCreated: false, scaling: input.copyScaling }
+              );
+              logEvent(
+                "metacopier",
+                `Added ${input.name} and linked their existing MC account (magic ${magicForName})` +
+                  (warnings.length ? ` — ${warnings.length} warning(s): ${warnings.join("; ")}` : ""),
+                warnings.length ? "warn" : "info"
+              );
+              return {
+                success: true,
+                linked: true,
+                magicNumber: String(magicForName),
+                warnings,
+              };
+            }
+          } catch (error: any) {
+            // The trader exists either way; linking can be retried from the
+            // MetaCopier status dialog.
+            return {
+              success: true,
+              linked: false,
+              magicNumber: input.magicNumber,
+              warnings: [`MetaCopier link failed: ${error.message}`],
+            };
+          }
+        }
+
+        return {
+          success: true,
+          linked: false,
+          magicNumber: input.magicNumber,
+          warnings: [] as string[],
+        };
+      }),
+
+    // Set how a trader's trades are sized on their master account, creating
+    // the copier if the master has none from them yet (a changed master). An
+    // existing copier keeps its active state, and copiers into any other
+    // master are never touched.
+    applyTraderCopySettings: adminProcedure
+      .input(
+        z.object({
+          traderId: z.number(),
+          scaling: copyScalingInput,
+          // For a copier that has to be created:
+          activate: z.boolean().default(false),
+          newsTradingAllowed: z.boolean().default(false),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+        if (!trader.mcAccountId || !trader.liveAccountNumber) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Trader needs a MetaCopier account and a master account before copy settings can be applied",
+          });
+        }
+
+        let result: Awaited<ReturnType<typeof ensureLiveCopier>>;
+        try {
+          result = await ensureLiveCopier({
+            mcAccountId: trader.mcAccountId,
+            liveAccountNumber: trader.liveAccountNumber,
+            scaling: input.scaling,
+            status: input.activate ? "ACTIVE" : "DISABLED",
+            newsFilter: !input.newsTradingAllowed,
+          });
+        } catch (error: any) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message,
+          });
+        }
+
+        const sizing =
+          input.scaling.mode === "fixed"
+            ? `fixed ${input.scaling.value.toFixed(2)} lots`
+            : `${input.scaling.value.toFixed(2)}x, no scaling`;
+        logEvent(
+          "metacopier",
+          `${result.created ? `Created ${input.activate ? "ACTIVE" : "DISABLED"} copier` : "Updated copier"} for ${trader.name} (${trader.magicNumber}) into ${result.masterAlias}: ${sizing}`
+        );
+        return { success: true, ...result };
       }),
 
     // Update trader
@@ -2222,8 +2498,6 @@ export const appRouter = router({
           });
         }
 
-        // Reusable demo/slave account for magic-number routing.
-        const SLAVE_ACCOUNT_ID = "b94cabc8-946d-4a99-9b81-286f8553cc63";
         const warnings: string[] = [];
 
         // Step 1: Idempotent account — adopt an existing MC account that matches
@@ -2264,112 +2538,12 @@ export const appRouter = router({
           freshlyCreated = true;
         }
 
-        // Step 2: Persist mcAccountId IMMEDIATELY, before any copier work, so the
-        // trader stays linked to the account even if a later step fails. This is
-        // the core fix for orphaned accounts (MC created, DB never updated).
-        await updateMagicNumber(trader.id, { mcAccountId });
-
-        // Step 3: Ensure the demo copier exists and obtain the real magic number.
-        // Reuse an existing demo copier if present (idempotent), else create one.
-        let realMagic: string | number | undefined;
-        try {
-          const sourceCopiers =
-            await metaCopierService.getCopiersBySourceAccount(mcAccountId);
-          const demo = sourceCopiers.find(
-            (c: any) => c.toAccountId === SLAVE_ACCOUNT_ID
-          );
-          if (demo) {
-            realMagic = demo.fromAccountShortId ?? demo.customMagicNumber;
-          } else {
-            const copierResult = await metaCopierService.createCopier({
-              fromAccountId: mcAccountId,
-              toAccountId: SLAVE_ACCOUNT_ID,
-            });
-            if (copierResult.success && copierResult.fromAccountShortId) {
-              realMagic = copierResult.fromAccountShortId;
-            } else {
-              warnings.push("could not retrieve magic number (demo copier)");
-            }
-          }
-        } catch (error: any) {
-          warnings.push(`demo copier step failed: ${error.message}`);
-        }
-
-        // Step 4: If we obtained the real magic, set it and reset the login
-        // password to the new default (the magic) — only when it actually changed.
-        if (
-          realMagic !== undefined &&
-          String(realMagic) !== String(trader.magicNumber)
-        ) {
-          await updateMagicNumber(trader.id, {
-            magicNumber: String(realMagic),
-            password: await hashPassword(String(realMagic)),
-          });
-        }
-        // Trailing risk-limit defaults only for brand-new accounts — don't clobber
-        // an existing trader's configured limit when repairing.
-        if (freshlyCreated) {
-          await updateMagicNumber(trader.id, {
-            trailingRiskLimit: "1000",
-            trailingRiskLimitEnabled: true,
-          });
-        }
-
-        // Step 5: Ensure a (disabled) live-account copier when a live account is
-        // configured. Skip if one already copies from this account (idempotent).
-        if (trader.liveAccountNumber) {
-          try {
-            const liveAccount = await metaCopierService.checkAccountExists(
-              trader.liveAccountNumber
-            );
-            if (liveAccount.exists && liveAccount.accountId) {
-              const liveCopiers =
-                await metaCopierService.getCopiersByAccount(
-                  liveAccount.accountId
-                );
-              const hasLive = liveCopiers.some(
-                (c: any) => c.fromAccountId === mcAccountId
-              );
-              if (!hasLive) {
-                const liveCopierResult = await metaCopierService.createCopier({
-                  fromAccountId: mcAccountId,
-                  toAccountId: liveAccount.accountId,
-                  status: "DISABLED",
-                  newsFilter: true,
-                });
-                if (!liveCopierResult.success) {
-                  warnings.push(
-                    `live copier failed: ${liveCopierResult.message}`
-                  );
-                }
-              }
-            } else {
-              warnings.push(
-                `live account ${trader.liveAccountNumber} not found in MetaCopier`
-              );
-            }
-          } catch (error: any) {
-            warnings.push(`live copier step failed: ${error.message}`);
-          }
-        }
-
-        // Step 6: Rename MC account to "RFX - <name> - <magic>".
-        const magicForName = realMagic ?? trader.magicNumber;
-        try {
-          await metaCopierService.updateAccountName(
-            mcAccountId,
-            `RFX - ${trader.name} - ${magicForName}`
-          );
-        } catch (error: any) {
-          warnings.push(`rename failed: ${error.message}`);
-        }
-
-        // Step 7: Add "RFX Trader" label.
-        try {
-          await metaCopierService.addAccountLabel(mcAccountId, "RFX Trader");
-        } catch (error: any) {
-          warnings.push(`label failed: ${error.message}`);
-        }
+        // Steps 2-7: link the trader, demo copier + magic, live copier, rename,
+        // label. Shared with Add Trader, which runs it for an account that
+        // already exists in MetaCopier.
+        const { magicForName, warnings: linkWarnings } =
+          await linkTraderToMetaCopier(trader, mcAccountId, { freshlyCreated });
+        warnings.push(...linkWarnings);
 
         logEvent(
           "metacopier",

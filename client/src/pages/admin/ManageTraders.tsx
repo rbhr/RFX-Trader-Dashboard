@@ -60,6 +60,67 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
+type CopyMode = "multiplier" | "fixed";
+
+/** "0.5" -> 0.5, to 2 decimals; null when it isn't a positive number. */
+function parseCopyValue(text: string): number | null {
+  const n = Math.round(parseFloat(text) * 100) / 100;
+  return n > 0 ? n : null;
+}
+
+// How the trader's trades are sized on the master account. Shared by the Add
+// and Edit dialogs. The multiplier always goes out as MetaCopier's "No scaling"
+// type, so the admin never has to pick a scale type.
+function CopySettingsFields({
+  idPrefix,
+  mode,
+  value,
+  onChange,
+}: {
+  idPrefix: string;
+  mode: CopyMode;
+  value: string;
+  onChange: (next: { copyMode: CopyMode; copyValue: string }) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-copyMode`}>Type</Label>
+        <select
+          id={`${idPrefix}-copyMode`}
+          value={mode}
+          onChange={e =>
+            onChange({ copyMode: e.target.value as CopyMode, copyValue: value })
+          }
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          <option value="multiplier">Multiplier</option>
+          <option value="fixed">Fixed Lot</option>
+        </select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-copyValue`}>
+          {mode === "fixed" ? "Fixed Lot" : "Copy Multiplier"}
+        </Label>
+        <Input
+          id={`${idPrefix}-copyValue`}
+          type="number"
+          min="0.01"
+          step="0.01"
+          placeholder={mode === "fixed" ? "e.g. 0.10" : "e.g. 1.00"}
+          value={value}
+          onChange={e => onChange({ copyMode: mode, copyValue: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          {mode === "fixed"
+            ? "Every trade goes into the master account at this many lots."
+            : "The trader's own lot size times this, e.g. 0.5 halves it."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 interface TraderControlsForm {
   dailyLossPercent: string;
   dailyProfitPercent: string;
@@ -441,7 +502,18 @@ export default function ManageTraders() {
     lifetimeProfit: 0,
     lifetimeProfitShare: 0,
     lifetimeIncome: 0,
+    copyMode: "multiplier" as CopyMode,
+    copyValue: "1.00",
   });
+  // Copy settings as MetaCopier had them when Edit opened, so an untouched
+  // section is never re-written.
+  const [copyBaseline, setCopyBaseline] = useState<{
+    copyMode: CopyMode;
+    copyValue: string;
+  } | null>(null);
+  // "Save Settings and Change Master Account?" confirmation.
+  const [masterChangeOpen, setMasterChangeOpen] = useState(false);
+  const [activateNewCopier, setActivateNewCopier] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: traders, isLoading } = trpc.admin.listTraders.useQuery();
@@ -569,6 +641,20 @@ export default function ManageTraders() {
     },
   });
 
+  const applyCopySettings = trpc.admin.applyTraderCopySettings.useMutation({
+    onSuccess: data => {
+      utils.admin.listTraders.invalidate();
+      toast.success(
+        data.created
+          ? `Copier into ${data.masterAlias} created`
+          : `Copy settings updated on ${data.masterAlias}`
+      );
+    },
+    onError: error => {
+      toast.error(`Copy settings failed: ${error.message}`);
+    },
+  });
+
   const updateControls = trpc.admin.updateTraderControls.useMutation({
     onSuccess: () => {
       utils.admin.getTraderControls.invalidate();
@@ -591,9 +677,16 @@ export default function ManageTraders() {
   });
 
   const createTrader = trpc.admin.createTrader.useMutation({
-    onSuccess: () => {
+    onSuccess: data => {
       utils.admin.listTraders.invalidate();
-      toast.success("Trader created successfully");
+      toast.success(
+        data.linked
+          ? `Trader created and linked to their MetaCopier account (magic ${data.magicNumber})`
+          : "Trader created successfully"
+      );
+      if (data.warnings.length > 0) {
+        toast.warning(data.warnings.join("; "), { duration: 12000 });
+      }
       setAddDialogOpen(false);
       resetForm();
     },
@@ -664,6 +757,8 @@ export default function ManageTraders() {
       lifetimeProfit: 0,
       lifetimeProfitShare: 0,
       lifetimeIncome: 0,
+      copyMode: "multiplier",
+      copyValue: "1.00",
     });
   };
 
@@ -674,7 +769,22 @@ export default function ManageTraders() {
     setRiskLimitLoading(false);
     setControls(EMPTY_CONTROLS);
     setControlsBaseline(null);
+    // Scale type 3 is "Fixed lot size"; anything else is shown as a multiplier.
+    const copy = trader.copierInfo
+      ? trader.copierInfo.scaleType === 3
+        ? {
+            copyMode: "fixed" as CopyMode,
+            copyValue: trader.copierInfo.fixedLotSize.toFixed(2),
+          }
+        : {
+            copyMode: "multiplier" as CopyMode,
+            copyValue: trader.copierInfo.multiplier.toFixed(2),
+          }
+      : null;
+    setCopyBaseline(copy);
+    setActivateNewCopier(false);
     setFormData({
+      ...(copy ?? { copyMode: "multiplier" as CopyMode, copyValue: "1.00" }),
       magicNumber: trader.magicNumber,
       name: trader.name,
       password: "",
@@ -798,7 +908,26 @@ export default function ManageTraders() {
     });
   };
 
+  const masterChanged =
+    !!selectedTrader &&
+    !!formData.liveAccountNumber &&
+    formData.liveAccountNumber !== (selectedTrader.liveAccountNumber || "");
+
+  // A changed master means a new live copier, so it is confirmed first.
   const handleSubmitEdit = () => {
+    if (!selectedTrader) return;
+    if (parseCopyValue(formData.copyValue) === null) {
+      toast.error("Copy settings need a value above 0");
+      return;
+    }
+    if (masterChanged && selectedTrader.mcAccountId) {
+      setMasterChangeOpen(true);
+      return;
+    }
+    saveEdit();
+  };
+
+  const saveEdit = () => {
     if (!selectedTrader) return;
 
     const updates: any = {
@@ -843,7 +972,36 @@ export default function ManageTraders() {
       updates.magicNumber = formData.magicNumber;
     }
 
-    updateTrader.mutate(updates);
+    // Copy settings go to MetaCopier after the trader row is saved, because the
+    // server reads the (possibly new) master account from it. Sent only when
+    // they changed, or when the master did — which creates the new copier and
+    // leaves the old master's copier exactly as it is.
+    const scalingValue = parseCopyValue(formData.copyValue);
+    // With no copier into the current master, the fields open on the 1.00x
+    // default; only an actual edit counts, so saving an unrelated change never
+    // creates a copier as a side effect.
+    const copyChanged = copyBaseline
+      ? copyBaseline.copyMode !== formData.copyMode ||
+        parseCopyValue(copyBaseline.copyValue) !== scalingValue
+      : formData.copyMode !== "multiplier" || scalingValue !== 1;
+    const applyCopy =
+      !!selectedTrader.mcAccountId &&
+      !!formData.liveAccountNumber &&
+      scalingValue !== null &&
+      (masterChanged || copyChanged);
+    const traderId = selectedTrader.id;
+
+    updateTrader.mutate(updates, {
+      onSuccess: () => {
+        if (!applyCopy || scalingValue === null) return;
+        applyCopySettings.mutate({
+          traderId,
+          scaling: { mode: formData.copyMode, value: scalingValue },
+          activate: masterChanged && activateNewCopier,
+          newsTradingAllowed: controls.newsTradingAllowed,
+        });
+      },
+    });
 
     // Only push the risk limit to MetaCopier when the admin actually changed
     // it — resubmitting the prefilled value re-writes the external API and
@@ -915,6 +1073,14 @@ export default function ManageTraders() {
         | "Weekly"
         | "Fortnightly"
         | "Self Service",
+      liveAccountNumber: formData.liveAccountNumber || undefined,
+      copyScaling:
+        parseCopyValue(formData.copyValue) !== null
+          ? {
+              mode: formData.copyMode,
+              value: parseCopyValue(formData.copyValue)!,
+            }
+          : undefined,
     });
   };
 
@@ -2001,6 +2167,40 @@ export default function ManageTraders() {
                   </select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="liveAccountNumber">Master Account</Label>
+                  <select
+                    id="liveAccountNumber"
+                    value={formData.liveAccountNumber}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        liveAccountNumber: e.target.value,
+                      })
+                    }
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Select Master Account</option>
+                    {rfxMasterAccounts?.map((account: any) => (
+                      <option key={account.id} value={account.loginAccountNumber}>
+                        {account.alias} ({account.loginAccountNumber})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <CopySettingsFields
+                  idPrefix="add"
+                  mode={formData.copyMode}
+                  value={formData.copyValue}
+                  onChange={next => setFormData({ ...formData, ...next })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  If this MT account already exists in MetaCopier it is linked
+                  on save: the demo copier (1x, no scaling) is set up to get the
+                  trader's magic number, the magic number here is updated, and a
+                  disabled copier into the master account is added with the copy
+                  settings above.
+                </p>
+                <div className="space-y-2">
                   <Label htmlFor="payoutCycle">Payout Cycle</Label>
                   <select
                     id="payoutCycle"
@@ -2256,6 +2456,28 @@ export default function ManageTraders() {
                     </select>
                   </div>
                 </div>
+              </div>
+
+              {/* Copy settings (the copier into the master account) */}
+              <div className="border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-3">Copy Settings</h3>
+                <CopySettingsFields
+                  idPrefix="edit"
+                  mode={formData.copyMode}
+                  value={formData.copyValue}
+                  onChange={next => setFormData({ ...formData, ...next })}
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  {!selectedTrader?.mcAccountId
+                    ? "Applied once the trader has a MetaCopier account."
+                    : !formData.liveAccountNumber
+                      ? "Choose a Live Account Number above to apply these."
+                      : masterChanged
+                        ? "The master account changed: saving creates a copier into the new master with these settings. The existing master's copier is left as it is."
+                        : copyBaseline
+                          ? "Applies to the copier into this trader's master account."
+                          : "No copier into this master account yet. Change these and save to create one (disabled); left at 1.00x, saving creates nothing."}
+                </p>
               </div>
 
               {/* Risk controls (all held in MetaCopier) */}
@@ -2718,6 +2940,73 @@ export default function ManageTraders() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Master account change confirmation */}
+        <AlertDialog open={masterChangeOpen} onOpenChange={setMasterChangeOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Save Settings and Change Master Account?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <p>
+                    {selectedTrader?.name} moves to{" "}
+                    <span className="font-medium text-foreground">
+                      {rfxMasterAccounts?.find(
+                        (a: any) =>
+                          a.loginAccountNumber === formData.liveAccountNumber
+                      )?.alias ?? formData.liveAccountNumber}
+                    </span>
+                    . A copier into it is set up at{" "}
+                    <span className="font-medium text-foreground">
+                      {formData.copyMode === "fixed"
+                        ? `a fixed ${formData.copyValue} lots`
+                        : `${formData.copyValue}x`}
+                    </span>
+                    , along with every other change on this screen.
+                  </p>
+                  <p>
+                    The copier into the current master
+                    {selectedTrader?.liveAccountNumber
+                      ? ` (${selectedTrader.liveAccountNumber})`
+                      : ""}{" "}
+                    is not disabled or changed. While both are active, trades
+                    copy to both accounts.
+                  </p>
+                  <div className="flex items-center gap-2 text-foreground">
+                    <Checkbox
+                      id="activate-new-copier"
+                      checked={activateNewCopier}
+                      onCheckedChange={checked =>
+                        setActivateNewCopier(checked === true)
+                      }
+                    />
+                    <Label htmlFor="activate-new-copier" className="cursor-pointer">
+                      Start copying to the new master straight away
+                    </Label>
+                  </div>
+                  <p className="text-xs">
+                    Unticked, the new copier is created disabled. If the new
+                    master already has a copier from this trader, only its copy
+                    settings are updated.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setMasterChangeOpen(false);
+                  saveEdit();
+                }}
+              >
+                Save and Change Master
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Magic Number Edit Confirmation */}
         <AlertDialog open={magicConfirmOpen} onOpenChange={setMagicConfirmOpen}>

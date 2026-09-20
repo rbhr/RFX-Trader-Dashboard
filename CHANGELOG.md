@@ -5,6 +5,27 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.2] — 2026-09-20
+
+### Added
+
+- **Copy Settings in Edit Trader and Add Trader.** Type (Multiplier or Fixed Lot) and a
+  free-form value to 2 decimals. A multiplier is always sent as MetaCopier's "No scaling" type
+  with that multiplier; a fixed lot as "Fixed lot size". Edit prefills from the trader's copier
+  into their master account and only writes when the values change.
+- **Changing a trader's master account sets up the new copier.** Saving asks "Save Settings and
+  Change Master Account?", then creates a copier into the new master with the copy settings on
+  the screen (news filter following the trader's news setting). It is created disabled unless
+  "Start copying to the new master straight away" is ticked. The copier into the previous master
+  is never disabled or changed; if the new master already has a copier from the trader, only its
+  copy settings are updated.
+- **Add Trader links an account that already exists in MetaCopier.** With a Master Account and
+  copy settings now on the Add screen, saving a trader whose MT account is already in MetaCopier
+  sets up the demo copier (1x, no scaling) to obtain the trader's magic number, updates the magic
+  number in the dashboard, adds a disabled copier into the chosen master, and renames and labels
+  the account — the same flow as "Create MetaCopier account", now shared code. An account already
+  linked to another trader is refused rather than double-linked.
+
 ## [4.0.0] — 2026-09-19
 
 ### Added

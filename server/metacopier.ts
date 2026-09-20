@@ -58,6 +58,27 @@ export interface Position {
   comment?: string;
 }
 
+/**
+ * How a trader's trades are sized on the live account. "multiplier" copies the
+ * trader's own lot size times `value` (MetaCopier scale type 4, "No scaling");
+ * "fixed" opens every trade at `value` lots (scale type 3, "Fixed lot size").
+ */
+export interface CopyScaling {
+  mode: 'multiplier' | 'fixed';
+  value: number;
+}
+
+const SCALE_TYPE_FIXED_LOT = 3;
+const SCALE_TYPE_NO_SCALING = 4;
+
+/** The copier fields a CopyScaling maps to. Values are kept to 2 decimals. */
+function scalingFields(scaling: CopyScaling): Record<string, unknown> {
+  const value = Math.round(scaling.value * 100) / 100;
+  return scaling.mode === 'fixed'
+    ? { scaleType: { id: SCALE_TYPE_FIXED_LOT }, fixedLotSize: value }
+    : { scaleType: { id: SCALE_TYPE_NO_SCALING }, multiplier: value };
+}
+
 export interface AccountInfo {
   balance: number;
   equity: number;
@@ -613,6 +634,14 @@ class MetaCopierService {
   }
 
   /**
+   * Change how a copier sizes trades, leaving every other setting — including
+   * whether it is active — as it is.
+   */
+  async setCopierScaling(toAccountId: string, copierId: string, scaling: CopyScaling): Promise<void> {
+    await this.patchCopier(toAccountId, copierId, scalingFields(scaling));
+  }
+
+  /**
    * Update copier status. Enable/disable is the `active` boolean (and
    * `monitorOnly` for Manage) — the API ignores a `status: { id }` field on
    * copiers. Uses read-modify-write so toggling never wipes the copier's other
@@ -672,6 +701,8 @@ class MetaCopierService {
     status?: 'ACTIVE' | 'DISABLED' | 'MANAGE';
     /** Live copiers only: block new trades around high-impact news. */
     newsFilter?: boolean;
+    /** Lot sizing; defaults to No scaling at 1x (what the demo copier needs). */
+    scaling?: CopyScaling;
   }): Promise<{ success: boolean; copierId?: string; fromAccountShortId?: string; message?: string }> {
     try {
       const response = await this.fetchWithAuth<any>(
@@ -709,6 +740,7 @@ class MetaCopierService {
             // Enable/disable is the `active` boolean (status:{id} is ignored).
             active: status !== 'DISABLED',
             monitorOnly: status === 'MANAGE',
+            ...(params.scaling ? scalingFields(params.scaling) : {}),
           };
           // Set the custom magic number to the trader's magic (the source short id)
           if (shortId !== undefined && shortId !== null) {
@@ -1234,6 +1266,15 @@ class MetaCopierService {
   /**
    * Get MetaCopier account ID by login account number
    */
+  /** The MetaCopier account (id + alias) behind an MT login number, or null. */
+  async getAccountByLoginNumber(
+    loginAccountNumber: string
+  ): Promise<{ id: string; alias: string } | null> {
+    const accounts = await this.getCachedAccounts();
+    const account = accounts.find((acc: any) => acc.loginAccountNumber === loginAccountNumber);
+    return account ? { id: account.id, alias: account.alias ?? loginAccountNumber } : null;
+  }
+
   async getAccountIdByLoginNumber(loginAccountNumber: string): Promise<string | null> {
     try {
       const accounts = await this.getCachedAccounts();
