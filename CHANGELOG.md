@@ -5,6 +5,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.3] — 2026-09-20
+
+### Fixed
+
+- **Editing a trader did not check their demo copier or magic number.** Only Add Trader ran the
+  MetaCopier link flow, so a trader added earlier with the 99999 placeholder kept it. Saving the
+  Edit Trader dialog now links an MT account that already exists in MetaCopier, creates the demo
+  copier (1x, no scaling) if it is missing, and replaces the 99999 placeholder with the real
+  magic — setting the login password to it as well. An established trader's magic and password
+  are never changed: a mismatch is reported instead. The check does not run for the grid's
+  inline toggles, and never creates a live copier or renames an account made in MetaCopier.
+- A failed read of a master's or the demo account's copiers could be mistaken for "no copier
+  yet" and create a duplicate. Those reads now fail loudly instead.
+
 ## [4.0.2] — 2026-09-20
 
 ### Added

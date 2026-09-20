@@ -602,7 +602,14 @@ class MetaCopierService {
   /**
    * Get all copiers for a specific account
    */
-  async getCopiersByAccount(accountId: string): Promise<any[]> {
+  /**
+   * `strict` throws instead of returning [] when the read fails. Use it before
+   * deciding to CREATE a copier: a failed read must not look like "none yet".
+   */
+  async getCopiersByAccount(accountId: string, strict = false): Promise<any[]> {
+    if (strict) {
+      return (await this.fetchWithAuth<any[]>(`/accounts/${accountId}/copiers`)) || [];
+    }
     try {
       const copiers = await this.fetchWithAuth<any[]>(
         `/accounts/${accountId}/copiers`

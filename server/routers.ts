@@ -652,6 +652,10 @@ async function recordPaymentAndNotify(params: {
 // Reusable demo/slave account for magic-number routing.
 const DEMO_SLAVE_ACCOUNT_ID = "b94cabc8-946d-4a99-9b81-286f8553cc63";
 
+// What Add Trader pre-fills as the magic number until the real one — the short
+// id MetaCopier gives the trader's demo copier — is known.
+const PLACEHOLDER_MAGIC = "99999";
+
 const copyScalingInput = z.object({
   mode: z.enum(["multiplier", "fixed"]),
   // Free-form to 2 decimals: 1.0, 0.5, 0.15 as a multiplier; 0.1, 0.05 as lots.
@@ -680,7 +684,9 @@ async function ensureLiveCopier(opts: {
     );
   }
   const { id: masterId, alias: masterAlias } = master;
-  const existing = (await metaCopierService.getCopiersByAccount(masterId)).find(
+  const existing = (
+    await metaCopierService.getCopiersByAccount(masterId, true)
+  ).find(
     (c: any) => c.fromAccountId === opts.mcAccountId
   );
   if (existing) {
@@ -712,9 +718,29 @@ async function ensureLiveCopier(opts: {
 async function linkTraderToMetaCopier(
   trader: NonNullable<Awaited<ReturnType<typeof getMagicNumberById>>>,
   mcAccountId: string,
-  opts: { freshlyCreated: boolean; scaling?: CopyScaling }
-): Promise<{ magicForName: string | number; warnings: string[] }> {
+  opts: {
+    freshlyCreated: boolean;
+    scaling?: CopyScaling;
+    /**
+     * "always": the dashboard magic (and login password) become MetaCopier's.
+     * "placeholder": only when the dashboard still holds the 99999 placeholder —
+     * for edits, where resetting an established trader's password would lock
+     * them out. A differing magic is then reported, not changed.
+     */
+    adoptMagic?: "always" | "placeholder";
+    /** Rename to "RFX - <name> - <magic>" and label. Off for accounts that
+     *  were made in MetaCopier first and carry their own name. */
+    renameAccount?: boolean;
+    /** Add a (disabled) copier into the master if there is none. Off for
+     *  edits: there a missing live copier may be deliberate, and Copy Settings
+     *  or a master change is what creates one. */
+    ensureLive?: boolean;
+  }
+): Promise<{ magicForName: string | number; warnings: string[]; magicChanged: boolean }> {
   const warnings: string[] = [];
+  const adoptMagic = opts.adoptMagic ?? "always";
+  const renameAccount = opts.renameAccount ?? true;
+  let magicChanged = false;
 
   // Persist mcAccountId IMMEDIATELY, before any copier work, so the trader
   // stays linked to the account even if a later step fails. This is the core
@@ -725,11 +751,10 @@ async function linkTraderToMetaCopier(
   // existing demo copier if present (idempotent), else create one.
   let realMagic: string | number | undefined;
   try {
-    const sourceCopiers =
-      await metaCopierService.getCopiersBySourceAccount(mcAccountId);
-    const demo = sourceCopiers.find(
-      (c: any) => c.toAccountId === DEMO_SLAVE_ACCOUNT_ID
-    );
+    // One call: the demo account's own copier list, not every account's.
+    const demo = (
+      await metaCopierService.getCopiersByAccount(DEMO_SLAVE_ACCOUNT_ID, true)
+    ).find((c: any) => c.fromAccountId === mcAccountId);
     if (demo) {
       realMagic = demo.fromAccountShortId ?? demo.customMagicNumber;
     } else {
@@ -753,10 +778,17 @@ async function linkTraderToMetaCopier(
     realMagic !== undefined &&
     String(realMagic) !== String(trader.magicNumber)
   ) {
-    await updateMagicNumber(trader.id, {
-      magicNumber: String(realMagic),
-      password: await hashPassword(String(realMagic)),
-    });
+    if (adoptMagic === "always" || trader.magicNumber === PLACEHOLDER_MAGIC) {
+      await updateMagicNumber(trader.id, {
+        magicNumber: String(realMagic),
+        password: await hashPassword(String(realMagic)),
+      });
+      magicChanged = true;
+    } else {
+      warnings.push(
+        `MetaCopier magic is ${realMagic} but the dashboard has ${trader.magicNumber} — left unchanged`
+      );
+    }
   }
   // Trailing risk-limit defaults only for brand-new accounts — don't clobber
   // an existing trader's configured limit when repairing.
@@ -769,7 +801,7 @@ async function linkTraderToMetaCopier(
 
   // Ensure a copier into the master account when one is configured. A new one
   // starts disabled: onboarding switches it on.
-  if (trader.liveAccountNumber) {
+  if (trader.liveAccountNumber && (opts.ensureLive ?? true)) {
     try {
       await ensureLiveCopier({
         mcAccountId,
@@ -782,25 +814,31 @@ async function linkTraderToMetaCopier(
     }
   }
 
-  // Rename MC account to "RFX - <name> - <magic>".
-  const magicForName = realMagic ?? trader.magicNumber;
-  try {
-    await metaCopierService.updateAccountName(
-      mcAccountId,
-      `RFX - ${trader.name} - ${magicForName}`
-    );
-  } catch (error: any) {
-    warnings.push(`rename failed: ${error.message}`);
+  const magicForName = magicChanged
+    ? (realMagic as string | number)
+    : adoptMagic === "always"
+      ? (realMagic ?? trader.magicNumber)
+      : trader.magicNumber;
+  if (renameAccount) {
+    // Rename MC account to "RFX - <name> - <magic>".
+    try {
+      await metaCopierService.updateAccountName(
+        mcAccountId,
+        `RFX - ${trader.name} - ${magicForName}`
+      );
+    } catch (error: any) {
+      warnings.push(`rename failed: ${error.message}`);
+    }
+
+    // Add "RFX Trader" label.
+    try {
+      await metaCopierService.addAccountLabel(mcAccountId, "RFX Trader");
+    } catch (error: any) {
+      warnings.push(`label failed: ${error.message}`);
+    }
   }
 
-  // Add "RFX Trader" label.
-  try {
-    await metaCopierService.addAccountLabel(mcAccountId, "RFX Trader");
-  } catch (error: any) {
-    warnings.push(`label failed: ${error.message}`);
-  }
-
-  return { magicForName, warnings };
+  return { magicForName, warnings, magicChanged };
 }
 
 export const appRouter = router({
@@ -2170,7 +2208,11 @@ export const appRouter = router({
               const { magicForName, warnings } = await linkTraderToMetaCopier(
                 trader,
                 existing.accountId,
-                { freshlyCreated: false, scaling: input.copyScaling }
+                {
+                  freshlyCreated: false,
+                  scaling: input.copyScaling,
+                  renameAccount: false,
+                }
               );
               logEvent(
                 "metacopier",
@@ -2264,6 +2306,9 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.number(),
+          // Set by the Edit Trader dialog: also check the MetaCopier link,
+          // demo copier and magic number after saving.
+          syncMetaCopier: z.boolean().optional(),
           name: z.string().optional(),
           magicNumber: z.string().min(1).optional(),
           password: z.string().optional(),
@@ -2295,7 +2340,7 @@ export const appRouter = router({
           });
         }
 
-        const { id, ...data } = input;
+        const { id, syncMetaCopier, ...data } = input;
         const updateData: any = {};
 
         if (data.name !== undefined) updateData.name = data.name;
@@ -2337,7 +2382,58 @@ export const appRouter = router({
 
         await updateMagicNumber(id, updateData);
 
-        return { success: true };
+        // Keep the MetaCopier side in step on every edit: link an MT account
+        // that already exists in MetaCopier, make sure the demo copier is there
+        // (it is what gives the trader their magic), and swap the 99999
+        // placeholder for the real magic — login password included. One cheap
+        // call when everything is already in place.
+        const notes: string[] = [];
+        let newMagic: string | null = null;
+        try {
+          // Only from the Edit Trader dialog — not the grid's inline toggles.
+          const trader = syncMetaCopier ? await getMagicNumberById(id) : null;
+          if (trader && !trader.isAdmin && trader.mtAccount) {
+            let mcAccountId = trader.mcAccountId;
+            if (!mcAccountId) {
+              const existing = await metaCopierService.checkAccountExists(
+                trader.mtAccount
+              );
+              if (existing.exists && existing.accountId) {
+                const holder = (await getAllMagicNumbers()).find(
+                  t => t.mcAccountId === existing.accountId && t.id !== id
+                );
+                if (holder) {
+                  notes.push(
+                    `MetaCopier account for MT ${trader.mtAccount} is already linked to ${holder.name} (${holder.magicNumber}) — not linked`
+                  );
+                } else {
+                  mcAccountId = existing.accountId;
+                }
+              }
+            }
+            if (mcAccountId) {
+              const { magicForName, warnings, magicChanged } =
+                await linkTraderToMetaCopier(trader, mcAccountId, {
+                  freshlyCreated: false,
+                  adoptMagic: "placeholder",
+                  renameAccount: false,
+                  ensureLive: false,
+                });
+              notes.push(...warnings);
+              if (magicChanged) {
+                newMagic = String(magicForName);
+                logEvent(
+                  "metacopier",
+                  `${trader.name}: magic ${trader.magicNumber} → ${newMagic} from their demo copier; login password reset to it`
+                );
+              }
+            }
+          }
+        } catch (error: any) {
+          notes.push(`MetaCopier check failed: ${error.message}`);
+        }
+
+        return { success: true, newMagic, notes };
       }),
 
     // Delete trader

@@ -666,9 +666,16 @@ export default function ManageTraders() {
   });
 
   const updateTrader = trpc.admin.updateTrader.useMutation({
-    onSuccess: () => {
+    onSuccess: data => {
       utils.admin.listTraders.invalidate();
-      toast.success("Trader updated successfully");
+      toast.success(
+        data.newMagic
+          ? `Trader updated — magic number is now ${data.newMagic}, and so is their login password`
+          : "Trader updated successfully"
+      );
+      if (data.notes.length > 0) {
+        toast.warning(data.notes.join("; "), { duration: 12000 });
+      }
       setEditDialogOpen(false);
     },
     onError: error => {
@@ -932,6 +939,7 @@ export default function ManageTraders() {
 
     const updates: any = {
       id: selectedTrader.id,
+      syncMetaCopier: true,
       name: formData.name,
       profitShare: formData.profitShare,
       mtAccount: formData.mtAccount || undefined,
