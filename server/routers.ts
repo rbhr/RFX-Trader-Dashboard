@@ -87,7 +87,10 @@ import {
   buildPaymentMessage,
   buildRiskLimitBreachMessage,
   buildAdminRiskLimitAlertMessage,
+  localizedTelegram,
 } from "./telegram";
+import { createSystemNotification } from "./systemNotifications";
+import { toLanguage, translate, type Language } from "@shared/i18n";
 import { maybeActivateOnboarding } from "./onboarding";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
@@ -131,29 +134,32 @@ async function generateAndSend2FACode(
   telegramChatId: string | null,
   traderName: string,
   magicNumber: string,
-  purpose: "login_2fa" | "password_reset" | "password_change"
+  purpose: "login_2fa" | "password_reset" | "password_change",
+  language: string | null | undefined
 ): Promise<boolean> {
   if (!telegramHandle || !telegramChatId) return false;
 
   const code = String(randomInt(100000, 1000000));
   await createTwoFactorCode(magicNumberId, code, purpose);
 
-  const purposeLabel =
+  const purposeKey =
     purpose === "login_2fa"
-      ? "login from a new device"
+      ? "telegram.purposeLogin"
       : purpose === "password_reset"
-        ? "password reset"
-        : "password change";
+        ? "telegram.purposeReset"
+        : "telegram.purposeChange";
 
-  const message =
-    `[Magic ${magicNumber}] 🔐 <b>Verification Code</b>\n\n` +
-    `Hi ${traderName},\n\n` +
-    `Your verification code for <b>${purposeLabel}</b> is:\n\n` +
-    `<code>${code}</code>\n\n` +
-    `This code expires in 5 minutes. If you didn't request this, ignore this message.`;
+  const lang: Language = toLanguage(language);
+  const message = translate(lang, "telegram.verificationCode", {
+    magicNumber,
+    greeting: translate(lang, "telegram.greeting", { name: traderName }),
+    purpose: translate(lang, purposeKey),
+    code,
+  });
 
+  // The log never carries the code, so it stays a plain English label.
   return sendTelegramMessage(telegramHandle, message, telegramChatId, {
-    logLabel: `verification code (${purposeLabel})`,
+    logLabel: `verification code (${translate("en", purposeKey)}${lang === "en" ? "" : `, sent in ${lang}`})`,
   });
 }
 
@@ -595,31 +601,39 @@ async function recordPaymentAndNotify(params: {
       return;
     }
 
-    await createNotification({
+    await createSystemNotification({
       magicNumberId,
-      title: `[Magic ${trader.magicNumber}] Payment Received`,
-      message: `You have received a payment of $${amount.toFixed(2)}. Transaction hash: ${transactionHash}`,
+      key: "payment",
+      params: {
+        magicNumber: trader.magicNumber,
+        amount: amount.toFixed(2),
+        hash: transactionHash,
+      },
       type: "payment",
-      isRead: false,
     });
     console.log(
       `[Payment] In-app notification sent to ${trader.name} for payment of $${amount}`
     );
 
     if (trader.telegramHandle && trader.telegramChatId) {
-      const telegramMsg = buildPaymentMessage({
-        traderName: trader.name,
-        magicNumber: trader.magicNumber,
-        amount,
-        network: network || trader.usdtNetwork || "TRC20",
-        networkFee,
-        transactionHash,
-        paymentDate,
-      });
+      const { message: telegramMsg, opts: telegramOpts } = localizedTelegram(
+        buildPaymentMessage,
+        {
+          traderName: trader.name,
+          magicNumber: trader.magicNumber,
+          amount,
+          network: network || trader.usdtNetwork || "TRC20",
+          networkFee,
+          transactionHash,
+          paymentDate,
+        },
+        trader.language
+      );
       const sent = await sendTelegramMessage(
         trader.telegramHandle,
         telegramMsg,
-        trader.telegramChatId
+        trader.telegramChatId,
+        telegramOpts
       );
       if (sent) {
         console.log(
@@ -717,7 +731,8 @@ export const appRouter = router({
               magicNumberData.telegramChatId,
               magicNumberData.name,
               magicNumberData.magicNumber,
-              "login_2fa"
+              "login_2fa",
+              magicNumberData.language
             );
             return {
               success: false,
@@ -832,7 +847,8 @@ export const appRouter = router({
           trader.telegramChatId,
           trader.name,
           trader.magicNumber,
-          "password_reset"
+          "password_reset",
+          trader.language
         );
 
         if (!sent) {
@@ -913,7 +929,8 @@ export const appRouter = router({
               trader.telegramChatId,
               trader.name,
               trader.magicNumber,
-              "password_change"
+              "password_change",
+              trader.language
             );
             return { success: false, requires2FA: true };
           }
@@ -950,6 +967,7 @@ export const appRouter = router({
           name: trader.name,
           profitShare: parseFloat(trader.profitShare),
           payoutCycle: trader.payoutCycle ?? null,
+          language: toLanguage(trader.language),
           showAllData: trader.showAllData,
           isAdmin: ctx.tradingSession.magicNumber.isAdmin || false,
           isViewedTraderAdmin: trader.isAdmin || false,
@@ -962,6 +980,17 @@ export const appRouter = router({
           telegramConnected: !!trader.telegramChatId,
           showMyTradesUrl: trader.showMyTradesUrl || null,
         };
+      }),
+
+    // Save the trader's language: the dashboard follows it on every device and
+    // Telegram messages and notifications are written in it.
+    setLanguage: tradingProcedure
+      .input(z.object({ language: z.enum(["en", "ur", "ar"]) }))
+      .mutation(async ({ ctx, input }) => {
+        await updateMagicNumber(ctx.tradingSession.magicNumber.id, {
+          language: input.language,
+        });
+        return { success: true };
       }),
 
     // Update USDT payment information
@@ -1003,7 +1032,7 @@ export const appRouter = router({
 
     // Send a test "Hello World" Telegram message to the trader's handle
     testTelegramMessage: tradingProcedure.mutation(async ({ ctx }) => {
-      const { telegramHandle, telegramChatId, name } =
+      const { telegramHandle, telegramChatId, name, language } =
         ctx.tradingSession.magicNumber;
       if (!telegramHandle) {
         throw new TRPCError({
@@ -1018,10 +1047,17 @@ export const appRouter = router({
             "Telegram not connected yet. Open Telegram, search for @RFXTraderBot and send /start, then try again.",
         });
       }
+      const { message: testMsg, opts: testOpts } = localizedTelegram(
+        (p: { name: string }, lang: Language) =>
+          translate(lang, "telegram.test", p),
+        { name },
+        language
+      );
       const sent = await sendTelegramMessage(
         telegramHandle,
-        `Hello World! 👋 This is a test message from RFX Trader Dashboard, ${name}. Your Telegram notifications are working correctly.`,
-        telegramChatId
+        testMsg,
+        telegramChatId,
+        testOpts
       );
       if (!sent) {
         throw new TRPCError({
@@ -1066,6 +1102,8 @@ export const appRouter = router({
           id: n.id,
           title: n.title,
           message: n.message,
+          i18nKey: n.i18nKey ?? null,
+          i18nParams: n.i18nParams ?? null,
           type: n.type,
           isRead: n.isRead,
           createdAt: n.createdAt,
@@ -1179,8 +1217,9 @@ export const appRouter = router({
             (f: any) => f.type?.id === 17
           );
 
+          // 0 is MetaCopier's "no limit", which the dashboard says in words.
           if (maxOpenPosFeature && maxOpenPosFeature.setting) {
-            return maxOpenPosFeature.setting.maxOpenPositions || null;
+            return (maxOpenPosFeature.setting.maxOpenPositions as number) ?? null;
           }
 
           return null;
@@ -1337,26 +1376,35 @@ export const appRouter = router({
         });
 
         // In-app notification for the trader
-        await createNotification({
+        await createSystemNotification({
           magicNumberId: trader.id,
-          title: `[Magic ${trader.magicNumber}] Risk Limit Breached — Account Permanently Breached`,
-          message: `Your incubator account equity dropped to $${input.equity.toFixed(2)}, below your risk limit of $${input.riskLimit.toFixed(2)}. All trades have been closed and your account is permanently breached.`,
+          key: "breach",
+          params: {
+            magicNumber: trader.magicNumber,
+            equity: input.equity.toFixed(2),
+            riskLimit: input.riskLimit.toFixed(2),
+          },
           type: "error",
         });
 
         // Telegram notification for the trader
         let traderTelegramSent = false;
         if (trader.telegramHandle && trader.telegramChatId) {
-          const msg = buildRiskLimitBreachMessage({
-            traderName: trader.name,
-            magicNumber: trader.magicNumber,
-            equity: input.equity,
-            riskLimit: input.riskLimit,
-          });
+          const { message: msg, opts: breachOpts } = localizedTelegram(
+            buildRiskLimitBreachMessage,
+            {
+              traderName: trader.name,
+              magicNumber: trader.magicNumber,
+              equity: input.equity,
+              riskLimit: input.riskLimit,
+            },
+            trader.language
+          );
           traderTelegramSent = await sendTelegramMessage(
             trader.telegramHandle,
             msg,
-            trader.telegramChatId
+            trader.telegramChatId,
+            breachOpts
           );
         }
 
@@ -2631,16 +2679,17 @@ export const appRouter = router({
       }),
 
     // Write trading controls to MetaCopier. Only the fields present are
-    // touched, so the client sends just what the admin changed; 0 switches a
-    // percentage control off.
+    // touched, so the client sends just what the admin changed. 0 switches a
+    // control off: no daily limit, or (MetaCopier's own meaning of 0) no cap
+    // on lots or open trades.
     updateTraderControls: adminProcedure
       .input(
         z.object({
           traderId: z.number(),
           dailyLossPercent: z.number().min(0).max(100).optional(),
           dailyProfitPercent: z.number().min(0).max(100).optional(),
-          maxTotalLots: z.number().positive().optional(),
-          maxOpenTrades: z.number().int().positive().optional(),
+          maxTotalLots: z.number().min(0).optional(),
+          maxOpenTrades: z.number().int().min(0).optional(),
           newsTradingAllowed: z.boolean().optional(),
         })
       )
@@ -2767,11 +2816,10 @@ export const appRouter = router({
         await resolveRiskLimitBreach(input.breachId);
         await updateMagicNumber(input.magicNumberId, { isActive: true });
         const resolvedTrader = await getMagicNumberById(input.magicNumberId);
-        await createNotification({
+        await createSystemNotification({
           magicNumberId: input.magicNumberId,
-          title: `[Magic ${resolvedTrader?.magicNumber ?? "?"}] Trading Re-enabled`,
-          message:
-            "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
+          key: "tradingReenabled",
+          params: { magicNumber: resolvedTrader?.magicNumber ?? "?" },
           type: "info",
         });
         return { success: true };
@@ -2941,11 +2989,10 @@ export const appRouter = router({
       for (const breach of activeBreaches) {
         await updateMagicNumber(breach.magicNumberId, { isActive: true });
         const breachTrader = await getMagicNumberById(breach.magicNumberId);
-        await createNotification({
+        await createSystemNotification({
           magicNumberId: breach.magicNumberId,
-          title: `[Magic ${breachTrader?.magicNumber ?? "?"}] Trading Re-enabled`,
-          message:
-            "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
+          key: "tradingReenabled",
+          params: { magicNumber: breachTrader?.magicNumber ?? "?" },
           type: "info",
         });
       }

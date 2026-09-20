@@ -6,6 +6,9 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
+// Arabic-script font for Urdu and Arabic. Self-hosted, and split by
+// unicode-range, so browsers only fetch it once that script is on screen.
+import "@fontsource-variable/noto-sans-arabic";
 import "./index.css";
 
 const queryClient = new QueryClient();

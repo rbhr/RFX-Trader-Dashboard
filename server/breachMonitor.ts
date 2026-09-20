@@ -10,14 +10,15 @@ import {
   getAllActiveMagicNumbers,
   getActiveBreachByMagicNumberId,
   createRiskLimitBreach,
-  createNotification,
 } from "./db";
+import { createSystemNotification } from "./systemNotifications";
 import { metaCopierService } from "./metacopier";
 import { findActualRiskLimit } from "./tradingControls";
 import {
   sendTelegramMessage,
   buildRiskLimitBreachMessage,
   buildAdminRiskLimitAlertMessage,
+  localizedTelegram,
 } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { socketEvents } from "./metacopierSocket";
@@ -84,17 +85,25 @@ async function checkAllTraders(): Promise<void> {
           });
 
           // In-app notification for the trader
-          await createNotification({
+          await createSystemNotification({
             magicNumberId: trader.id,
-            title: `[Magic ${trader.magicNumber}] ⚠️ Risk Limit Breached`,
-            message: `Your incubator account equity dropped to $${equity.toFixed(2)}, below your risk limit of $${riskLimit.toFixed(2)}. All trades have been closed and your account is permanently breached.`,
+            key: "breach",
+            params: {
+              magicNumber: trader.magicNumber,
+              equity: equity.toFixed(2),
+              riskLimit: riskLimit.toFixed(2),
+            },
             type: "warning",
           });
 
           // Telegram notification to the trader (if connected)
           if (trader.telegramChatId) {
-            const msg = buildRiskLimitBreachMessage({ traderName: trader.name, magicNumber: trader.magicNumber, equity, riskLimit });
-            await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId).catch(
+            const { message: msg, opts } = localizedTelegram(
+              buildRiskLimitBreachMessage,
+              { traderName: trader.name, magicNumber: trader.magicNumber, equity, riskLimit },
+              trader.language
+            );
+            await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId, opts).catch(
               (e) => console.warn(`[BreachMonitor] Telegram to trader failed:`, e)
             );
           }

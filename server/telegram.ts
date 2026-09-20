@@ -2,6 +2,7 @@ import TelegramBot from "node-telegram-bot-api";
 import { getMagicNumbersByTelegramHandle, updateMagicNumber } from "./db";
 import { maybeActivateOnboarding } from "./onboarding";
 import { logEvent } from "./logStore";
+import { toLanguage, translate, type Language } from "@shared/i18n";
 
 let bot: TelegramBot | null = null;
 let pollingStarted = false;
@@ -51,12 +52,12 @@ export function startTelegramPolling(): void {
       // A Telegram account with no public @username can't be matched to a
       // dashboard handle. Without this branch the /start is silently dropped
       // (no link, no reply, no log) — tell the user how to fix it instead.
+      // No trader to read a language from yet, so go by the Telegram client's.
+      const clientLang = toLanguage(msg.from?.language_code);
       if (!username) {
         await pollingBot.sendMessage(
           chatId,
-          `👋 <b>Welcome to RFX Trader Dashboard!</b>\n\n` +
-            `⚠️ Your Telegram account doesn't have a <b>username</b> set, so we can't link it to your trading account.\n\n` +
-            `Please set one in <b>Telegram → Settings → Username</b>, make sure that same handle is saved in your dashboard settings, then send /start again.`,
+          translate(clientLang, "telegram.startNoUsername"),
           { parse_mode: "HTML", disable_web_page_preview: true } as any
         );
         logEvent("telegram", `/start with no Telegram username set (chat ${chatId})`, "warn");
@@ -76,19 +77,15 @@ export function startTelegramPolling(): void {
             .map((t) => `• [Magic ${t.magicNumber}] ${t.name}`)
             .join("\n");
 
-          const welcomeMsg = anyFirstLink
-            ? (
-                `✅ <b>Welcome to RFX Trader Dashboard!</b>\n\n` +
-                `Your Telegram is now linked to ${traders.length} account(s):\n${accountList}\n\n` +
-                `• 📊 <b>Dashboard:</b> <a href="${dashboardUrl}">${dashboardUrl}</a>\n\n` +
-                `You'll receive payment confirmations, risk limit alerts, and important updates here. Welcome aboard! 🚀`
-              )
-            : (
-                `✅ <b>Re-linked!</b>\n\n` +
-                `Your Telegram is connected to ${traders.length} account(s):\n${accountList}\n\n` +
-                `• 📊 <b>Dashboard:</b> <a href="${dashboardUrl}">${dashboardUrl}</a>\n\n` +
-                `Notifications will continue to be delivered here.`
-              );
+          const welcomeMsg = translate(
+            toLanguage(traders[0].language),
+            anyFirstLink ? "telegram.startLinked" : "telegram.startRelinked",
+            {
+              count: traders.length,
+              accounts: accountList,
+              dashboardLink: `<a href="${dashboardUrl}">${dashboardUrl}</a>`,
+            }
+          );
 
           await pollingBot.sendMessage(chatId, welcomeMsg, { parse_mode: "HTML", disable_web_page_preview: true } as any);
           logEvent("telegram", `${anyFirstLink ? 'Linked' : 'Re-linked'} @${username} (chat ${chatId}) to ${traders.length} account(s): ${traders.map((t) => t.magicNumber).join(', ')}`);
@@ -101,7 +98,7 @@ export function startTelegramPolling(): void {
         } else {
           await pollingBot.sendMessage(
             chatId,
-            `👋 Hi @${username}! To link your Telegram to RFX Trader Dashboard, please save your Telegram handle in your dashboard settings first, then send /start again.`
+            translate(clientLang, "telegram.startUnknown", { username })
           );
           logEvent("telegram", `/start from unknown handle @${username} (chat ${chatId}) — no matching trader`, "warn");
         }
@@ -130,12 +127,23 @@ export async function sendTelegramMessage(
   telegramHandle: string,
   message: string,
   chatId?: string | null,
-  opts?: { logLabel?: string }
+  opts?: {
+    logLabel?: string;
+    /** Language `message` is written in, when it is not English. */
+    lang?: Language;
+    /** The same message in English, so the admin Logs show both. */
+    englishMessage?: string;
+  }
 ): Promise<boolean> {
   const recipient = telegramRecipientLabel(telegramHandle, chatId);
   // Sensitive sends (e.g. 2FA codes) pass an explicit logLabel so the code body
-  // is never persisted; everything else logs a sanitized content preview.
-  const summary = opts?.logLabel ?? previewTelegramMessage(message);
+  // is never persisted; everything else logs a sanitized content preview — in
+  // English first, then in the language it actually went out in.
+  const summary =
+    opts?.logLabel ??
+    (opts?.englishMessage && opts.lang && opts.lang !== "en"
+      ? `${previewTelegramMessage(opts.englishMessage)} | [${opts.lang}] ${previewTelegramMessage(message)}`
+      : previewTelegramMessage(message));
 
   const b = getBot();
   if (!b) {
@@ -177,38 +185,62 @@ function previewTelegramMessage(message: string): string {
 }
 
 /**
+ * A trader-facing message in the trader's language, plus what
+ * sendTelegramMessage needs to log the English alongside it.
+ */
+export function localizedTelegram<P>(
+  build: (params: P, lang: Language) => string,
+  params: P,
+  language: string | null | undefined
+): { message: string; opts: { lang: Language; englishMessage?: string } } {
+  const lang = toLanguage(language);
+  return {
+    message: build(params, lang),
+    opts: {
+      lang,
+      englishMessage: lang === "en" ? undefined : build(params, "en"),
+    },
+  };
+}
+
+/**
  * Build a risk limit breach notification message for a trader.
  */
-export function buildRiskLimitBreachMessage(params: {
-  traderName: string;
-  magicNumber: string;
-  equity: number;
-  riskLimit: number;
-}): string {
+export function buildRiskLimitBreachMessage(
+  params: {
+    traderName: string;
+    magicNumber: string;
+    equity: number;
+    riskLimit: number;
+  },
+  lang: Language = "en"
+): string {
   const { traderName, magicNumber, equity, riskLimit } = params;
-  return (
-    `[Magic ${magicNumber}] 🚨 <b>Risk Limit Breached</b>\n\n` +
-    `Hi ${traderName},\n\n` +
-    `Your incubator account equity has dropped to <b>$${equity.toFixed(2)}</b>, ` +
-    `which is below your risk limit of <b>$${riskLimit.toFixed(2)}</b>.\n\n` +
-    `<b>All trades have been closed and your account is permanently breached.</b>`
-  );
+  return translate(lang, "telegram.breach", {
+    magicNumber,
+    greeting: translate(lang, "telegram.greeting", { name: traderName }),
+    equity: equity.toFixed(2),
+    riskLimit: riskLimit.toFixed(2),
+  });
 }
 
 /**
  * Build a trailing risk limit update notification for a trader.
  */
-export function buildTrailingRiskLimitMessage(params: {
-  traderName: string;
-  magicNumber: string;
-  newStopout: number;
-}): string {
+export function buildTrailingRiskLimitMessage(
+  params: {
+    traderName: string;
+    magicNumber: string;
+    newStopout: number;
+  },
+  lang: Language = "en"
+): string {
   const { traderName, magicNumber, newStopout } = params;
-  return (
-    `[Magic ${magicNumber}] 📈 <b>Risk Limit Updated</b>\n\n` +
-    `Hi ${traderName},\n\n` +
-    `New Stopout <b>$${newStopout.toFixed(2)}</b>. Manage risk and lot size accordingly.`
-  );
+  return translate(lang, "telegram.trailing", {
+    magicNumber,
+    greeting: translate(lang, "telegram.greeting", { name: traderName }),
+    stopout: newStopout.toFixed(2),
+  });
 }
 
 /**
@@ -216,24 +248,26 @@ export function buildTrailingRiskLimitMessage(params: {
  * open trade on their incubator account is missing the SL/TP their copier
  * requires, so it was never copied to live — we close it and tell them why.
  */
-export function buildMissedTradeMessage(params: {
-  traderName: string;
-  magicNumber: string;
-  symbol: string;
-  missing: string;
-}): string {
+export function buildMissedTradeMessage(
+  params: {
+    traderName: string;
+    magicNumber: string;
+    symbol: string;
+    missing: string;
+  },
+  lang: Language = "en"
+): string {
   const { traderName, magicNumber, symbol, missing } = params;
-  return (
-    `[Magic ${magicNumber}] ⚠️ <b>Trade Not Copied to Live</b>\n\n` +
-    `Hi ${traderName},\n\n` +
-    `Your <b>${symbol}</b> trade had no <b>${missing}</b>, so it was not copied ` +
-    `to your live account. It has been closed on your incubator account.\n\n` +
-    `Always set a stop-loss and take-profit so your trades copy to live.`
-  );
+  return translate(lang, "telegram.missedTrade", {
+    magicNumber,
+    greeting: translate(lang, "telegram.greeting", { name: traderName }),
+    symbol,
+    missing,
+  });
 }
 
 /**
- * Build a risk limit breach alert message for the admin.
+ * Build a risk limit breach alert message for the admin. English only.
  */
 export function buildAdminRiskLimitAlertMessage(params: {
   traderName: string;
@@ -254,16 +288,20 @@ export function buildAdminRiskLimitAlertMessage(params: {
 /**
  * Build a payment notification message for a trader.
  */
-export function buildPaymentMessage(params: {
-  traderName: string;
-  magicNumber: string;
-  amount: number;
-  network: string;
-  networkFee: number;
-  transactionHash: string;
-  paymentDate: Date;
-}): string {
+export function buildPaymentMessage(
+  params: {
+    traderName: string;
+    magicNumber: string;
+    amount: number;
+    network: string;
+    networkFee: number;
+    transactionHash: string;
+    paymentDate: Date;
+  },
+  lang: Language = "en"
+): string {
   const { traderName, magicNumber, amount, network, networkFee, transactionHash, paymentDate } = params;
+  // Dates keep Western digits and English month names in every language.
   const dateStr = paymentDate.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
@@ -276,15 +314,13 @@ export function buildPaymentMessage(params: {
     network === "ERC20"
       ? `https://etherscan.io/tx/${transactionHash}`
       : `https://tronscan.org/#/transaction/${transactionHash}`;
-  return (
-    `[Magic ${magicNumber}] 💰 <b>Payment Received</b>\n\n` +
-    `Hi ${traderName},\n\n` +
-    `A payment of <b>${amount.toFixed(2)} USDT</b> has been sent to your wallet.\n\n` +
-    `📋 <b>Details</b>\n` +
-    `• Network: ${network}\n` +
-    `• Network Fee: ${networkFee.toFixed(2)} USDT\n` +
-    `• Date: ${dateStr}\n` +
-    `• TX: <a href="${explorerUrl}">${transactionHash.substring(0, 10)}...${transactionHash.slice(-6)}</a>\n\n` +
-    `You can view the full transmission proof in your RFX Trader dashboard.`
-  );
+  return translate(lang, "telegram.payment", {
+    magicNumber,
+    greeting: translate(lang, "telegram.greeting", { name: traderName }),
+    amount: amount.toFixed(2),
+    network,
+    fee: networkFee.toFixed(2),
+    date: dateStr,
+    txLink: `<a href="${explorerUrl}">${transactionHash.substring(0, 10)}...${transactionHash.slice(-6)}</a>`,
+  });
 }

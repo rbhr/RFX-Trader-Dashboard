@@ -214,7 +214,8 @@ export default function Logs() {
                             {CATEGORY_LABEL[log.category as LogCategory] ?? log.category}
                           </Badge>
                         </TableCell>
-                        <TableCell className={`text-sm ${levelClasses(log.level)}`}>
+                        {/* Telegram lines carry the English and the trader's language together. */}
+                        <TableCell dir="auto" className={`text-sm ${levelClasses(log.level)}`}>
                           {log.message}
                         </TableCell>
                       </TableRow>

@@ -14,11 +14,14 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { TrendingUp, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 type LoginStep = "credentials" | "two_factor" | "forgot_magic" | "forgot_code" | "forgot_newpass";
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const { t, tError } = useLanguage();
   const [step, setStep] = useState<LoginStep>("credentials");
   const [magicNumber, setMagicNumber] = useState("");
   const [password, setPassword] = useState("");
@@ -32,10 +35,10 @@ export default function Login() {
     onSuccess: (data) => {
       if (data.requires2FA) {
         setStep("two_factor");
-        toast.info("A verification code has been sent to your Telegram.");
+        toast.info(t("common.codeSentToTelegram"));
         return;
       }
-      toast.success(`Welcome back, ${data.name}!`);
+      toast.success(t("login.welcomeBack", { name: data.name }));
       if (data.isAdmin) {
         setLocation("/admin/dashboard");
       } else {
@@ -43,23 +46,23 @@ export default function Login() {
       }
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(tError(error.message));
     },
   });
 
   const requestResetMutation = trpc.trading.requestPasswordReset.useMutation({
     onSuccess: () => {
       setStep("forgot_code");
-      toast.info("A verification code has been sent to your Telegram.");
+      toast.info(t("common.codeSentToTelegram"));
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(tError(error.message));
     },
   });
 
   const resetPasswordMutation = trpc.trading.resetPassword.useMutation({
     onSuccess: () => {
-      toast.success("Password reset successfully! Please log in.");
+      toast.success(t("login.resetSuccess"));
       setStep("credentials");
       setPassword("");
       setResetCode("");
@@ -67,7 +70,7 @@ export default function Login() {
       setConfirmPassword("");
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(tError(error.message));
     },
   });
 
@@ -117,7 +120,7 @@ export default function Login() {
   const handleForgotRequest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!magicNumber) {
-      toast.error("Please enter your magic number");
+      toast.error(t("login.enterMagicFirst"));
       return;
     }
     requestResetMutation.mutate({ magicNumber });
@@ -126,11 +129,11 @@ export default function Login() {
   const handleResetPassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
+      toast.error(t("common.passwordsDoNotMatch"));
       return;
     }
     if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+      toast.error(t("common.passwordTooShort"));
       return;
     }
     resetPasswordMutation.mutate({
@@ -146,7 +149,10 @@ export default function Login() {
     resetPasswordMutation.isPending;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background p-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background p-4">
+      <div className="absolute top-4 end-4">
+        <LanguageSelector />
+      </div>
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="space-y-4 text-center">
           <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -159,21 +165,21 @@ export default function Login() {
           <div>
             <CardTitle className="text-2xl">
               {step === "two_factor"
-                ? "Verify Your Identity"
+                ? t("login.verifyTitle")
                 : step.startsWith("forgot")
-                  ? "Reset Password"
-                  : "RFX Trader Dashboard"}
+                  ? t("login.resetTitle")
+                  : t("common.appName")}
             </CardTitle>
             <CardDescription className="mt-2">
               {step === "two_factor"
-                ? "Enter the 6-digit code sent to your Telegram"
+                ? t("login.verifySubtitle")
                 : step === "forgot_magic"
-                  ? "Enter your magic number to receive a reset code"
+                  ? t("login.resetEnterMagic")
                   : step === "forgot_code"
-                    ? "Enter the verification code sent to your Telegram"
+                    ? t("login.resetEnterCode")
                     : step === "forgot_newpass"
-                      ? "Set your new password"
-                      : "Track your trading performance"}
+                      ? t("login.resetSetNew")
+                      : t("login.tagline")}
             </CardDescription>
           </div>
         </CardHeader>
@@ -181,31 +187,32 @@ export default function Login() {
           {step === "credentials" && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="magicNumber">Magic Number</Label>
+                <Label htmlFor="magicNumber">{t("common.magicNumber")}</Label>
                 <Input
                   id="magicNumber"
                   type="text"
+                  dir="ltr"
                   value={magicNumber}
                   onChange={(e) => setMagicNumber(e.target.value)}
-                  placeholder="Enter your magic number"
+                  placeholder={t("login.magicPlaceholder")}
                   disabled={isPending}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("login.password")}</Label>
                 <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder={t("login.passwordPlaceholder")}
                   disabled={isPending}
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <Checkbox
                     id="rememberMe"
                     checked={rememberMe}
@@ -218,7 +225,7 @@ export default function Login() {
                     htmlFor="rememberMe"
                     className="text-sm font-normal cursor-pointer"
                   >
-                    Remember me
+                    {t("login.rememberMe")}
                   </Label>
                 </div>
                 <button
@@ -226,7 +233,7 @@ export default function Login() {
                   className="text-sm text-primary hover:underline"
                   onClick={() => setStep("forgot_magic")}
                 >
-                  Forgot password?
+                  {t("login.forgotPassword")}
                 </button>
               </div>
 
@@ -237,11 +244,11 @@ export default function Login() {
               >
                 {loginMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                    {t("login.signingIn")}
                   </>
                 ) : (
-                  "Sign In"
+                  t("login.signIn")
                 )}
               </Button>
             </form>
@@ -250,17 +257,18 @@ export default function Login() {
           {step === "two_factor" && (
             <form onSubmit={handleTwoFactorSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="twoFactorCode">Verification Code</Label>
+                <Label htmlFor="twoFactorCode">{t("common.verificationCode")}</Label>
                 <Input
                   id="twoFactorCode"
                   type="text"
                   inputMode="numeric"
+                  dir="ltr"
                   maxLength={6}
                   value={twoFactorCode}
                   onChange={(e) =>
                     setTwoFactorCode(e.target.value.replace(/\D/g, ""))
                   }
-                  placeholder="Enter 6-digit code"
+                  placeholder={t("common.enterSixDigitCode")}
                   disabled={isPending}
                   autoFocus
                   className="text-center text-2xl tracking-widest font-mono"
@@ -274,11 +282,11 @@ export default function Login() {
               >
                 {loginMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                    {t("common.verifying")}
                   </>
                 ) : (
-                  "Verify & Sign In"
+                  t("login.verifyAndSignIn")
                 )}
               </Button>
 
@@ -290,8 +298,8 @@ export default function Login() {
                   setTwoFactorCode("");
                 }}
               >
-                <ArrowLeft className="h-3 w-3" />
-                Back to login
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" />
+                {t("login.backToLogin")}
               </button>
             </form>
           )}
@@ -299,13 +307,14 @@ export default function Login() {
           {step === "forgot_magic" && (
             <form onSubmit={handleForgotRequest} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="forgotMagic">Magic Number</Label>
+                <Label htmlFor="forgotMagic">{t("common.magicNumber")}</Label>
                 <Input
                   id="forgotMagic"
                   type="text"
+                  dir="ltr"
                   value={magicNumber}
                   onChange={(e) => setMagicNumber(e.target.value)}
-                  placeholder="Enter your magic number"
+                  placeholder={t("login.magicPlaceholder")}
                   disabled={isPending}
                   autoFocus
                 />
@@ -318,11 +327,11 @@ export default function Login() {
               >
                 {requestResetMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending code...
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                    {t("login.sendingCode")}
                   </>
                 ) : (
-                  "Send Reset Code"
+                  t("login.sendResetCode")
                 )}
               </Button>
 
@@ -331,8 +340,8 @@ export default function Login() {
                 className="w-full text-sm text-muted-foreground hover:text-primary flex items-center justify-center gap-1"
                 onClick={() => setStep("credentials")}
               >
-                <ArrowLeft className="h-3 w-3" />
-                Back to login
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" />
+                {t("login.backToLogin")}
               </button>
             </form>
           )}
@@ -346,17 +355,18 @@ export default function Login() {
               className="space-y-4"
             >
               <div className="space-y-2">
-                <Label htmlFor="resetCode">Verification Code</Label>
+                <Label htmlFor="resetCode">{t("common.verificationCode")}</Label>
                 <Input
                   id="resetCode"
                   type="text"
                   inputMode="numeric"
+                  dir="ltr"
                   maxLength={6}
                   value={resetCode}
                   onChange={(e) =>
                     setResetCode(e.target.value.replace(/\D/g, ""))
                   }
-                  placeholder="Enter 6-digit code"
+                  placeholder={t("common.enterSixDigitCode")}
                   disabled={isPending}
                   autoFocus
                   className="text-center text-2xl tracking-widest font-mono"
@@ -368,7 +378,7 @@ export default function Login() {
                 className="w-full"
                 disabled={resetCode.length !== 6}
               >
-                Continue
+                {t("login.continue")}
               </Button>
 
               <button
@@ -379,8 +389,8 @@ export default function Login() {
                   setResetCode("");
                 }}
               >
-                <ArrowLeft className="h-3 w-3" />
-                Back
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" />
+                {t("common.back")}
               </button>
             </form>
           )}
@@ -388,26 +398,26 @@ export default function Login() {
           {step === "forgot_newpass" && (
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="newPassword">New Password</Label>
+                <Label htmlFor="newPassword">{t("login.newPassword")}</Label>
                 <Input
                   id="newPassword"
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder={t("common.atLeastSixCharacters")}
                   disabled={isPending}
                   autoFocus
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword">{t("login.confirmPassword")}</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your new password"
+                  placeholder={t("login.confirmPasswordPlaceholder")}
                   disabled={isPending}
                 />
               </div>
@@ -424,11 +434,11 @@ export default function Login() {
               >
                 {resetPasswordMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Resetting...
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                    {t("login.resetting")}
                   </>
                 ) : (
-                  "Reset Password"
+                  t("login.resetPassword")
                 )}
               </Button>
 
@@ -437,8 +447,8 @@ export default function Login() {
                 className="w-full text-sm text-muted-foreground hover:text-primary flex items-center justify-center gap-1"
                 onClick={() => setStep("forgot_code")}
               >
-                <ArrowLeft className="h-3 w-3" />
-                Back
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" />
+                {t("common.back")}
               </button>
             </form>
           )}

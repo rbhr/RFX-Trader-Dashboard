@@ -9,12 +9,13 @@
 import {
   getTrailingRiskLimitTraders,
   getAdminSetting,
-  createNotification,
 } from "./db";
+import { createSystemNotification } from "./systemNotifications";
 import { metaCopierService } from "./metacopier";
 import {
   sendTelegramMessage,
   buildTrailingRiskLimitMessage,
+  localizedTelegram,
 } from "./telegram";
 import { logEvent } from "./logStore";
 import { findActualRiskLimit } from "./tradingControls";
@@ -87,23 +88,31 @@ async function checkTrailingRiskLimits(): Promise<void> {
             `${trader.name} (${trader.magicNumber}): stopout $${currentAbsoluteLimit.toFixed(2)} → $${newLimit.toFixed(2)} (balance $${balance.toFixed(2)}, buffer $${buffer.toFixed(2)})`
           );
 
-          await createNotification({
+          await createSystemNotification({
             magicNumberId: trader.id,
-            title: `[Magic ${trader.magicNumber}] Risk Limit Updated`,
-            message: `New Stopout $${newLimit.toFixed(2)}. Manage risk and lot size accordingly.`,
+            key: "trailing",
+            params: {
+              magicNumber: trader.magicNumber,
+              stopout: newLimit.toFixed(2),
+            },
             type: "info",
           });
 
           if (trader.telegramChatId) {
-            const msg = buildTrailingRiskLimitMessage({
-              traderName: trader.name,
-              magicNumber: trader.magicNumber,
-              newStopout: newLimit,
-            });
+            const { message: msg, opts } = localizedTelegram(
+              buildTrailingRiskLimitMessage,
+              {
+                traderName: trader.name,
+                magicNumber: trader.magicNumber,
+                newStopout: newLimit,
+              },
+              trader.language
+            );
             await sendTelegramMessage(
               trader.telegramHandle ?? "",
               msg,
-              trader.telegramChatId
+              trader.telegramChatId,
+              opts
             ).catch((e) =>
               console.warn(`[TrailingRiskLimit] Telegram to ${trader.name} failed:`, e)
             );

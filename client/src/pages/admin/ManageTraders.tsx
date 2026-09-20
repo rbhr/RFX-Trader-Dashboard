@@ -876,16 +876,15 @@ export default function ManageTraders() {
         changes.dailyProfitPercent =
           parseFloat(controls.dailyProfitPercent) || 0;
       }
-      const lots = parseFloat(controls.maxTotalLots);
-      if (controls.maxTotalLots !== controlsBaseline.maxTotalLots && lots > 0) {
-        changes.maxTotalLots = lots;
+      // Blank and 0 both mean "no limit" — that is what 0 means to MetaCopier.
+      if (controls.maxTotalLots !== controlsBaseline.maxTotalLots) {
+        changes.maxTotalLots = Math.max(0, parseFloat(controls.maxTotalLots) || 0);
       }
-      const trades = parseInt(controls.maxOpenTrades, 10);
-      if (
-        controls.maxOpenTrades !== controlsBaseline.maxOpenTrades &&
-        trades > 0
-      ) {
-        changes.maxOpenTrades = trades;
+      if (controls.maxOpenTrades !== controlsBaseline.maxOpenTrades) {
+        changes.maxOpenTrades = Math.max(
+          0,
+          parseInt(controls.maxOpenTrades, 10) || 0
+        );
       }
       if (controls.newsTradingAllowed !== controlsBaseline.newsTradingAllowed) {
         changes.newsTradingAllowed = controls.newsTradingAllowed;
@@ -2378,10 +2377,10 @@ export default function ManageTraders() {
                         <Input
                           id="edit-maxTotalLots"
                           type="number"
-                          min="0.01"
+                          min="0"
                           step="0.01"
                           value={controls.maxTotalLots}
-                          placeholder={controlsBaseline ? "Not set" : "Loading..."}
+                          placeholder={controlsBaseline ? "No limit" : "Loading..."}
                           disabled={!controlsBaseline}
                           onChange={e =>
                             setControls({
@@ -2391,7 +2390,8 @@ export default function ManageTraders() {
                           }
                         />
                         <p className="text-xs text-muted-foreground">
-                          Total lots open at the same time, per symbol.
+                          Total lots open at the same time, per symbol. 0 or
+                          blank means no limit.
                           {traderControls &&
                             traderControls.maxTotalLots != null &&
                             !traderControls.lotsAggregated && (
@@ -2408,10 +2408,10 @@ export default function ManageTraders() {
                         <Input
                           id="edit-maxOpenTrades"
                           type="number"
-                          min="1"
+                          min="0"
                           step="1"
                           value={controls.maxOpenTrades}
-                          placeholder={controlsBaseline ? "Not set" : "Loading..."}
+                          placeholder={controlsBaseline ? "No limit" : "Loading..."}
                           disabled={!controlsBaseline}
                           onChange={e =>
                             setControls({
@@ -2421,7 +2421,8 @@ export default function ManageTraders() {
                           }
                         />
                         <p className="text-xs text-muted-foreground">
-                          Trades open at the same time.
+                          Trades open at the same time. 0 or blank means no
+                          limit.
                         </p>
                       </div>
                     </div>

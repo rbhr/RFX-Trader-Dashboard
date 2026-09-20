@@ -16,9 +16,15 @@
  * is notified only on a successful close, so there is no notification spam.
  */
 
-import { getAllActiveMagicNumbers, createNotification } from "./db";
+import { getAllActiveMagicNumbers } from "./db";
+import { createSystemNotification } from "./systemNotifications";
+import { localizeMissingParts, type Language } from "@shared/i18n";
 import { metaCopierService } from "./metacopier";
-import { sendTelegramMessage, buildMissedTradeMessage } from "./telegram";
+import {
+  sendTelegramMessage,
+  buildMissedTradeMessage,
+  localizedTelegram,
+} from "./telegram";
 import { logEvent } from "./logStore";
 
 const MONITOR_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
@@ -70,15 +76,15 @@ function evaluateSkip(
 }
 
 async function notifyMissedTrade(
-  trader: { id: number; name: string; magicNumber: string; telegramHandle: string | null; telegramChatId: string | null },
+  trader: { id: number; name: string; magicNumber: string; telegramHandle: string | null; telegramChatId: string | null; language?: string | null },
   symbol: string,
   missing: string
 ): Promise<void> {
   // In-app notification (the warning enum value already exists).
-  await createNotification({
+  await createSystemNotification({
     magicNumberId: trader.id,
-    title: `[Magic ${trader.magicNumber}] Trade Not Copied to Live`,
-    message: `Your ${symbol} trade had no ${missing}, so it was not copied to live and has been closed on your incubator account. Always set a stop-loss and take-profit.`,
+    key: "missedTrade",
+    params: { magicNumber: trader.magicNumber, symbol, missing },
     type: "warning",
   }).catch((e) =>
     console.warn(`[MissedTradeMonitor] In-app notify failed for ${trader.name}:`, e)
@@ -86,13 +92,13 @@ async function notifyMissedTrade(
 
   // Telegram (if connected) — graceful fallback, in-app already delivered.
   if (trader.telegramChatId) {
-    const msg = buildMissedTradeMessage({
-      traderName: trader.name,
-      magicNumber: trader.magicNumber,
-      symbol,
-      missing,
-    });
-    await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId).catch(
+    const { message: msg, opts } = localizedTelegram(
+      (p: { traderName: string; magicNumber: string; symbol: string; missing: string }, lang: Language) =>
+        buildMissedTradeMessage({ ...p, missing: localizeMissingParts(lang, p.missing) }, lang),
+      { traderName: trader.name, magicNumber: trader.magicNumber, symbol, missing },
+      trader.language
+    );
+    await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId, opts).catch(
       (e) => console.warn(`[MissedTradeMonitor] Telegram to ${trader.name} failed:`, e)
     );
   }

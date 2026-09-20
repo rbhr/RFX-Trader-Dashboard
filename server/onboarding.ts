@@ -1,10 +1,8 @@
 import bcrypt from "bcrypt";
 
-import {
-  getMagicNumberById,
-  updateMagicNumber,
-  createNotification,
-} from "./db";
+import { getMagicNumberById, updateMagicNumber } from "./db";
+import { createSystemNotification } from "./systemNotifications";
+import { toLanguage, translate, type Language } from "@shared/i18n";
 import { enableTraderLiveCopiers } from "./metacopier";
 import { sendTelegramMessage } from "./telegram";
 import { logEvent } from "./logStore";
@@ -20,7 +18,10 @@ const escapeHtml = (s: string): string =>
  * longest present label so the emoji/colon column lines up. The ShowMyTrades
  * line is included only when the trader has a showMyTradesUrl.
  */
-export function buildLoginDetailsMessage(trader: TraderRow): string {
+export function buildLoginDetailsMessage(
+  trader: TraderRow,
+  lang: Language = "en"
+): string {
   const rows: [string, string, string][] = [
     ["Name", "🆔", `RFX - ${trader.name} - ${trader.magicNumber}`],
     ["Acct", "🧾", trader.mtAccount ?? ""],
@@ -34,7 +35,9 @@ export function buildLoginDetailsMessage(trader: TraderRow): string {
   const body = rows
     .map(([label, emoji, val]) => `${label.padEnd(width)} ${emoji} : ${escapeHtml(val)}`)
     .join("\n");
-  return `🔐 <b>LOGIN DETAILS</b>\n\n<pre>${body}</pre>`;
+  // Only the heading is translated: the rows are the field names the trader
+  // types into the MT5 login box, and the <pre> block relies on their widths.
+  return `🔐 <b>${translate(lang, "telegram.loginDetailsHeading")}</b>\n\n<pre>${body}</pre>`;
 }
 
 /**
@@ -98,10 +101,16 @@ export async function maybeActivateOnboarding(traderId: number): Promise<void> {
     await updateMagicNumber(trader.id, { liveCopiersActivatedAt: new Date() });
 
     try {
+      const lang = toLanguage(trader.language);
       await sendTelegramMessage(
         trader.telegramHandle ?? "",
-        buildLoginDetailsMessage(trader),
-        trader.telegramChatId
+        buildLoginDetailsMessage(trader, lang),
+        trader.telegramChatId,
+        {
+          lang,
+          englishMessage:
+            lang === "en" ? undefined : buildLoginDetailsMessage(trader, "en"),
+        }
       );
     } catch (e) {
       console.error(
@@ -113,11 +122,10 @@ export async function maybeActivateOnboarding(traderId: number): Promise<void> {
     // In-app twin of the Telegram message — without the login details: a
     // notification is stored in plain text and the MT password must not be.
     try {
-      await createNotification({
+      await createSystemNotification({
         magicNumberId: trader.id,
-        title: `[Magic ${trader.magicNumber}] Onboarding Complete`,
-        message:
-          "Your onboarding is complete and your trades are now being copied into the Live Account. Your MT login details have been sent to you on Telegram.",
+        key: "onboardingComplete",
+        params: { magicNumber: trader.magicNumber },
         type: "info",
       });
     } catch (e) {

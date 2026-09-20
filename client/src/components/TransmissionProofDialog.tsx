@@ -38,7 +38,8 @@ export function TransmissionProofDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      {/* Payment proofs are English-only by decision, so pin them left-to-right. */}
+      <DialogContent dir="ltr" lang="en" className="max-w-2xl max-h-[90vh] overflow-y-auto">
         {payment && (
           <div className="space-y-6">
             <div className="text-center space-y-2">

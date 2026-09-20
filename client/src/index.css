@@ -120,6 +120,19 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Urdu and Arabic: one consistent Arabic-script face on every device. A
+     Naskh-style face rather than Nastaliq for Urdu, whose tall line height
+     breaks dense tables. Latin text falls through to the default stack. */
+  html:lang(ur),
+  html:lang(ar) {
+    font-family: "Noto Sans Arabic Variable",
+      var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
+  }
+  /* English-only islands inside a translated page (the payment proof). */
+  html:lang(ur) [lang="en"],
+  html:lang(ar) [lang="en"] {
+    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
+  }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),

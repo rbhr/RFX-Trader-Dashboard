@@ -27,6 +27,9 @@ import {
   CreditCard
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage, Trans, Ltr } from "@/contexts/LanguageContext";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { isTranslationKey, localizeMissingParts } from "@shared/i18n";
 import {
   Dialog,
   DialogContent,
@@ -107,7 +110,7 @@ function PnLCard({
       </CardHeader>
       <CardContent>
         <div className={`text-2xl font-bold ${isPositive ? "text-primary" : "text-destructive"}`}>
-          {formatCurrency(value, true)}
+          <Ltr>{formatCurrency(value, true)}</Ltr>
         </div>
         <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
       </CardContent>
@@ -154,6 +157,27 @@ export default function Dashboard(props: {
   const { viewAsTraderId: externalViewAsTraderId, embedded = false } = props ?? {};
   const [, setLocation] = useLocation();
   const { session: selfSession, isLoading: sessionLoading, logout } = useTradingSession();
+  const { t, tError, lang } = useLanguage();
+
+  // System notifications carry their translation key and params, so they read
+  // in the current language; admin-typed ones (no key) show as written.
+  const notificationText = (
+    n: { title: string; message: string; i18nKey: string | null; i18nParams: string | null },
+    field: "title" | "message"
+  ): string => {
+    const key = n.i18nKey ? `notifications.${n.i18nKey}.${field}` : "";
+    if (!isTranslationKey(key)) return n[field];
+    let params: Record<string, string | number> = {};
+    try {
+      params = JSON.parse(n.i18nParams ?? "{}");
+    } catch {
+      return n[field];
+    }
+    if (typeof params.missing === "string") {
+      params.missing = localizeMissingParts(lang, params.missing);
+    }
+    return t(key, params);
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [usdtAddress, setUsdtAddress] = useState<string>("");
@@ -204,10 +228,10 @@ export default function Dashboard(props: {
     if (!address) return null;
     if (network === "TRC20") {
       if (address.length !== 34 || !address.startsWith("T"))
-        return "TRC20 address must be 34 characters and start with 'T'";
+        return t("settings.trc20Invalid");
     } else if (network === "ERC20") {
       if (address.length !== 42 || !address.startsWith("0x"))
-        return "ERC20 address must be 42 characters and start with '0x'";
+        return t("settings.erc20Invalid");
     }
     return null;
   };
@@ -225,10 +249,10 @@ export default function Dashboard(props: {
     onSuccess: (data) => {
       if (data.requires2FA) {
         setPasswordChangeStep("2fa");
-        toast.info("A verification code has been sent to your Telegram.");
+        toast.info(t("common.codeSentToTelegram"));
         return;
       }
-      toast.success("Password changed successfully!");
+      toast.success(t("settings.passwordChanged"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmNewPassword("");
@@ -236,7 +260,7 @@ export default function Dashboard(props: {
       setPasswordChangeStep("form");
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(tError(error.message));
     },
   });
   const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
@@ -307,10 +331,10 @@ export default function Dashboard(props: {
   const payoutCycle = session?.payoutCycle ?? pnlSummary?.payoutCycle;
   const profitShareTitle =
     payoutCycle === "Weekly"
-      ? "Weekly Profit Share"
+      ? t("dashboard.weeklyProfitShare")
       : payoutCycle === "Fortnightly"
-        ? "Fortnightly Profit Share"
-        : "Profit Share";
+        ? t("dashboard.fortnightlyProfitShare")
+        : t("dashboard.profitShare");
 
   const { data: copierInfo } = trpc.trading.getCopierInfo.useQuery(viewAsInput, {
     refetchInterval: 60000,
@@ -399,7 +423,10 @@ export default function Dashboard(props: {
           onSuccess: (result) => {
             if (!('alreadyReported' in result)) {
               toast.error(
-                `⚠️ Risk limit breached! Equity $${accountEquity.toFixed(2)} is below your $${riskLimit.toFixed(2)} limit. All trades have been closed. Please contact an admin.`,
+                t("dashboard.breachToast", {
+                  equity: `$${accountEquity.toFixed(2)}`,
+                  riskLimit: `$${riskLimit.toFixed(2)}`,
+                }),
                 { duration: 10000 }
               );
             }
@@ -436,9 +463,9 @@ export default function Dashboard(props: {
         utils.trading.getPnLSummary.invalidate(),
         utils.trading.getOpenPositions.invalidate(),
       ]);
-      toast.success("Data refreshed");
+      toast.success(t("dashboard.dataRefreshed"));
     } catch (error) {
-      toast.error("Failed to refresh data");
+      toast.error(t("dashboard.refreshFailed"));
     } finally {
       setIsRefreshing(false);
     }
@@ -460,9 +487,9 @@ export default function Dashboard(props: {
         usdtAddress: usdtAddress || undefined,
         usdtNetwork: usdtNetwork || undefined,
       });
-      toast.success("USDT information updated");
+      toast.success(t("settings.usdtUpdated"));
     } catch (error) {
-      toast.error("Failed to update USDT information");
+      toast.error(t("settings.usdtUpdateFailed"));
     }
   };
 
@@ -480,7 +507,7 @@ export default function Dashboard(props: {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading dashboard...</p>
+          <p className="text-muted-foreground">{t("dashboard.loading")}</p>
         </div>
       </div>
     );
@@ -498,14 +525,14 @@ export default function Dashboard(props: {
                 <TrendingUp className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-bold">RFX Trader Dashboard</h1>
+                <h1 className="text-xl font-bold">{t("common.appName")}</h1>
                 <p className="text-sm text-muted-foreground">
-                  {session?.name} • Magic #{session?.magicNumber}
+                  {session?.name} • <Ltr>Magic #{session?.magicNumber}</Ltr>
                 </p>
               </div>
               {/* Admin trader picker */}
               {selfSession?.isAdmin && allTraders && (
-                <div className="ml-4">
+                <div className="ms-4">
                   <Select
                     value={viewAsTraderId?.toString() ?? "self"}
                     onValueChange={(v) => {
@@ -528,6 +555,7 @@ export default function Dashboard(props: {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <LanguageSelector />
               {session?.showMyTradesUrl && (
                 <Button
                   variant="outline"
@@ -536,7 +564,7 @@ export default function Dashboard(props: {
                     window.open(session.showMyTradesUrl!, "_blank", "noopener")
                   }
                 >
-                  <ExternalLink className="h-4 w-4 mr-1" />
+                  <ExternalLink className="h-4 w-4 me-1" />
                   ShowMyTrades
                 </Button>
               )}
@@ -545,7 +573,7 @@ export default function Dashboard(props: {
                   <Button variant="outline" size="sm" className="relative">
                     <Bell className="h-4 w-4" />
                     {unreadCount > 0 && (
-                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                      <Badge className="absolute -top-1 -end-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
                         {unreadCount}
                       </Badge>
                     )}
@@ -554,7 +582,7 @@ export default function Dashboard(props: {
                 <PopoverContent className="w-80" align="end">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-semibold">Notifications</h4>
+                      <h4 className="font-semibold">{t("dashboard.notifications")}</h4>
                       {unreadCount > 0 && (
                         <Button
                           variant="ghost"
@@ -564,8 +592,8 @@ export default function Dashboard(props: {
                             refetchNotifications();
                           }}
                         >
-                          <Check className="h-4 w-4 mr-1" />
-                          Mark all read
+                          <Check className="h-4 w-4 me-1" />
+                          {t("dashboard.markAllRead")}
                         </Button>
                       )}
                     </div>
@@ -586,10 +614,10 @@ export default function Dashboard(props: {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1">
-                                <div className="font-medium text-sm">{notif.title}</div>
-                                <div className="text-xs text-muted-foreground mt-1">{notif.message}</div>
+                                <div className="font-medium text-sm" dir="auto">{notificationText(notif, "title")}</div>
+                                <div className="text-xs text-muted-foreground mt-1" dir="auto">{notificationText(notif, "message")}</div>
                                 <div className="text-xs text-muted-foreground mt-2">
-                                  {new Date(notif.createdAt).toLocaleString()}
+                                  <Ltr>{new Date(notif.createdAt).toLocaleString("en-US")}</Ltr>
                                 </div>
                               </div>
                               {!notif.isRead && (
@@ -601,7 +629,7 @@ export default function Dashboard(props: {
                       ) : (
                         <div className="text-center py-8 text-muted-foreground">
                           <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No notifications</p>
+                          <p className="text-sm">{t("dashboard.noNotifications")}</p>
                         </div>
                       )}
                     </div>
@@ -614,8 +642,8 @@ export default function Dashboard(props: {
                 onClick={handleRefresh}
                 disabled={isRefreshing}
               >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-                Refresh
+                <RefreshCw className={`h-4 w-4 me-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                {t("common.refresh")}
               </Button>
               {!isViewingAsTrader && (
                 <Button
@@ -623,13 +651,13 @@ export default function Dashboard(props: {
                   size="sm"
                   onClick={() => setSettingsOpen(true)}
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
+                  <Settings className="h-4 w-4 me-2" />
+                  {t("dashboard.settings")}
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <LogOut className="h-4 w-4 me-2 rtl:rotate-180" />
+                {t("dashboard.logout")}
               </Button>
             </div>
           </div>
@@ -645,7 +673,7 @@ export default function Dashboard(props: {
             <CardHeader>
               <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <DollarSign className="h-4 w-4" />
-                <span>Today's Total P&L</span>
+                <span>{t("dashboard.todayTotalPnl")}</span>
               </div>
             </CardHeader>
             <CardContent>
@@ -656,19 +684,19 @@ export default function Dashboard(props: {
                   <div className={`text-4xl font-bold mb-4 ${
                     displayTodayTotal >= 0 ? "text-primary" : "text-destructive"
                   }`}>
-                    {formatCurrency(displayTodayTotal, true)}
+                    <Ltr>{formatCurrency(displayTodayTotal, true)}</Ltr>
                   </div>
                   <div className="flex items-center gap-6 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Realized: </span>
+                      <span className="text-muted-foreground">{t("dashboard.realized")} </span>
                       <span className="font-semibold">
-                        {formatCurrency(pnlSummary?.todayRealizedPnL ?? 0, true)}
+                        <Ltr>{formatCurrency(pnlSummary?.todayRealizedPnL ?? 0, true)}</Ltr>
                       </span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Floating: </span>
+                      <span className="text-muted-foreground">{t("dashboard.floating")} </span>
                       <span className="font-semibold">
-                        {formatCurrency(displayFloating, true)}
+                        <Ltr>{formatCurrency(displayFloating, true)}</Ltr>
                       </span>
                     </div>
                   </div>
@@ -709,7 +737,7 @@ export default function Dashboard(props: {
               <CardHeader>
                 <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                   <Activity className="h-4 w-4" />
-                  <span>Account &amp; Copier Configuration</span>
+                  <span>{t("dashboard.configTitle")}</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -718,69 +746,116 @@ export default function Dashboard(props: {
                     {copierInfo.notCopiedReason ? (
                       <div className="space-y-1">
                         <p className="text-base font-bold text-red-600">
-                          Your trades are not being copied into the Live Account{' '}
-                          {copierInfo.notCopiedReason === "news" ? "due to News" : "- Disabled by your Administrator"}.
+                          {copierInfo.notCopiedReason === "news"
+                            ? t("dashboard.notCopiedNews")
+                            : t("dashboard.notCopiedAdmin")}
                         </p>
                         <p className="text-sm text-red-600">
-                          If you place trades now, they are not counted toward profit share since they are not executed in the Live Account.
+                          {t("dashboard.notCountedWarning")}
                         </p>
                         {copierInfo.newsBlock && (
                           <p className="text-sm text-muted-foreground">
-                            {copierInfo.newsBlock.symbols.join(", ")}: {copierInfo.newsBlock.title}, until{' '}
-                            {new Date(copierInfo.newsBlock.untilUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            <Trans
+                              k="dashboard.newsDetail"
+                              values={{
+                                symbols: <Ltr>{copierInfo.newsBlock.symbols.join(", ")}</Ltr>,
+                                // Event titles come from the calendar in English.
+                                title: <Ltr>{copierInfo.newsBlock.title}</Ltr>,
+                                time: (
+                                  <Ltr>
+                                    {new Date(copierInfo.newsBlock.untilUtc).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                  </Ltr>
+                                ),
+                              }}
+                            />
                           </p>
                         )}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         {copierInfo.scaleType === 3 ? (
-                          <>
-                            Each of your trades is going into the Live Account as <span className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</span>
-                          </>
+                          <Trans
+                            k="dashboard.copiedFixedLots"
+                            values={{
+                              lots: <Ltr className="font-bold text-green-600">{copierInfo.fixedLotSize} lots</Ltr>,
+                            }}
+                          />
                         ) : (
-                          <>
-                            Each of your trades are being multiplied by <span className="font-bold text-green-600">{copierInfo.multiplier}x</span> into the Live Account
-                          </>
+                          <Trans
+                            k="dashboard.copiedMultiplied"
+                            values={{
+                              multiplier: <Ltr className="font-bold text-green-600">{copierInfo.multiplier}x</Ltr>,
+                            }}
+                          />
                         )}
                       </p>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      Your maximum trades open at the same time: <span className="font-bold text-green-600">{maxOpenTrades ?? 'unavailable'}</span>
+                      <Trans
+                        k="dashboard.maxTrades"
+                        values={{
+                          value: <Ltr className="font-bold text-green-600">{maxOpenTrades == null ? t("common.unavailable") : maxOpenTrades === 0 ? t("common.noLimit") : maxOpenTrades}</Ltr>,
+                        }}
+                      />
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Your maximum lots open at the same time: <span className="font-bold text-green-600">{maxLotSize != null ? maxLotSize : 'unavailable'}</span>
+                      <Trans
+                        k="dashboard.maxLots"
+                        values={{
+                          value: <Ltr className="font-bold text-green-600">{maxLotSize == null ? t("common.unavailable") : maxLotSize === 0 ? t("common.noLimit") : maxLotSize}</Ltr>,
+                        }}
+                      />
                     </p>
                     {dailyLossLimit && (
                       <p className="text-sm text-muted-foreground">
-                        Your maximum daily loss today:{' '}
-                        <span className="font-bold text-red-600">{formatCurrency(dailyLossLimit.maxLossAmount)}</span>.
-                        If the equity in your incubator account drops below{' '}
-                        <span className="font-bold text-red-600">{formatCurrency(dailyLossLimit.breachEquity)}</span>,
-                        all trades will be closed and you can resume trading after rollover.
+                        <Trans
+                          k="dashboard.dailyLoss"
+                          values={{
+                            amount: <Ltr className="font-bold text-red-600">{formatCurrency(dailyLossLimit.maxLossAmount)}</Ltr>,
+                            equity: <Ltr className="font-bold text-red-600">{formatCurrency(dailyLossLimit.breachEquity)}</Ltr>,
+                          }}
+                        />
                       </p>
                     )}
                     {riskLimit != null && (
                       <p className="text-sm text-muted-foreground">
-                        If the equity in your incubator account drops below{' '}
-                        <span className="font-bold text-green-600">${riskLimit.toLocaleString()}</span>,
-                        all trades will be closed and your account is permanently breached.
+                        <Trans
+                          k="dashboard.riskLimit"
+                          values={{
+                            amount: <Ltr className="font-bold text-green-600">${riskLimit.toLocaleString("en-US")}</Ltr>,
+                          }}
+                        />
                       </p>
                     )}
                     <div className="border-t pt-2 mt-2 space-y-1">
                       <p className="text-sm text-muted-foreground">
-                        Account Balance: <span className="font-bold text-green-600">
-                          {accountBalanceEquity?.balance != null ? formatCurrency(accountBalanceEquity.balance) : 'unavailable'}
-                        </span>
+                        <Trans
+                          k="dashboard.accountBalance"
+                          values={{
+                            value: (
+                              <Ltr className="font-bold text-green-600">
+                                {accountBalanceEquity?.balance != null ? formatCurrency(accountBalanceEquity.balance) : t("common.unavailable")}
+                              </Ltr>
+                            ),
+                          }}
+                        />
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Account Equity: <span className="font-bold text-green-600">
-                          {accountBalanceEquity?.equity != null ? formatCurrency(accountBalanceEquity.equity) : 'unavailable'}
-                        </span>
+                        <Trans
+                          k="dashboard.accountEquity"
+                          values={{
+                            value: (
+                              <Ltr className="font-bold text-green-600">
+                                {accountBalanceEquity?.equity != null ? formatCurrency(accountBalanceEquity.equity) : t("common.unavailable")}
+                              </Ltr>
+                            ),
+                          }}
+                        />
                       </p>
                     </div>
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No copier linked to your account.</p>
+                  <p className="text-sm text-muted-foreground">{t("dashboard.noCopier")}</p>
                 )}
               </CardContent>
             </Card>
@@ -790,30 +865,32 @@ export default function Dashboard(props: {
         {/* P&L Summary Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <PnLCard
-            title="This Week"
+            title={t("dashboard.thisWeek")}
             value={displayWeek}
-            subtitle="Last 7 days"
+            subtitle={t("dashboard.thisWeekSub")}
             icon={Calendar}
             isLoading={pnlLoading}
           />
           <PnLCard
-            title="This Month"
+            title={t("dashboard.thisMonth")}
             value={displayMonth}
-            subtitle="Current month"
+            subtitle={t("dashboard.thisMonthSub")}
             icon={Calendar}
             isLoading={pnlLoading}
           />
           <PnLCard
-            title="All Time"
+            title={t("dashboard.allTime")}
             value={displayAllTime}
-            subtitle="Total performance"
+            subtitle={t("dashboard.allTimeSub")}
             icon={TrendingUp}
             isLoading={pnlLoading}
           />
           <PnLCard
             title={profitShareTitle}
             value={displayProfitShare}
-            subtitle={`${((pnlSummary?.profitSharePercent ?? 0) * 100).toFixed(0)}% of profit since your last payout, after earlier losses`}
+            subtitle={t("dashboard.profitShareSub", {
+              percent: ((pnlSummary?.profitSharePercent ?? 0) * 100).toFixed(0),
+            })}
             icon={Percent}
             isLoading={pnlLoading}
           />
@@ -823,16 +900,18 @@ export default function Dashboard(props: {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-2xl font-bold">Open Positions</h2>
+              <h2 className="text-2xl font-bold">{t("dashboard.openPositions")}</h2>
               <p className="text-sm text-muted-foreground">
-                {positionsLoading ? "Loading..." : `${openPositions?.length ?? 0} active positions`}
+                {positionsLoading
+                  ? t("common.loading")
+                  : t("dashboard.activePositions", { count: openPositions?.length ?? 0 })}
               </p>
 
             </div>
             {!embedded && (
               <Button variant="outline" size="sm" onClick={() => setLocation("/history")}>
-                <Activity className="h-4 w-4 mr-2" />
-                View History
+                <Activity className="h-4 w-4 me-2" />
+                {t("dashboard.viewHistory")}
               </Button>
             )}
           </div>
@@ -854,15 +933,15 @@ export default function Dashboard(props: {
                   <TableRow>
                     {isViewedTraderAdmin && <TableHead>Magic</TableHead>}
                     {isViewedTraderAdmin && <TableHead>Trader</TableHead>}
-                    <TableHead>Ticket</TableHead>
-                    <TableHead>Symbol</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Volume</TableHead>
-                    <TableHead>Open Date</TableHead>
-                    <TableHead className="text-right">Open Price</TableHead>
-                    <TableHead className="text-right">TP</TableHead>
-                    <TableHead className="text-right">SL</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
+                    <TableHead>{t("table.ticket")}</TableHead>
+                    <TableHead>{t("table.symbol")}</TableHead>
+                    <TableHead>{t("table.type")}</TableHead>
+                    <TableHead className="text-end">{t("table.volume")}</TableHead>
+                    <TableHead>{t("table.openDate")}</TableHead>
+                    <TableHead className="text-end">{t("table.openPrice")}</TableHead>
+                    <TableHead className="text-end">{t("table.tp")}</TableHead>
+                    <TableHead className="text-end">{t("table.sl")}</TableHead>
+                    <TableHead className="text-end">{t("table.pnl")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -872,29 +951,29 @@ export default function Dashboard(props: {
                     return (
                       <TableRow key={position.id}>
                         {isViewedTraderAdmin && (
-                          <TableCell className="font-mono text-xs">{position.magicNumber}</TableCell>
+                          <TableCell className="font-mono text-xs"><Ltr>{position.magicNumber}</Ltr></TableCell>
                         )}
                         {isViewedTraderAdmin && (
                           <TableCell className="text-xs">{magicToTrader.get(position.magicNumber) ?? "—"}</TableCell>
                         )}
-                        <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
-                        <TableCell className="font-semibold">{position.symbol}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground"><Ltr>{position.id}</Ltr></TableCell>
+                        <TableCell className="font-semibold"><Ltr>{position.symbol}</Ltr></TableCell>
                         <TableCell>
                           <Badge className={`text-xs border-transparent text-white ${position.type === "BUY" ? "bg-blue-600" : "bg-red-600"}`}>
                             {position.type}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">{position.volume}</TableCell>
-                        <TableCell className="text-xs">{formatDateTime(position.openTime)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{formatPrice(position.openPrice)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {position.takeProfit ? formatPrice(position.takeProfit) : "—"}
+                        <TableCell className="text-end"><Ltr>{position.volume}</Ltr></TableCell>
+                        <TableCell className="text-xs"><Ltr>{formatDateTime(position.openTime)}</Ltr></TableCell>
+                        <TableCell className="text-end font-mono text-xs"><Ltr>{formatPrice(position.openPrice)}</Ltr></TableCell>
+                        <TableCell className="text-end font-mono text-xs">
+                          <Ltr>{position.takeProfit ? formatPrice(position.takeProfit) : "—"}</Ltr>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {position.stopLoss ? formatPrice(position.stopLoss) : "—"}
+                        <TableCell className="text-end font-mono text-xs">
+                          <Ltr>{position.stopLoss ? formatPrice(position.stopLoss) : "—"}</Ltr>
                         </TableCell>
-                        <TableCell className={`text-right font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
-                          {formatCurrency(totalPnL, true)}
+                        <TableCell className={`text-end font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
+                          <Ltr>{formatCurrency(totalPnL, true)}</Ltr>
                         </TableCell>
                       </TableRow>
                     );
@@ -906,9 +985,9 @@ export default function Dashboard(props: {
             <Card>
               <CardContent className="p-8 text-center">
                 <Activity className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                <h3 className="font-semibold mb-2">No Open Positions</h3>
+                <h3 className="font-semibold mb-2">{t("dashboard.noOpenPositions")}</h3>
                 <p className="text-sm text-muted-foreground">
-                  You don't have any active trading positions at the moment.
+                  {t("dashboard.noOpenPositionsBody")}
                 </p>
               </CardContent>
             </Card>
@@ -916,7 +995,7 @@ export default function Dashboard(props: {
         {/* Trade History — shown when embedded or viewing admin dashboard */}
         {showTradeHistory && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Trade History</h2>
+            <h2 className="text-2xl font-bold mb-4">{t("dashboard.tradeHistory")}</h2>
             {historyLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
@@ -935,17 +1014,17 @@ export default function Dashboard(props: {
                     <TableRow>
                       {isViewedTraderAdmin && <TableHead>Magic</TableHead>}
                       {isViewedTraderAdmin && <TableHead>Trader</TableHead>}
-                      <TableHead>Ticket</TableHead>
-                      <TableHead>Symbol</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Volume</TableHead>
-                      <TableHead>Open Date</TableHead>
-                      <TableHead>Close Date</TableHead>
-                      <TableHead className="text-right">Open Price</TableHead>
-                      <TableHead className="text-right">Close Price</TableHead>
-                      <TableHead className="text-right">TP</TableHead>
-                      <TableHead className="text-right">SL</TableHead>
-                      <TableHead className="text-right">P&L</TableHead>
+                      <TableHead>{t("table.ticket")}</TableHead>
+                      <TableHead>{t("table.symbol")}</TableHead>
+                      <TableHead>{t("table.type")}</TableHead>
+                      <TableHead className="text-end">{t("table.volume")}</TableHead>
+                      <TableHead>{t("table.openDate")}</TableHead>
+                      <TableHead>{t("table.closeDate")}</TableHead>
+                      <TableHead className="text-end">{t("table.openPrice")}</TableHead>
+                      <TableHead className="text-end">{t("table.closePrice")}</TableHead>
+                      <TableHead className="text-end">{t("table.tp")}</TableHead>
+                      <TableHead className="text-end">{t("table.sl")}</TableHead>
+                      <TableHead className="text-end">{t("table.pnl")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -957,33 +1036,33 @@ export default function Dashboard(props: {
                       return (
                         <TableRow key={position.id ?? index}>
                           {isViewedTraderAdmin && (
-                            <TableCell className="font-mono text-xs">{position.magicNumber}</TableCell>
+                            <TableCell className="font-mono text-xs"><Ltr>{position.magicNumber}</Ltr></TableCell>
                           )}
                           {isViewedTraderAdmin && (
                             <TableCell className="text-xs">{magicToTrader.get(position.magicNumber) ?? "—"}</TableCell>
                           )}
-                          <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
-                          <TableCell className="font-semibold">{position.symbol}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground"><Ltr>{position.id}</Ltr></TableCell>
+                          <TableCell className="font-semibold"><Ltr>{position.symbol}</Ltr></TableCell>
                           <TableCell>
                             <Badge className={`text-xs border-transparent text-white ${position.type === "BUY" ? "bg-blue-600" : "bg-red-600"}`}>
                               {position.type}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">{position.volume}</TableCell>
-                          <TableCell className="text-xs">{formatDateTime(position.openTime)}</TableCell>
-                          <TableCell className="text-xs">{formatDateTime(position.closeTime)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{formatPrice(position.openPrice)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{formatPrice(position.closePrice)}</TableCell>
-                          <TableCell className={`text-right font-mono text-xs ${tpHit ? "text-green-600 font-bold" : ""}`}>
-                            {position.takeProfit ? formatPrice(position.takeProfit) : "—"}
-                            {tpHit && <span className="ml-1 text-[10px]">HIT</span>}
+                          <TableCell className="text-end"><Ltr>{position.volume}</Ltr></TableCell>
+                          <TableCell className="text-xs"><Ltr>{formatDateTime(position.openTime)}</Ltr></TableCell>
+                          <TableCell className="text-xs"><Ltr>{formatDateTime(position.closeTime)}</Ltr></TableCell>
+                          <TableCell className="text-end font-mono text-xs"><Ltr>{formatPrice(position.openPrice)}</Ltr></TableCell>
+                          <TableCell className="text-end font-mono text-xs"><Ltr>{formatPrice(position.closePrice)}</Ltr></TableCell>
+                          <TableCell className={`text-end font-mono text-xs ${tpHit ? "text-green-600 font-bold" : ""}`}>
+                            <Ltr>{position.takeProfit ? formatPrice(position.takeProfit) : "—"}</Ltr>
+                            {tpHit && <span className="ms-1 text-[10px]">{t("common.hit")}</span>}
                           </TableCell>
-                          <TableCell className={`text-right font-mono text-xs ${slHit ? "text-destructive font-bold" : ""}`}>
-                            {position.stopLoss ? formatPrice(position.stopLoss) : "—"}
-                            {slHit && <span className="ml-1 text-[10px]">HIT</span>}
+                          <TableCell className={`text-end font-mono text-xs ${slHit ? "text-destructive font-bold" : ""}`}>
+                            <Ltr>{position.stopLoss ? formatPrice(position.stopLoss) : "—"}</Ltr>
+                            {slHit && <span className="ms-1 text-[10px]">{t("common.hit")}</span>}
                           </TableCell>
-                          <TableCell className={`text-right font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
-                            {formatCurrency(totalPnL, true)}
+                          <TableCell className={`text-end font-bold ${isPositive ? "text-green-600" : "text-destructive"}`}>
+                            <Ltr>{formatCurrency(totalPnL, true)}</Ltr>
                           </TableCell>
                         </TableRow>
                       );
@@ -1003,9 +1082,9 @@ export default function Dashboard(props: {
               <Card>
                 <CardContent className="p-8 text-center">
                   <Activity className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <h3 className="font-semibold mb-2">No Trade History</h3>
+                  <h3 className="font-semibold mb-2">{t("dashboard.noTradeHistory")}</h3>
                   <p className="text-sm text-muted-foreground">
-                    No closed positions found for this trader.
+                    {t("dashboard.noTradeHistoryBody")}
                   </p>
                 </CardContent>
               </Card>
@@ -1016,7 +1095,7 @@ export default function Dashboard(props: {
         {/* Payments — shown alongside trade history (embedded / admin view) */}
         {showTradeHistory && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Payments</h2>
+            <h2 className="text-2xl font-bold mb-4">{t("dashboard.payments")}</h2>
             {paymentsLoading ? (
               <Card>
                 <CardContent className="p-4">
@@ -1029,21 +1108,21 @@ export default function Dashboard(props: {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead>Network</TableHead>
-                        <TableHead className="text-right">Fee</TableHead>
-                        <TableHead>Note</TableHead>
-                        <TableHead className="text-right">Transaction</TableHead>
-                        <TableHead className="text-right">Proof</TableHead>
+                        <TableHead>{t("table.date")}</TableHead>
+                        <TableHead className="text-end">{t("table.amount")}</TableHead>
+                        <TableHead>{t("table.network")}</TableHead>
+                        <TableHead className="text-end">{t("table.fee")}</TableHead>
+                        <TableHead>{t("table.note")}</TableHead>
+                        <TableHead className="text-end">{t("table.transaction")}</TableHead>
+                        <TableHead className="text-end">{t("table.proof")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paysPaged.slice.map((p: any) => (
                         <TableRow key={p.id}>
-                          <TableCell className="text-xs">{formatDateTime(p.paymentDate)}</TableCell>
-                          <TableCell className="text-right font-semibold text-primary">
-                            {formatCurrency(p.amount)}
+                          <TableCell className="text-xs"><Ltr>{formatDateTime(p.paymentDate)}</Ltr></TableCell>
+                          <TableCell className="text-end font-semibold text-primary">
+                            <Ltr>{formatCurrency(p.amount)}</Ltr>
                           </TableCell>
                           <TableCell>
                             {p.network ? (
@@ -1052,13 +1131,13 @@ export default function Dashboard(props: {
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right text-xs text-muted-foreground">
-                            {p.networkFee ? formatCurrency(p.networkFee) : "—"}
+                          <TableCell className="text-end text-xs text-muted-foreground">
+                            <Ltr>{p.networkFee ? formatCurrency(p.networkFee) : "—"}</Ltr>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" dir="auto">
                             {p.narration || "—"}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-end">
                             {p.transactionHash && !String(p.transactionHash).startsWith("PENDING-") ? (
                               <a
                                 href={p.network === "ERC20"
@@ -1066,18 +1145,19 @@ export default function Dashboard(props: {
                                   : `https://tronscan.org/#/transaction/${p.transactionHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                dir="ltr"
                                 className="inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline"
                               >
                                 {String(p.transactionHash).slice(0, 8)}…{String(p.transactionHash).slice(-6)}
                                 <ExternalLink className="h-3 w-3" />
                               </a>
                             ) : (
-                              <span className="text-muted-foreground text-xs">Pending</span>
+                              <span className="text-muted-foreground text-xs">{t("common.pending")}</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-end">
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setProofPayment(p)}>
-                              Show Transmission Proof
+                              {t("common.showTransmissionProof")}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -1097,9 +1177,9 @@ export default function Dashboard(props: {
               <Card>
                 <CardContent className="p-8 text-center">
                   <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <h3 className="font-semibold mb-2">No Payments</h3>
+                  <h3 className="font-semibold mb-2">{t("dashboard.noPayments")}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Payments to this trader will appear here.
+                    {t("dashboard.noPaymentsBody")}
                   </p>
                 </CardContent>
               </Card>
@@ -1121,44 +1201,45 @@ export default function Dashboard(props: {
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
+            <DialogTitle>{t("settings.title")}</DialogTitle>
             <DialogDescription>
-              Manage your account settings and preferences
+              {t("settings.description")}
             </DialogDescription>
           </DialogHeader>
           
           <Tabs defaultValue="account" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="account">Account</TabsTrigger>
-              <TabsTrigger value="payments">Payments</TabsTrigger>
-              <TabsTrigger value="security">Security</TabsTrigger>
+              <TabsTrigger value="account">{t("settings.tabAccount")}</TabsTrigger>
+              <TabsTrigger value="payments">{t("settings.tabPayments")}</TabsTrigger>
+              <TabsTrigger value="security">{t("settings.tabSecurity")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="account" className="space-y-4 mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Account Information</CardTitle>
+                  <CardTitle className="text-lg">{t("settings.accountInfo")}</CardTitle>
                   <CardDescription>
-                    Your trading account details
+                    {t("settings.accountInfoDesc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm font-medium">Name</span>
+                    <span className="text-sm font-medium">{t("settings.name")}</span>
                     <span className="text-sm">{session?.name || '—'}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm font-medium">Magic Number</span>
-                    <span className="text-sm font-mono">{session?.magicNumber || '—'}</span>
+                    <span className="text-sm font-medium">{t("common.magicNumber")}</span>
+                    <span className="text-sm font-mono"><Ltr>{session?.magicNumber || '—'}</Ltr></span>
                   </div>
                   <div className="py-2 space-y-2">
                     <div>
-                      <Label htmlFor="telegramHandle" className="text-sm font-medium">Telegram Handle</Label>
-                      <p className="text-xs text-muted-foreground mt-0.5">Used to receive payment and important notifications via Telegram</p>
+                      <Label htmlFor="telegramHandle" className="text-sm font-medium">{t("settings.telegramHandle")}</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t("settings.telegramHandleHelp")}</p>
                     </div>
                     <div className="flex gap-2">
                       <Input
                         id="telegramHandle"
+                        dir="ltr"
                         placeholder="@yourusername"
                         value={telegramHandle}
                         onChange={(e) => setTelegramHandle(e.target.value)}
@@ -1172,16 +1253,16 @@ export default function Dashboard(props: {
                             { telegramHandle: telegramHandle.trim() },
                             {
                               onSuccess: () => {
-                                toast.success("Telegram handle saved");
+                                toast.success(t("settings.telegramSaved"));
                                 utils.trading.getSession.invalidate();
                               },
-                              onError: (e) => toast.error(e.message),
+                              onError: (e) => toast.error(tError(e.message)),
                             }
                           );
                         }}
                         disabled={updateTelegramMutation.isPending || !telegramHandle.trim()}
                       >
-                        {updateTelegramMutation.isPending ? "Saving..." : "Save"}
+                        {updateTelegramMutation.isPending ? t("common.saving") : t("common.save")}
                       </Button>
                     </div>
                     {session?.telegramHandle && (
@@ -1189,12 +1270,12 @@ export default function Dashboard(props: {
                         {session?.telegramConnected ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
                             <span className="h-2 w-2 rounded-full bg-green-500 inline-block"></span>
-                            Connected
+                            {t("settings.connected")}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
                             <span className="h-2 w-2 rounded-full bg-amber-500 inline-block"></span>
-                            Not connected — send /start to @RFXTraderBot
+                            {t("settings.notConnected")}
                           </span>
                         )}
                       </div>
@@ -1205,19 +1286,27 @@ export default function Dashboard(props: {
                       className="w-full"
                       onClick={() => {
                         testTelegramMutation.mutate(undefined, {
-                          onSuccess: () => toast.success("Test message sent! Check your Telegram."),
-                          onError: (e) => toast.error(e.message),
+                          onSuccess: () => toast.success(t("settings.testSent")),
+                          onError: (e) => toast.error(tError(e.message)),
                         });
                       }}
                       disabled={testTelegramMutation.isPending || !session?.telegramHandle || !session?.telegramConnected}
                     >
-                      {testTelegramMutation.isPending ? "Sending..." : "Send Test Message"}
+                      {testTelegramMutation.isPending ? t("common.sending") : t("settings.sendTestMessage")}
                     </Button>
                     {!session?.telegramHandle && (
-                      <p className="text-xs text-muted-foreground">Save a handle first, then send /start to @RFXTraderBot in Telegram.</p>
+                      <p className="text-xs text-muted-foreground">{t("settings.saveHandleFirst")}</p>
                     )}
                     {session?.telegramHandle && !session?.telegramConnected && (
-                      <p className="text-xs text-muted-foreground">Open Telegram, search <span className="font-mono">@RFXTraderBot</span> and send <span className="font-mono">/start</span> to activate notifications.</p>
+                      <p className="text-xs text-muted-foreground">
+                        <Trans
+                          k="settings.openTelegramHint"
+                          values={{
+                            bot: <Ltr className="font-mono">@RFXTraderBot</Ltr>,
+                            command: <Ltr className="font-mono">/start</Ltr>,
+                          }}
+                        />
+                      </p>
                     )}
                   </div>
                 </CardContent>
@@ -1227,18 +1316,19 @@ export default function Dashboard(props: {
             <TabsContent value="payments" className="space-y-4 mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">USDT Payment Details</CardTitle>
+                  <CardTitle className="text-lg">{t("settings.usdtTitle")}</CardTitle>
                   <CardDescription>
-                    Configure your USDT wallet for receiving payments
+                    {t("settings.usdtDesc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="usdtAddress">USDT Address</Label>
+                      <Label htmlFor="usdtAddress">{t("settings.usdtAddress")}</Label>
                       <Input
                         id="usdtAddress"
-                        placeholder="Enter your USDT wallet address"
+                        dir="ltr"
+                        placeholder={t("settings.usdtAddressPlaceholder")}
                         value={usdtAddress}
                         onChange={(e) => {
                           setUsdtAddress(e.target.value);
@@ -1251,13 +1341,13 @@ export default function Dashboard(props: {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="usdtNetwork">Network</Label>
+                      <Label htmlFor="usdtNetwork">{t("settings.network")}</Label>
                       <Select value={usdtNetwork} onValueChange={(value: "TRC20" | "ERC20") => {
                           setUsdtNetwork(value);
                           setUsdtAddressError(validateUsdtAddress(usdtAddress, value));
                         }}>
                         <SelectTrigger id="usdtNetwork">
-                          <SelectValue placeholder="Select network" />
+                          <SelectValue placeholder={t("settings.selectNetwork")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="TRC20">TRC20</SelectItem>
@@ -1266,7 +1356,7 @@ export default function Dashboard(props: {
                       </Select>
                     </div>
                     <Button onClick={handleSaveUsdtInfo} disabled={updateUsdtMutation.isPending || !!usdtAddressError}>
-                      {updateUsdtMutation.isPending ? "Saving..." : "Save USDT Information"}
+                      {updateUsdtMutation.isPending ? t("common.saving") : t("settings.saveUsdt")}
                     </Button>
                   </div>
                 </CardContent>
@@ -1274,43 +1364,43 @@ export default function Dashboard(props: {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Payment Summary</CardTitle>
+                  <CardTitle className="text-lg">{t("settings.summaryTitle")}</CardTitle>
                   <CardDescription>
-                    Your profit share and lifetime earnings
+                    {t("settings.summaryDesc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm font-medium">Profit Share Rate</span>
-                    <span className="text-sm">{((session?.profitShare ?? 0.35) * 100).toFixed(2)}%</span>
+                    <span className="text-sm font-medium">{t("settings.profitShareRate")}</span>
+                    <span className="text-sm"><Ltr>{((session?.profitShare ?? 0.35) * 100).toFixed(2)}%</Ltr></span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm font-medium">Lifetime Profit</span>
-                    <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfit ?? 0)}</span>
+                    <span className="text-sm font-medium">{t("settings.lifetimeProfit")}</span>
+                    <span className="text-sm font-semibold"><Ltr>{formatCurrency(session?.lifetimeProfit ?? 0)}</Ltr></span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm font-medium">Lifetime Profit Share</span>
-                    <span className="text-sm font-semibold">{formatCurrency(session?.lifetimeProfitShare ?? 0)}</span>
+                    <span className="text-sm font-medium">{t("settings.lifetimeProfitShare")}</span>
+                    <span className="text-sm font-semibold"><Ltr>{formatCurrency(session?.lifetimeProfitShare ?? 0)}</Ltr></span>
                   </div>
                   <div className="flex justify-between items-center py-2">
-                    <span className="text-sm font-medium">Lifetime Income</span>
-                    <span className="text-sm font-semibold text-primary">{formatCurrency(session?.lifetimeIncome ?? 0)}</span>
+                    <span className="text-sm font-medium">{t("settings.lifetimeIncome")}</span>
+                    <span className="text-sm font-semibold text-primary"><Ltr>{formatCurrency(session?.lifetimeIncome ?? 0)}</Ltr></span>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Payment History</CardTitle>
+                  <CardTitle className="text-lg">{t("settings.paymentHistory")}</CardTitle>
                   <CardDescription>
-                    All payments received from RFX
+                    {t("settings.paymentHistoryDesc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {paymentsLoading ? (
                     <div className="text-center py-8">
                       <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Loading payments...</p>
+                      <p className="text-sm text-muted-foreground">{t("settings.loadingPayments")}</p>
                     </div>
                    ) : paymentHistory && paymentHistory.length > 0 ? (
                     <div className="space-y-3">
@@ -1318,8 +1408,8 @@ export default function Dashboard(props: {
                         <div key={payment.id} className="border rounded-lg p-4">
                           <div className="flex justify-between items-start mb-2">
                             <div>
-                              <div className="font-semibold text-primary">{formatCurrency(payment.amount)}</div>
-                              <div className="text-xs text-muted-foreground">
+                              <div className="font-semibold text-primary"><Ltr>{formatCurrency(payment.amount)}</Ltr></div>
+                              <div className="text-xs text-muted-foreground" dir="ltr">
                                 {new Date(payment.paymentDate).toLocaleDateString('en-US', {
                                   year: 'numeric',
                                   month: 'long',
@@ -1337,12 +1427,12 @@ export default function Dashboard(props: {
                                 setProofDialogOpen(true);
                               }}
                             >
-                              <FileText className="h-4 w-4 mr-2" />
-                              Show Transmission Proof
+                              <FileText className="h-4 w-4 me-2" />
+                              {t("common.showTransmissionProof")}
                             </Button>
                           </div>
                           <div className="text-xs text-muted-foreground mt-2">
-                            <div className="font-mono break-all">TX: {payment.transactionHash}</div>
+                            <div className="font-mono break-all" dir="ltr">TX: {payment.transactionHash}</div>
                           </div>
                         </div>
                       ))}
@@ -1350,7 +1440,7 @@ export default function Dashboard(props: {
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
                       <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No payment history available</p>
+                      <p className="text-sm">{t("settings.noPaymentHistory")}</p>
                     </div>
                   )}
                 </CardContent>
@@ -1360,59 +1450,59 @@ export default function Dashboard(props: {
             <TabsContent value="security" className="space-y-4 mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Change Password</CardTitle>
+                  <CardTitle className="text-lg">{t("settings.changePassword")}</CardTitle>
                   <CardDescription>
-                    Update your account password
+                    {t("settings.changePasswordDesc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {passwordChangeStep === "form" ? (
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="currentPassword">Current Password</Label>
+                        <Label htmlFor="currentPassword">{t("settings.currentPassword")}</Label>
                         <Input
                           id="currentPassword"
                           type="password"
                           value={currentPassword}
                           onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder="Enter current password"
+                          placeholder={t("settings.currentPasswordPlaceholder")}
                           disabled={changePasswordMutation.isPending}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="newPassword">New Password</Label>
+                        <Label htmlFor="newPassword">{t("settings.newPassword")}</Label>
                         <Input
                           id="newPassword"
                           type="password"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="At least 6 characters"
+                          placeholder={t("common.atLeastSixCharacters")}
                           disabled={changePasswordMutation.isPending}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+                        <Label htmlFor="confirmNewPassword">{t("settings.confirmNewPassword")}</Label>
                         <Input
                           id="confirmNewPassword"
                           type="password"
                           value={confirmNewPassword}
                           onChange={(e) => setConfirmNewPassword(e.target.value)}
-                          placeholder="Confirm new password"
+                          placeholder={t("settings.confirmNewPasswordPlaceholder")}
                           disabled={changePasswordMutation.isPending}
                         />
                       </div>
                       {newPassword && confirmNewPassword && newPassword !== confirmNewPassword && (
-                        <p className="text-xs text-red-500">Passwords do not match</p>
+                        <p className="text-xs text-red-500">{t("common.passwordsDoNotMatch")}</p>
                       )}
                       <Button
                         className="w-full"
                         onClick={() => {
                           if (newPassword !== confirmNewPassword) {
-                            toast.error("Passwords do not match");
+                            toast.error(t("common.passwordsDoNotMatch"));
                             return;
                           }
                           if (newPassword.length < 6) {
-                            toast.error("Password must be at least 6 characters");
+                            toast.error(t("common.passwordTooShort"));
                             return;
                           }
                           changePasswordMutation.mutate({
@@ -1428,24 +1518,25 @@ export default function Dashboard(props: {
                           newPassword !== confirmNewPassword
                         }
                       >
-                        {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+                        {changePasswordMutation.isPending ? t("settings.changing") : t("settings.changePassword")}
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        A verification code has been sent to your Telegram. Enter it below to confirm the password change.
+                        {t("settings.codeSentEnterBelow")}
                       </p>
                       <div className="space-y-2">
-                        <Label htmlFor="passwordChangeCode">Verification Code</Label>
+                        <Label htmlFor="passwordChangeCode">{t("common.verificationCode")}</Label>
                         <Input
                           id="passwordChangeCode"
                           type="text"
                           inputMode="numeric"
+                          dir="ltr"
                           maxLength={6}
                           value={passwordChangeCode}
                           onChange={(e) => setPasswordChangeCode(e.target.value.replace(/\D/g, ""))}
-                          placeholder="Enter 6-digit code"
+                          placeholder={t("common.enterSixDigitCode")}
                           disabled={changePasswordMutation.isPending}
                           autoFocus
                           className="text-center text-2xl tracking-widest font-mono"
@@ -1462,7 +1553,7 @@ export default function Dashboard(props: {
                         }}
                         disabled={changePasswordMutation.isPending || passwordChangeCode.length !== 6}
                       >
-                        {changePasswordMutation.isPending ? "Verifying..." : "Verify & Change Password"}
+                        {changePasswordMutation.isPending ? t("common.verifying") : t("settings.verifyAndChange")}
                       </Button>
                       <button
                         type="button"
@@ -1472,7 +1563,7 @@ export default function Dashboard(props: {
                           setPasswordChangeCode("");
                         }}
                       >
-                        Cancel
+                        {t("common.cancel")}
                       </button>
                     </div>
                   )}
@@ -1484,8 +1575,9 @@ export default function Dashboard(props: {
       </Dialog>
 
       {/* Transmission Proof Dialog */}
+      {/* Payment proofs are English-only by decision, so pin this one left-to-right. */}
       <Dialog open={proofDialogOpen} onOpenChange={setProofDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent dir="ltr" lang="en" className="max-w-md">
           {selectedPayment && (
             <div className="space-y-6">
               {/* Header with Network-Specific USDT Logo */}
@@ -1514,13 +1606,13 @@ export default function Dashboard(props: {
               <div className="space-y-4">
                 <div className="flex justify-between items-start">
                   <span className="text-sm font-medium">Address name</span>
-                  <span className="text-sm text-right text-muted-foreground">{session?.name}</span>
+                  <span className="text-sm text-end text-muted-foreground">{session?.name}</span>
                 </div>
 
                 <div className="flex justify-between items-start gap-4">
                   <span className="text-sm font-medium">Address</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-right text-muted-foreground font-mono break-all max-w-[200px]">
+                    <span className="text-sm text-end text-muted-foreground font-mono break-all max-w-[200px]">
                       {session?.usdtAddress || 'Not provided'}
                     </span>
                     {session?.usdtAddress && (
@@ -1566,7 +1658,7 @@ export default function Dashboard(props: {
                 <div className="flex justify-between items-start gap-4">
                   <span className="text-sm font-medium">Transaction ID</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-right text-muted-foreground font-mono break-all max-w-[200px]">
+                    <span className="text-sm text-end text-muted-foreground font-mono break-all max-w-[200px]">
                       {selectedPayment.transactionHash}
                     </span>
                     <div className="flex gap-1">
@@ -1624,7 +1716,13 @@ export default function Dashboard(props: {
       
       {/* Footer with version info */}
       <div className="text-center py-4 text-xs text-muted-foreground">
-        App version {__APP_VERSION__} · Build {__BUILD_HASH__}
+        <Trans
+          k="dashboard.footer"
+          values={{
+            version: <Ltr>{__APP_VERSION__}</Ltr>,
+            build: <Ltr>{__BUILD_HASH__}</Ltr>,
+          }}
+        />
       </div>
     </div>
   );

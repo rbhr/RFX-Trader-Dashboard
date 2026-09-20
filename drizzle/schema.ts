@@ -59,6 +59,9 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   ]).default("Fortnightly"),
   telegramHandle: varchar("telegramHandle", { length: 100 }),
   telegramChatId: varchar("telegramChatId", { length: 30 }),
+  // Dashboard language, also used for Telegram messages and notifications
+  // written while the trader is offline. See shared/i18n.
+  language: mysqlEnum("language", ["en", "ur", "ar"]).notNull().default("en"),
   // Profit Tracking
   lifetimeProfit: decimal("lifetimeProfit", {
     precision: 15,
@@ -230,6 +233,12 @@ export const notifications = mysqlTable("notifications", {
   magicNumberId: int("magicNumberId").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   message: text("message").notNull(),
+  // System notifications also carry their shared/i18n key (the branch under
+  // `notifications.`, e.g. "breach") and JSON params, so they render in the
+  // reader's language. `title`/`message` hold the English text as the fallback
+  // and for admin-typed messages, which have no key.
+  i18nKey: varchar("i18nKey", { length: 100 }),
+  i18nParams: text("i18nParams"),
   type: mysqlEnum("type", ["payment", "info", "warning", "error"])
     .notNull()
     .default("info"),

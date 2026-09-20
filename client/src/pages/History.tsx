@@ -29,6 +29,8 @@ import {
 import { toast } from "sonner";
 import { PaginationBar, paginate, type PageSize } from "@/components/Pagination";
 import { TransmissionProofDialog, type ProofPayment } from "@/components/TransmissionProofDialog";
+import { useLanguage, Ltr } from "@/contexts/LanguageContext";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 function formatCurrency(value: number, showSign = false): string {
   const formatted = Math.abs(value).toLocaleString("en-US", {
@@ -74,6 +76,7 @@ function explorerUrl(network: string | null, hash: string): string {
 export default function History() {
   const [, setLocation] = useLocation();
   const { session, isLoading: sessionLoading } = useTradingSession();
+  const { t } = useLanguage();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const utils = trpc.useUtils();
 
@@ -122,9 +125,9 @@ export default function History() {
         utils.trading.getAllTimePositions.invalidate(),
         utils.trading.getPayments.invalidate(),
       ]);
-      toast.success("History refreshed");
+      toast.success(t("history.refreshed"));
     } catch {
-      toast.error("Failed to refresh history");
+      toast.error(t("history.refreshFailed"));
     } finally {
       setIsRefreshing(false);
     }
@@ -135,7 +138,7 @@ export default function History() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading history...</p>
+          <p className="text-muted-foreground">{t("history.loading")}</p>
         </div>
       </div>
     );
@@ -152,18 +155,21 @@ export default function History() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={() => setLocation("/dashboard")}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                <ArrowLeft className="h-4 w-4 me-2 rtl:rotate-180" />
+                {t("common.back")}
               </Button>
               <div>
-                <h1 className="text-xl font-bold">Trade History</h1>
-                <p className="text-sm text-muted-foreground">All-time trading performance</p>
+                <h1 className="text-xl font-bold">{t("history.title")}</h1>
+                <p className="text-sm text-muted-foreground">{t("history.subtitle")}</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <LanguageSelector />
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw className={`h-4 w-4 me-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                {t("common.refresh")}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -174,7 +180,7 @@ export default function History() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <HistoryIcon className="h-5 w-5" />
-              Trade History
+              {t("history.title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -188,7 +194,7 @@ export default function History() {
               <div className="py-10 text-center">
                 <HistoryIcon className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
-                  Your closed trading positions will appear here once you complete trades.
+                  {t("history.emptyTrades")}
                 </p>
               </div>
             ) : (
@@ -197,17 +203,17 @@ export default function History() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Ticket</TableHead>
-                        <TableHead>Symbol</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Volume</TableHead>
-                        <TableHead>Open</TableHead>
-                        <TableHead>Close</TableHead>
-                        <TableHead className="text-right">Open Price</TableHead>
-                        <TableHead className="text-right">Close Price</TableHead>
-                        <TableHead className="text-right">TP</TableHead>
-                        <TableHead className="text-right">SL</TableHead>
-                        <TableHead className="text-right">P&L</TableHead>
+                        <TableHead>{t("table.ticket")}</TableHead>
+                        <TableHead>{t("table.symbol")}</TableHead>
+                        <TableHead>{t("table.type")}</TableHead>
+                        <TableHead className="text-end">{t("table.volume")}</TableHead>
+                        <TableHead>{t("table.open")}</TableHead>
+                        <TableHead>{t("table.close")}</TableHead>
+                        <TableHead className="text-end">{t("table.openPrice")}</TableHead>
+                        <TableHead className="text-end">{t("table.closePrice")}</TableHead>
+                        <TableHead className="text-end">{t("table.tp")}</TableHead>
+                        <TableHead className="text-end">{t("table.sl")}</TableHead>
+                        <TableHead className="text-end">{t("table.pnl")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -218,28 +224,28 @@ export default function History() {
                         const slHit = wasSLHit(position);
                         return (
                           <TableRow key={position.id}>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{position.id}</TableCell>
-                            <TableCell className="font-semibold">{position.symbol}</TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground"><Ltr>{position.id}</Ltr></TableCell>
+                            <TableCell className="font-semibold"><Ltr>{position.symbol}</Ltr></TableCell>
                             <TableCell>
                               <Badge className={`text-xs border-transparent text-white ${position.type === "BUY" ? "bg-blue-600" : "bg-red-600"}`}>
                                 {position.type}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right">{position.volume}</TableCell>
-                            <TableCell className="text-xs">{formatDateTime(position.openTime)}</TableCell>
-                            <TableCell className="text-xs">{formatDateTime(position.closeTime)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{formatPrice(position.openPrice)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{formatPrice(position.closePrice)}</TableCell>
-                            <TableCell className={`text-right font-mono text-xs ${tpHit ? "text-green-600 font-bold" : ""}`}>
-                              {position.takeProfit ? formatPrice(position.takeProfit) : "—"}
-                              {tpHit && <span className="ml-1 text-[10px]">HIT</span>}
+                            <TableCell className="text-end"><Ltr>{position.volume}</Ltr></TableCell>
+                            <TableCell className="text-xs"><Ltr>{formatDateTime(position.openTime)}</Ltr></TableCell>
+                            <TableCell className="text-xs"><Ltr>{formatDateTime(position.closeTime)}</Ltr></TableCell>
+                            <TableCell className="text-end font-mono text-xs"><Ltr>{formatPrice(position.openPrice)}</Ltr></TableCell>
+                            <TableCell className="text-end font-mono text-xs"><Ltr>{formatPrice(position.closePrice)}</Ltr></TableCell>
+                            <TableCell className={`text-end font-mono text-xs ${tpHit ? "text-green-600 font-bold" : ""}`}>
+                              <Ltr>{position.takeProfit ? formatPrice(position.takeProfit) : "—"}</Ltr>
+                              {tpHit && <span className="ms-1 text-[10px]">{t("common.hit")}</span>}
                             </TableCell>
-                            <TableCell className={`text-right font-mono text-xs ${slHit ? "text-destructive font-bold" : ""}`}>
-                              {position.stopLoss ? formatPrice(position.stopLoss) : "—"}
-                              {slHit && <span className="ml-1 text-[10px]">HIT</span>}
+                            <TableCell className={`text-end font-mono text-xs ${slHit ? "text-destructive font-bold" : ""}`}>
+                              <Ltr>{position.stopLoss ? formatPrice(position.stopLoss) : "—"}</Ltr>
+                              {slHit && <span className="ms-1 text-[10px]">{t("common.hit")}</span>}
                             </TableCell>
-                            <TableCell className={`text-right font-bold ${pnl >= 0 ? "text-primary" : "text-destructive"}`}>
-                              {formatCurrency(pnl, true)}
+                            <TableCell className={`text-end font-bold ${pnl >= 0 ? "text-primary" : "text-destructive"}`}>
+                              <Ltr>{formatCurrency(pnl, true)}</Ltr>
                             </TableCell>
                           </TableRow>
                         );
@@ -264,7 +270,7 @@ export default function History() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <CreditCard className="h-5 w-5" />
-              Payments
+              {t("history.payments")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -278,7 +284,7 @@ export default function History() {
               <div className="py-10 text-center">
                 <CreditCard className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
-                  Payments made to you will appear here.
+                  {t("history.emptyPayments")}
                 </p>
               </div>
             ) : (
@@ -287,21 +293,21 @@ export default function History() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead>Network</TableHead>
-                        <TableHead className="text-right">Fee</TableHead>
-                        <TableHead>Note</TableHead>
-                        <TableHead className="text-right">Transaction</TableHead>
-                        <TableHead className="text-right">Proof</TableHead>
+                        <TableHead>{t("table.date")}</TableHead>
+                        <TableHead className="text-end">{t("table.amount")}</TableHead>
+                        <TableHead>{t("table.network")}</TableHead>
+                        <TableHead className="text-end">{t("table.fee")}</TableHead>
+                        <TableHead>{t("table.note")}</TableHead>
+                        <TableHead className="text-end">{t("table.transaction")}</TableHead>
+                        <TableHead className="text-end">{t("table.proof")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {pays.slice.map((p) => (
                         <TableRow key={p.id}>
-                          <TableCell className="text-xs">{formatDateTime(p.paymentDate)}</TableCell>
-                          <TableCell className="text-right font-semibold text-primary">
-                            {formatCurrency(p.amount)}
+                          <TableCell className="text-xs"><Ltr>{formatDateTime(p.paymentDate)}</Ltr></TableCell>
+                          <TableCell className="text-end font-semibold text-primary">
+                            <Ltr>{formatCurrency(p.amount)}</Ltr>
                           </TableCell>
                           <TableCell>
                             {p.network ? (
@@ -310,18 +316,19 @@ export default function History() {
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right text-xs text-muted-foreground">
-                            {p.networkFee ? formatCurrency(p.networkFee) : "—"}
+                          <TableCell className="text-end text-xs text-muted-foreground">
+                            <Ltr>{p.networkFee ? formatCurrency(p.networkFee) : "—"}</Ltr>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" dir="auto">
                             {p.narration || "—"}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-end">
                             {p.transactionHash ? (
                               <a
                                 href={explorerUrl(p.network, p.transactionHash)}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                dir="ltr"
                                 className="inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline"
                               >
                                 {p.transactionHash.slice(0, 8)}…{p.transactionHash.slice(-6)}
@@ -331,14 +338,14 @@ export default function History() {
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-end">
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs"
                               onClick={() => setProofPayment(p)}
                             >
-                              Show Transmission Proof
+                              {t("common.showTransmissionProof")}
                             </Button>
                           </TableCell>
                         </TableRow>

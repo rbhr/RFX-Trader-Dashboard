@@ -46,6 +46,30 @@ Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for e
 - **DB shell**: `docker compose exec dashboard-mysql mysql -urfx -p rfx_trader`
   (MySQL data is bind-mounted at `data/mysql` on the host, so it survives container recreation.)
 
+## Translations (English / Urdu / Arabic)
+
+Trader-facing text is translated; English is the default and the language wording is
+discussed in. **Whenever trader-facing text changes, update the Urdu and Arabic in the same
+change** — Claude writes the translations.
+
+- All trader-facing strings live in `shared/i18n/en.ts` (the source of truth). `ur.ts` and
+  `ar.ts` are typed against it, so a missing or extra key fails `pnpm check`, and
+  `server/i18n.test.ts` checks that placeholders and Telegram HTML tags match.
+- Client: `useLanguage()` gives `t()`, `tError()` (server error messages) and `lang`;
+  `<Trans>` is for sentences with styled values inside, `<Ltr>` wraps figures (money, lots,
+  prices, tickets, hashes, dates) so they read left-to-right with Western digits.
+- Urdu and Arabic mirror the layout (`<html dir="rtl">`): use logical Tailwind classes
+  (`ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`, `text-start`/`text-end`), never `ml-`/`mr-`/
+  `text-right` on trader pages. Directional icons get `rtl:rotate-180`.
+- Server: the trader's choice is `magic_numbers.language`. Telegram builders take a `lang`;
+  send through `localizedTelegram(...)` so the admin Logs show English and the trader's
+  language together. System notifications go through `createSystemNotification`, which stores
+  the i18n key + params so they render in the reader's language.
+- Keep trading terms in Latin script in every language: lot, SL/TP, stop-loss, take-profit,
+  P&L, Magic Number, USDT, Telegram, Incubator, Live.
+- English-only by decision: admin screens (`/admin/*` is forced to English), the payment
+  (transmission) proof dialogs, admin-typed broadcasts/DMs, admin alerts.
+
 ## User Preferences
 
 - Always provide full Docker commands for any server/DB operations — never assume the user will translate `pnpm db:push` into the Docker equivalent

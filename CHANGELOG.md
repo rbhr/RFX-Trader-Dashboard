@@ -29,6 +29,20 @@ hash.
   `GET /apiKeys/current`.
 - New incubator accounts get aggregate-per-symbol guardrails, a 4% max daily loss
   and a 5% daily profit limit; new live copiers get the news filter.
+- **Language selector: English, Urdu (اردو) and Arabic (العربية).** On the Login page, the
+  trader Dashboard and History. English is the default. The choice is saved on the trader
+  (`magic_numbers.language`) so it follows them across devices; a choice made on the Login
+  page before signing in is saved once they are in. Urdu and Arabic mirror the layout
+  right-to-left, while money, lots, prices, tickets, hashes and dates stay left-to-right
+  with Western digits. Self-hosted Noto Sans Arabic gives both a consistent face.
+- **Telegram messages and in-app notifications in the trader's language** — breach,
+  trailing limit, missed trade, payment, onboarding, verification codes, the test message
+  and the bot's /start replies. The admin **Logs** show each outgoing message in English
+  and in the language it was sent in. System notifications store their translation key and
+  params, so they follow the reader's language (an admin viewing as a trader reads English).
+- `shared/i18n/` holds the three dictionaries. Urdu and Arabic are typed against English, so
+  a missing translation fails the typecheck; `server/i18n.test.ts` checks placeholders and
+  Telegram HTML tags line up.
 
 ### Changed
 
@@ -49,6 +63,9 @@ hash.
   are bold red. A disabled copier reads "- Disabled by your Administrator", and
   the line warning that trades placed now do not count toward profit share is
   red.
+- Admin screens, the payment (transmission) proof and admin-typed messages stay English by
+  decision; `/admin/*` is always rendered in English, left-to-right.
+- The breach toast on the dashboard now also says the account is permanently breached.
 
 ### Fixed
 
@@ -63,6 +80,16 @@ hash.
   lists its daily limit first, the dashboard and breach monitor used the daily
   limit's figure and an admin edit wrote the dollar stopout into the daily limit.
   All four now share `findActualRiskLimit` (riskType 4).
+- **Max open trades / max total lots could not be set to 0 in Edit Trader.** The dialog and
+  the server both rejected 0, so the save was silently skipped. 0 (or a cleared field) now
+  saves as MetaCopier's "no limit", and the trader dashboard says "no limit" rather than
+  "unavailable".
+
+### Deploy note
+
+- Schema: adds `magic_numbers.language` and `notifications.i18nKey` / `i18nParams`. Add the
+  columns **before** the new container starts (old code ignores them; new code selects them),
+  then confirm with `docker exec -it rfx-trader-dashboard pnpm db:push`.
 
 ## [3.1.5] — 2026-09-07
 
