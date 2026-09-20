@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2, Pencil, Check, Banknote } from "lucide-react";
 import {

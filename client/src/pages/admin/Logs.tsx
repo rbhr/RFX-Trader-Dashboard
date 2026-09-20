@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollText, RefreshCw, Wifi, WifiOff } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import AdminLayout from "@/components/AdminLayout";
 import { PaginationBar, type PageSize } from "@/components/Pagination";
 

@@ -2247,6 +2247,50 @@ export const appRouter = router({
         };
       }),
 
+    // Every copier fed by this trader's account other than the one into their
+    // current master (which Copy Settings edits). Read-only, for Edit Trader.
+    getTraderOtherCopiers: adminProcedure
+      .input(z.object({ traderId: z.number() }))
+      .query(async ({ input }) => {
+        const trader = await getMagicNumberById(input.traderId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+        if (!trader.mcAccountId) return [];
+
+        const copiers = await metaCopierService.getCopiersBySourceAccount(
+          trader.mcAccountId
+        );
+        return copiers
+          .filter(
+            (c: any) =>
+              !trader.liveAccountNumber ||
+              c.toAccountLogin !== trader.liveAccountNumber
+          )
+          .map((c: any) => {
+            const scaleTypeId: number = c.scaleType?.id ?? c.scaleType;
+            const fixed = scaleTypeId === 3;
+            return {
+              id: c.id as string,
+              accountAlias: (c.toAccountAlias as string) ?? "",
+              accountNumber: (c.toAccountLogin as string) ?? "",
+              isDemo: c.toAccountId === DEMO_SLAVE_ACCOUNT_ID,
+              // Scale type 4 is "No scaling", shown as a plain multiplier.
+              copyType: fixed
+                ? "Fixed Lot"
+                : scaleTypeId === 4
+                  ? "Multiplier"
+                  : `${c.scaleType?.name ?? "Scaled"} scaling`,
+              copyRatio: fixed
+                ? `${Number(c.fixedLotSize ?? 0).toFixed(2)} lots`
+                : `${Number(c.multiplier ?? 1).toFixed(2)}x`,
+              enabled: !!c.active,
+              monitorOnly: !!c.monitorOnly,
+            };
+          })
+          .sort((a, b) => a.accountAlias.localeCompare(b.accountAlias));
+      }),
+
     // Set how a trader's trades are sized on their master account, creating
     // the copier if the master has none from them yet (a changed master). An
     // existing copier keeps its active state, and copiers into any other

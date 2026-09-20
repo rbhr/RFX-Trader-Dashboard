@@ -5,6 +5,21 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.4] — 2026-09-20
+
+### Added
+
+- **"Other Copiers" in Edit Trader.** At the bottom of Copy Settings, a read-only list of every
+  other account this trader's account copies into — account number and name, copy type, copy
+  ratio, and whether it is enabled. The copier into the trader's current master is the one Copy
+  Settings edits, so it is not repeated; the demo routing copier is marked as such.
+
+### Changed
+
+- **Toasts wait for each other and stay up longer.** Edit Trader can fire four saves at once,
+  and their toasts stacked and expired together. `@/lib/toast` now shows one at a time, in
+  order, for 5.5s instead of 4s (explicit durations are kept). Progress toasts are unaffected.
+
 ## [4.0.3] — 2026-09-20
 
 ### Fixed

@@ -40,7 +40,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Pencil,
   Trash2,
@@ -524,6 +524,12 @@ export default function ManageTraders() {
       { enabled: editDialogOpen && !!selectedTrader?.mcAccountId, staleTime: 0 }
     );
 
+  const { data: otherCopiers, isLoading: otherCopiersLoading } =
+    trpc.admin.getTraderOtherCopiers.useQuery(
+      { traderId: selectedTrader?.id ?? 0 },
+      { enabled: editDialogOpen && !!selectedTrader?.mcAccountId, staleTime: 0 }
+    );
+
   // Fill the controls once per dialog open; the baseline doubles as the
   // "already loaded" flag so a background refetch can't clobber typing. Wait
   // for the fetch to settle — reopening a trader serves the cached copy first.
@@ -644,6 +650,7 @@ export default function ManageTraders() {
   const applyCopySettings = trpc.admin.applyTraderCopySettings.useMutation({
     onSuccess: data => {
       utils.admin.listTraders.invalidate();
+      utils.admin.getTraderOtherCopiers.invalidate();
       toast.success(
         data.created
           ? `Copier into ${data.masterAlias} created`
@@ -2486,6 +2493,56 @@ export default function ManageTraders() {
                           ? "Applies to the copier into this trader's master account."
                           : "No copier into this master account yet. Change these and save to create one (disabled); left at 1.00x, saving creates nothing."}
                 </p>
+
+                {/* Read-only: everywhere else this account copies to. */}
+                {selectedTrader?.mcAccountId && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-bold mb-2">Other Copiers</h4>
+                    {otherCopiersLoading ? (
+                      <p className="text-xs text-muted-foreground">Loading...</p>
+                    ) : !otherCopiers || otherCopiers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        This account copies nowhere else.
+                      </p>
+                    ) : (
+                      <div className="space-y-1">
+                        {otherCopiers.map(c => (
+                          <div
+                            key={c.id}
+                            className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 text-sm bg-muted/50 rounded px-3 py-2"
+                          >
+                            <span className="truncate">
+                              <span className="font-mono font-medium">
+                                {c.accountNumber}
+                              </span>{" "}
+                              <span className="text-muted-foreground">
+                                {c.accountAlias}
+                                {c.isDemo ? " · demo (magic routing)" : ""}
+                              </span>
+                            </span>
+                            <span className="text-muted-foreground">
+                              {c.copyType}
+                            </span>
+                            <span className="font-mono">{c.copyRatio}</span>
+                            <span
+                              className={
+                                c.enabled
+                                  ? "text-xs font-medium text-green-600"
+                                  : "text-xs font-medium text-destructive"
+                              }
+                            >
+                              {c.enabled
+                                ? c.monitorOnly
+                                  ? "Enabled (manage only)"
+                                  : "Enabled"
+                                : "Disabled"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Risk controls (all held in MetaCopier) */}

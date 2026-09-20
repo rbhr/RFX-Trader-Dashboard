@@ -26,7 +26,7 @@ import {
   CreditCard,
   ExternalLink,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { PaginationBar, paginate, type PageSize } from "@/components/Pagination";
 import { TransmissionProofDialog, type ProofPayment } from "@/components/TransmissionProofDialog";
 import { useLanguage, Ltr } from "@/contexts/LanguageContext";

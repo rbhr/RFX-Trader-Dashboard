@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo } from "react";
 import { Plus, Pencil, Trash2, Users, Check, X, AlertCircle, Clock } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 function TrailingRiskLimitConfig() {
   const { data: config, isLoading } =

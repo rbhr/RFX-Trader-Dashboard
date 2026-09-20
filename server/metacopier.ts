@@ -586,6 +586,7 @@ class MetaCopierService {
                 ...copier,
                 toAccountId: account.id,
                 toAccountAlias: account.alias,
+                toAccountLogin: account.loginAccountNumber,
               });
             }
           }

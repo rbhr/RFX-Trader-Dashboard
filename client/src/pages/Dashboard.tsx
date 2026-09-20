@@ -26,7 +26,7 @@ import {
   ExternalLink,
   CreditCard
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useLanguage, Trans, Ltr } from "@/contexts/LanguageContext";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { isTranslationKey, localizeMissingParts } from "@shared/i18n";
