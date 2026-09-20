@@ -128,10 +128,13 @@ fix-copier-magic-only.mjs
 fix-copier-settings.mjs
 fix-zarab-copier-magic.mjs
 hash-existing-passwords.mjs
+demo-copier-followups.mjs
+match-demo-copiers-to-live.mjs
 update-copiers.mjs
 update-guardrails.mjs
 update-trader-telegram.mjs
 zarab-switch-live.mjs
+zero-copier-limits.mjs
 
 # graphify knowledge-graph output (generated locally)
 graphify-out/
