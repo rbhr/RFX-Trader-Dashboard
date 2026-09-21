@@ -18,6 +18,7 @@ export type LogCategory =
   | "socket"
   | "payment"
   | "missed_trade"
+  | "limit_close"
   | "system";
 
 export type LogLevel = "info" | "warn" | "error";

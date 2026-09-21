@@ -5,6 +5,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.5] — 2026-09-21
+
+### Added
+
+- **Limit-close monitor.** MetaCopier enforces a trader's lot limit (Trade Guardrails) and
+  max open trades by closing the offending trade itself, within about a second, and only
+  writes a line to its own log — so the trader saw a trade vanish and was never told why
+  (Sameer 81301, 0.25 lots against a 0.04 limit on 2026-09-21; six other closes that day).
+  The monitor reads that log, records each close under a new **Limit Closes** log category and
+  tells the trader in-app and on Telegram, in their language. MetaCopier's socket has no log
+  stream, so the account's own history/positions push triggers a log read about 1.5s later
+  (2-3s end to end), with a 30s poll behind it; each read is one ~50KB request for the whole
+  project. The position is persisted, so a restart neither repeats nor skips a close, and a
+  close older than 30 minutes is logged but not sent.
+- It reports the close; it cannot prevent it. By the time the guardrail closes the incubator
+  trade the copier has usually already opened it on live. Keeping oversized trades off live
+  needs copier-level limits kept in step with the account's — tracked as high priority in
+  `todo.md`.
+
 ## [4.0.4] — 2026-09-20
 
 ### Added

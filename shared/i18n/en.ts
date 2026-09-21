@@ -269,6 +269,21 @@ export const en = {
       message:
         "You have received a payment of ${amount}. Transaction hash: {hash}",
     },
+    lotLimitClose: {
+      title: "[Magic {magicNumber}] Trade Closed — Lot Limit Exceeded",
+      message:
+        "Your {symbol} trade of {volume} lots took your open lots on {symbol} to {total}, above your limit of {limit}, so it was closed. Keep your total open lots within your limit.",
+    },
+    tradeLimitClose: {
+      title: "[Magic {magicNumber}] Trade Closed — Too Many Open Trades",
+      message:
+        "Your {symbol} trade of {volume} lots was closed because you already had your maximum of {limit} trades open at the same time.",
+    },
+    tradeLimitCloseNoMax: {
+      title: "[Magic {magicNumber}] Trade Closed — Too Many Open Trades",
+      message:
+        "Your {symbol} trade of {volume} lots was closed because you already had your maximum number of trades open at the same time.",
+    },
     tradingReenabled: {
       title: "[Magic {magicNumber}] Trading Re-enabled",
       message:
@@ -292,6 +307,12 @@ export const en = {
       "[Magic {magicNumber}] ⚠️ <b>Trade Not Copied to Live</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade had no <b>{missing}</b>, so it was not copied to your live account. It has been closed on your incubator account.\n\nAlways set a stop-loss and take-profit so your trades copy to live.",
     payment:
       "[Magic {magicNumber}] 💰 <b>Payment Received</b>\n\n{greeting}\n\nA payment of <b>{amount} USDT</b> has been sent to your wallet.\n\n📋 <b>Details</b>\n• Network: {network}\n• Network Fee: {fee} USDT\n• Date: {date}\n• TX: {txLink}\n\nYou can view the full transmission proof in your RFX Trader dashboard.",
+    lotLimitClose:
+      "[Magic {magicNumber}] ⚠️ <b>Trade Closed — Lot Limit Exceeded</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade of <b>{volume} lots</b> took your open lots on {symbol} to <b>{total}</b>, above your limit of <b>{limit}</b>, so it was closed.\n\nKeep your total open lots within your limit.",
+    tradeLimitClose:
+      "[Magic {magicNumber}] ⚠️ <b>Trade Closed — Too Many Open Trades</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade of <b>{volume} lots</b> was closed because you already had your maximum of <b>{limit}</b> trades open at the same time.",
+    tradeLimitCloseNoMax:
+      "[Magic {magicNumber}] ⚠️ <b>Trade Closed — Too Many Open Trades</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade of <b>{volume} lots</b> was closed because you already had your maximum number of trades open at the same time.",
     loginDetailsHeading: "LOGIN DETAILS",
     verificationCode:
       "[Magic {magicNumber}] 🔐 <b>Verification Code</b>\n\n{greeting}\n\nYour verification code for <b>{purpose}</b> is:\n\n<code>{code}</code>\n\nThis code expires in 5 minutes. If you didn't request this, ignore this message.",

@@ -256,6 +256,21 @@ export const ar: Translations = {
       title: "[Magic {magicNumber}] تم استلام دفعة",
       message: "لقد استلمت دفعة بقيمة ${amount}. معرّف المعاملة (hash): {hash}",
     },
+    lotLimitClose: {
+      title: "[Magic {magicNumber}] تم إغلاق الصفقة — تجاوز حد lots",
+      message:
+        "صفقتك على {symbol} بحجم {volume} lots رفعت إجمالي lots المفتوحة لديك على {symbol} إلى {total}، وهو أعلى من حدّك البالغ {limit}، لذلك تم إغلاقها. حافظ على إجمالي lots المفتوحة ضمن حدّك.",
+    },
+    tradeLimitClose: {
+      title: "[Magic {magicNumber}] تم إغلاق الصفقة — عدد الصفقات المفتوحة كبير",
+      message:
+        "تم إغلاق صفقتك على {symbol} بحجم {volume} lots لأن لديك بالفعل الحد الأقصى البالغ {limit} من الصفقات المفتوحة في الوقت نفسه.",
+    },
+    tradeLimitCloseNoMax: {
+      title: "[Magic {magicNumber}] تم إغلاق الصفقة — عدد الصفقات المفتوحة كبير",
+      message:
+        "تم إغلاق صفقتك على {symbol} بحجم {volume} lots لأنك بلغت بالفعل الحد الأقصى لعدد الصفقات المفتوحة في الوقت نفسه.",
+    },
     tradingReenabled: {
       title: "[Magic {magicNumber}] تمت إعادة تفعيل التداول",
       message:
@@ -278,6 +293,12 @@ export const ar: Translations = {
       "[Magic {magicNumber}] ⚠️ <b>لم تُنسخ الصفقة إلى الحساب الحقيقي (Live)</b>\n\n{greeting}\n\nصفقتك على <b>{symbol}</b> لم يكن فيها <b>{missing}</b>، لذلك لم تُنسخ إلى حسابك الحقيقي (Live). وقد تم إغلاقها في حساب Incubator الخاص بك.\n\nضع دائماً stop-loss و take-profit حتى تُنسخ صفقاتك إلى الحساب الحقيقي.",
     payment:
       "[Magic {magicNumber}] 💰 <b>تم استلام دفعة</b>\n\n{greeting}\n\nتم إرسال دفعة بقيمة <b>{amount} USDT</b> إلى محفظتك.\n\n📋 <b>التفاصيل</b>\n• الشبكة: {network}\n• رسوم الشبكة: {fee} USDT\n• التاريخ: {date}\n• TX: {txLink}\n\nيمكنك الاطلاع على إثبات التحويل كاملاً في لوحة متداولي RFX.",
+    lotLimitClose:
+      "[Magic {magicNumber}] ⚠️ <b>تم إغلاق الصفقة — تجاوز حد lots</b>\n\n{greeting}\n\nصفقتك على <b>{symbol}</b> بحجم <b>{volume} lots</b> رفعت إجمالي lots المفتوحة لديك على {symbol} إلى <b>{total}</b>، وهو أعلى من حدّك البالغ <b>{limit}</b>، لذلك تم إغلاقها.\n\nحافظ على إجمالي lots المفتوحة ضمن حدّك.",
+    tradeLimitClose:
+      "[Magic {magicNumber}] ⚠️ <b>تم إغلاق الصفقة — عدد الصفقات المفتوحة كبير</b>\n\n{greeting}\n\nتم إغلاق صفقتك على <b>{symbol}</b> بحجم <b>{volume} lots</b> لأن لديك بالفعل الحد الأقصى البالغ <b>{limit}</b> من الصفقات المفتوحة في الوقت نفسه.",
+    tradeLimitCloseNoMax:
+      "[Magic {magicNumber}] ⚠️ <b>تم إغلاق الصفقة — عدد الصفقات المفتوحة كبير</b>\n\n{greeting}\n\nتم إغلاق صفقتك على <b>{symbol}</b> بحجم <b>{volume} lots</b> لأنك بلغت بالفعل الحد الأقصى لعدد الصفقات المفتوحة في الوقت نفسه.",
     loginDetailsHeading: "بيانات تسجيل الدخول",
     verificationCode:
       "[Magic {magicNumber}] 🔐 <b>رمز التحقق</b>\n\n{greeting}\n\nرمز التحقق الخاص بك من أجل <b>{purpose}</b> هو:\n\n<code>{code}</code>\n\nتنتهي صلاحية هذا الرمز خلال 5 دقائق. إذا لم تطلب ذلك فتجاهل هذه الرسالة.",

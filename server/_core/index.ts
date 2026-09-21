@@ -12,6 +12,7 @@ import { startTelegramPolling } from "../telegram";
 import { startBreachMonitor } from "../breachMonitor";
 import { startTrailingRiskLimitMonitor } from "../trailingRiskLimit";
 import { startMissedTradeMonitor } from "../missedTradeMonitor";
+import { startLimitCloseMonitor } from "../limitCloseMonitor";
 import { startMetaCopierSocket } from "../metacopierSocket";
 import { registerLiveStreamRoutes } from "../liveStream";
 
@@ -92,6 +93,11 @@ async function startServer() {
   // Start missed-trade monitor — closes incubator trades missing SL/TP that the
   // copier never copied to live, then notifies the trader (runs every 1 minute)
   startMissedTradeMonitor();
+
+  // Start limit-close monitor — tells a trader when MetaCopier closed their
+  // trade for exceeding their lot or open-trade limit (socket-triggered, with
+  // a 30s poll behind it)
+  startLimitCloseMonitor();
 }
 
 startServer().catch(console.error);

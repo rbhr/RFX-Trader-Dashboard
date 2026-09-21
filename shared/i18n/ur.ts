@@ -255,6 +255,21 @@ export const ur: Translations = {
       title: "[Magic {magicNumber}] ادائیگی موصول ہو گئی",
       message: "آپ کو ${amount} کی ادائیگی موصول ہوئی ہے۔ ٹرانزیکشن ہیش: {hash}",
     },
+    lotLimitClose: {
+      title: "[Magic {magicNumber}] ٹریڈ بند کر دی گئی — lots کی حد سے تجاوز",
+      message:
+        "آپ کی {symbol} پر {volume} lots کی ٹریڈ سے {symbol} پر آپ کے کھلے lots بڑھ کر {total} ہو گئے، جو آپ کی حد {limit} سے زیادہ ہیں، اس لیے اسے بند کر دیا گیا۔ اپنے کل کھلے lots اپنی حد کے اندر رکھیں۔",
+    },
+    tradeLimitClose: {
+      title: "[Magic {magicNumber}] ٹریڈ بند کر دی گئی — کھلی ٹریڈز بہت زیادہ",
+      message:
+        "آپ کی {symbol} پر {volume} lots کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں آپ کی زیادہ سے زیادہ {limit} ٹریڈز پہلے ہی کھلی تھیں۔",
+    },
+    tradeLimitCloseNoMax: {
+      title: "[Magic {magicNumber}] ٹریڈ بند کر دی گئی — کھلی ٹریڈز بہت زیادہ",
+      message:
+        "آپ کی {symbol} پر {volume} lots کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں کھلی ٹریڈز کی آپ کی زیادہ سے زیادہ تعداد پہلے ہی پوری ہو چکی تھی۔",
+    },
     tradingReenabled: {
       title: "[Magic {magicNumber}] ٹریڈنگ دوبارہ فعال کر دی گئی",
       message:
@@ -277,6 +292,12 @@ export const ur: Translations = {
       "[Magic {magicNumber}] ⚠️ <b>ٹریڈ Live میں کاپی نہیں ہوئی</b>\n\n{greeting}\n\nآپ کی <b>{symbol}</b> ٹریڈ میں <b>{missing}</b> نہیں تھا، اس لیے یہ آپ کے Live اکاؤنٹ میں کاپی نہیں ہوئی۔ اسے آپ کے Incubator اکاؤنٹ پر بند کر دیا گیا ہے۔\n\nہمیشہ stop-loss اور take-profit لگائیں تاکہ آپ کی ٹریڈز Live میں کاپی ہوں۔",
     payment:
       "[Magic {magicNumber}] 💰 <b>ادائیگی موصول ہو گئی</b>\n\n{greeting}\n\n<b>{amount} USDT</b> کی ادائیگی آپ کے والٹ میں بھیج دی گئی ہے۔\n\n📋 <b>تفصیلات</b>\n• نیٹ ورک: {network}\n• نیٹ ورک فیس: {fee} USDT\n• تاریخ: {date}\n• TX: {txLink}\n\nادائیگی کا مکمل ثبوت آپ اپنے RFX ٹریڈر ڈیش بورڈ میں دیکھ سکتے ہیں۔",
+    lotLimitClose:
+      "[Magic {magicNumber}] ⚠️ <b>ٹریڈ بند کر دی گئی — lots کی حد سے تجاوز</b>\n\n{greeting}\n\nآپ کی <b>{symbol}</b> پر <b>{volume} lots</b> کی ٹریڈ سے {symbol} پر آپ کے کھلے lots بڑھ کر <b>{total}</b> ہو گئے، جو آپ کی حد <b>{limit}</b> سے زیادہ ہیں، اس لیے اسے بند کر دیا گیا۔\n\nاپنے کل کھلے lots اپنی حد کے اندر رکھیں۔",
+    tradeLimitClose:
+      "[Magic {magicNumber}] ⚠️ <b>ٹریڈ بند کر دی گئی — کھلی ٹریڈز بہت زیادہ</b>\n\n{greeting}\n\nآپ کی <b>{symbol}</b> پر <b>{volume} lots</b> کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں آپ کی زیادہ سے زیادہ <b>{limit}</b> ٹریڈز پہلے ہی کھلی تھیں۔",
+    tradeLimitCloseNoMax:
+      "[Magic {magicNumber}] ⚠️ <b>ٹریڈ بند کر دی گئی — کھلی ٹریڈز بہت زیادہ</b>\n\n{greeting}\n\nآپ کی <b>{symbol}</b> پر <b>{volume} lots</b> کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں کھلی ٹریڈز کی آپ کی زیادہ سے زیادہ تعداد پہلے ہی پوری ہو چکی تھی۔",
     loginDetailsHeading: "لاگ اِن کی تفصیلات",
     verificationCode:
       "[Magic {magicNumber}] 🔐 <b>تصدیقی کوڈ</b>\n\n{greeting}\n\n<b>{purpose}</b> کے لیے آپ کا تصدیقی کوڈ یہ ہے:\n\n<code>{code}</code>\n\nیہ کوڈ 5 منٹ میں ختم ہو جائے گا۔ اگر آپ نے یہ درخواست نہیں کی تو اس پیغام کو نظر انداز کریں۔",

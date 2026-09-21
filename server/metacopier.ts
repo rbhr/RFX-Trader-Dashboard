@@ -1091,6 +1091,19 @@ class MetaCopierService {
     return setting;
   }
 
+  /**
+   * The newest `limit` lines of MetaCopier's own project log, across every
+   * account, roughly newest first. One small request (~50KB for 200 lines).
+   */
+  async getProjectLogs(limit: number): Promise<
+    Array<{ id: string; text: string; accountId: string; logType: string; date: string }>
+  > {
+    const projectId = await this.getProjectId();
+    return (
+      (await this.fetchWithAuth<any[]>(`/projects/${projectId}/logs?limit=${limit}`)) || []
+    );
+  }
+
   /** The project this API key belongs to; needed by the calendar endpoints. */
   private getProjectId(): Promise<string> {
     if (!this.projectIdPromise) {

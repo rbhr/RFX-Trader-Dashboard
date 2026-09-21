@@ -35,6 +35,35 @@
 
 ---
 
+## 🔴 HIGH PRIORITY — Keep oversized trades off live (copier-level max lots)
+**Status:** 🔴 Not started. Raised 2026-09-21 after Sameer (81301) lost $8.72 on live for nothing.
+
+The account-level Trade Guardrail only *closes* an oversized trade after it has opened — by then the copier has already put it on live, so it opens and closes there within a second or two at a loss (Sameer: 0.25 lots vs a 0.04 limit, 08:00 UTC 2026-09-21, −$8.72 on 8220). Other accounts show the same guardrail closes in MetaCopier's log. The copier's own max lot size / max open positions *skip* the open instead ("Open skipped (exceeds max lot size)"), so the trade never reaches live.
+
+RR removed the copier-level limits (`zero-copier-limits.mjs`) because keeping account and copier levels in step by hand in MetaCopier was unmanageable. The fix is to make this platform the single place: **changing max total lots / max open trades in Edit Trader writes the account feature AND every live copier**, so they cannot drift.
+
+- [ ] Work out the copier-side equivalents and their semantics vs. the account guardrail: copier `maxLotSize` / `maximumLot` fields and feature type 19 ("Max lot size") are per-trade, the account guardrail is aggregated per symbol — confirm what the copier can enforce in aggregate, and how `maxOpenPositions` (field + feature 17 at copier level) behaves. Mind the copy ratio: the copier limit applies to the *copied* size (multiplier / fixed lot), not the trader's.
+- [ ] `updateTraderControls`: write max lots / max open trades to the account and to all live copiers (never the demo routing copier); `getTraderControls`: flag drift between the two levels.
+- [ ] New live copiers (`ensureLiveCopier`) inherit the trader's current limits.
+- [ ] One-off dry-run backfill to bring existing copiers in line with their account.
+- [ ] Trader-facing wording if behaviour changes (skipped, not closed) — en/ur/ar.
+
+---
+
+## 🔌 Manage Traders: Active switch and Copiers dialog
+**Status:** 🔵 Diagnosed 2026-09-21, nothing changed yet. RR to decide on item 3.
+
+Findings:
+- **Active/Inactive** only hides the trader from the login dropdown, drops them from the breach, missed-trade and trailing monitors and from payout runs, and blocks onboarding activation. It does **not** block login (`trading.login` never reads `isActive`) and does **not** touch MetaCopier — an inactive trader's copiers keep copying, now unmonitored. Nothing sets a trader inactive automatically; resolving a breach sets them active.
+- **Copiers dialog** reads `copier.status` and `copier.toAccountNumber`, which MetaCopier copiers do not have (real state is `active` + `monitorOnly`; the helper sets `toAccountLogin`). So the status pill is always an empty yellow pill, no D/M/A button is ever greyed out, and the account number is blank. The D/M/A writes themselves work (read-modify-write of `active`/`monitorOnly`).
+- **X (remove)** checks the destination account for *any* open position rather than this trader's, treats a failed check as "no positions" (fails open), and removals are not logged.
+
+- [ ] Derive status from `active`/`monitorOnly` (ACTIVE / MANAGE / DISABLED); show the account number.
+- [ ] Remove: check only this trader's positions on that master (by magic), fail closed, and log removals and status changes.
+- [ ] Decide what Inactive means: block login + warn in the grid when an inactive trader still has an active live copier (conservative), or also disable their live copiers.
+
+---
+
 ## 📰 MetaCopier News Filter / News Protection
 **Status:** 🟡 News filter chosen and wired into the dashboard 2026-09-19. Reference config is the copier "RFX - Bisma - 81279" → "01 exness Master 8220" (HIGH impact, 60 min before/after, blocks modifications, `bnd` category excluded). Edit Trader has a "News trading allowed" checkbox (default off) that switches the filter on every live copier; new live copiers get it automatically. Remaining copiers still need it switched on — per trader from Edit Trader, or with a backfill script. MetaCopier shipped the economic calendar plus both news features on 2026-09-06 (PRO plan).
 

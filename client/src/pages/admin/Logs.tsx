@@ -31,6 +31,7 @@ type LogCategory =
   | "socket"
   | "payment"
   | "missed_trade"
+  | "limit_close"
   | "system";
 
 const FILTERS: { key: LogCategory | undefined; label: string }[] = [
@@ -43,6 +44,7 @@ const FILTERS: { key: LogCategory | undefined; label: string }[] = [
   { key: "socket", label: "Socket" },
   { key: "payment", label: "Payments" },
   { key: "missed_trade", label: "Missed Trades" },
+  { key: "limit_close", label: "Limit Closes" },
   { key: "system", label: "System" },
 ];
 
@@ -55,6 +57,7 @@ const CATEGORY_LABEL: Record<LogCategory, string> = {
   socket: "Socket",
   payment: "Payment",
   missed_trade: "Missed Trade",
+  limit_close: "Limit Close",
   system: "System",
 };
 

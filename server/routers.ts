@@ -3204,6 +3204,7 @@ export const appRouter = router({
               "socket",
               "payment",
               "missed_trade",
+              "limit_close",
               "system",
             ])
             .optional(),
