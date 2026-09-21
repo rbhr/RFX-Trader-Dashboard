@@ -89,6 +89,7 @@ import {
   buildRiskLimitBreachMessage,
   buildAdminRiskLimitAlertMessage,
   localizedTelegram,
+  copyToAlertChannel,
 } from "./telegram";
 import { createSystemNotification } from "./systemNotifications";
 import { toLanguage, translate, type Language } from "@shared/i18n";
@@ -1582,17 +1583,22 @@ export const appRouter = router({
 
         // Telegram notification for the trader
         let traderTelegramSent = false;
+        const {
+          message: msg,
+          english: breachEnglish,
+          opts: breachOpts,
+        } = localizedTelegram(
+          buildRiskLimitBreachMessage,
+          {
+            traderName: trader.name,
+            magicNumber: trader.magicNumber,
+            equity: input.equity,
+            riskLimit: input.riskLimit,
+          },
+          trader.language
+        );
+        await copyToAlertChannel(breachEnglish);
         if (trader.telegramHandle && trader.telegramChatId) {
-          const { message: msg, opts: breachOpts } = localizedTelegram(
-            buildRiskLimitBreachMessage,
-            {
-              traderName: trader.name,
-              magicNumber: trader.magicNumber,
-              equity: input.equity,
-              riskLimit: input.riskLimit,
-            },
-            trader.language
-          );
           traderTelegramSent = await sendTelegramMessage(
             trader.telegramHandle,
             msg,
@@ -3107,8 +3113,11 @@ export const appRouter = router({
           magicNumberId: b.magicNumberId,
           traderName: trader?.name || "Unknown",
           magicNumber: trader?.magicNumber || "N/A",
+          breachType: b.breachType,
           equityAtBreach: parseFloat(b.equityAtBreach),
           riskLimitAtBreach: parseFloat(b.riskLimitAtBreach),
+          referenceBalance:
+            b.referenceBalance != null ? parseFloat(b.referenceBalance) : null,
           traderNotified: b.traderNotified,
           adminNotified: b.adminNotified,
           resolvedAt: b.resolvedAt,

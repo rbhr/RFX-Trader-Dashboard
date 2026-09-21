@@ -3,6 +3,7 @@ import { getMagicNumbersByTelegramHandle, updateMagicNumber } from "./db";
 import { maybeActivateOnboarding } from "./onboarding";
 import { logEvent } from "./logStore";
 import { toLanguage, translate, type Language } from "@shared/i18n";
+import { ENV } from "./_core/env";
 
 let bot: TelegramBot | null = null;
 let pollingStarted = false;
@@ -233,15 +234,44 @@ export function localizedTelegram<P>(
   build: (params: P, lang: Language) => string,
   params: P,
   language: string | null | undefined
-): { message: string; opts: { lang: Language; englishMessage?: string } } {
+): {
+  message: string;
+  /** The English rendering, whatever language the trader reads. */
+  english: string;
+  opts: { lang: Language; englishMessage?: string };
+} {
   const lang = toLanguage(language);
+  const english = build(params, "en");
   return {
-    message: build(params, lang),
-    opts: {
-      lang,
-      englishMessage: lang === "en" ? undefined : build(params, "en"),
-    },
+    message: lang === "en" ? english : build(params, lang),
+    english,
+    opts: { lang, englishMessage: lang === "en" ? undefined : english },
   };
+}
+
+/**
+ * Copy a trader-facing risk message to the team's alerts channel, in English.
+ * A no-op when TELEGRAM_ALERT_CHANNEL_ID is unset, and it never throws: a
+ * missing channel must not get in the way of telling the trader.
+ */
+export async function copyToAlertChannel(englishMessage: string): Promise<void> {
+  const channel = ENV.telegramAlertChannelId;
+  if (!channel) return;
+  const b = getBot();
+  if (!b) return;
+  try {
+    await b.sendMessage(channel, englishMessage, {
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    } as any);
+    logEvent("telegram", `Copied to alerts channel: ${previewTelegramMessage(englishMessage)}`);
+  } catch (err) {
+    logEvent(
+      "telegram",
+      `Alerts channel copy failed (${previewTelegramMessage(englishMessage)}): ${err instanceof Error ? err.message : String(err)}`,
+      "warn"
+    );
+  }
 }
 
 /**

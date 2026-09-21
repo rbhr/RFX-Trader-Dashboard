@@ -107,8 +107,14 @@ export default function RiskLimitBreaches() {
   });
 
   type BreachItem = NonNullable<typeof breaches>[number];
-  const activeBreaches: BreachItem[] = breaches?.filter((b: BreachItem) => !b.resolvedAt) ?? [];
-  const resolvedBreaches: BreachItem[] = breaches?.filter((b: BreachItem) => b.resolvedAt) ?? [];
+  // Daily loss hits lift by themselves at rollover, so they are never "active"
+  // and have their own list; the other two are total-equity breaches.
+  const dailyHits: BreachItem[] = breaches?.filter((b: BreachItem) => b.breachType === "daily") ?? [];
+  const equityBreaches: BreachItem[] = breaches?.filter((b: BreachItem) => b.breachType !== "daily") ?? [];
+  const activeBreaches: BreachItem[] = equityBreaches.filter((b: BreachItem) => !b.resolvedAt);
+  const resolvedBreaches: BreachItem[] = equityBreaches.filter((b: BreachItem) => b.resolvedAt);
+  const isToday = (d: Date) =>
+    new Date(d).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
 
   const formatDate = (d: Date | null) => {
     if (!d) return "—";
@@ -238,6 +244,95 @@ export default function RiskLimitBreaches() {
                       </TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Daily loss limit hits */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-amber-500" />
+              Daily Loss Limit Hits
+            </CardTitle>
+            <CardDescription>
+              Traders who reached their max daily loss. MetaCopier closes all
+              trades and blocks new ones until rollover, then lifts it by itself —
+              nothing to re-enable.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {dailyHits.length === 0 ? (
+              <div className="text-muted-foreground py-4 text-center text-sm">
+                No daily loss limits have been hit.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Trader</TableHead>
+                    <TableHead>Magic Number</TableHead>
+                    <TableHead>Day's Start Balance</TableHead>
+                    <TableHead>Equity at Hit</TableHead>
+                    <TableHead>Loss</TableHead>
+                    <TableHead>Daily Limit (equity)</TableHead>
+                    <TableHead>Hit At</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dailyHits.map((hit) => {
+                    const loss =
+                      hit.referenceBalance != null
+                        ? hit.referenceBalance - hit.equityAtBreach
+                        : null;
+                    return (
+                      <TableRow key={hit.id} className={isToday(hit.createdAt) ? "" : "opacity-60"}>
+                        <TableCell className="font-medium">{hit.traderName}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{hit.magicNumber}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {hit.referenceBalance != null ? `$${hit.referenceBalance.toFixed(2)}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-destructive font-semibold">
+                          ${hit.equityAtBreach.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-destructive">
+                          {loss != null && hit.referenceBalance
+                            ? `$${loss.toFixed(2)} (${((loss / hit.referenceBalance) * 100).toFixed(1)}%)`
+                            : "—"}
+                        </TableCell>
+                        <TableCell>${hit.riskLimitAtBreach.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {formatDate(hit.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          {isToday(hit.createdAt) ? (
+                            <Badge variant="outline" className="text-amber-600">
+                              Blocked until rollover
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-green-600">Lifted</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            aria-label="Delete record"
+                            onClick={() => setDeleteTarget(hit)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

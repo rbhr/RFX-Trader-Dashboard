@@ -11,6 +11,14 @@
  * under the `limit_close` log category and tells the trader (in-app + Telegram,
  * in their language).
  *
+ * The same log is the only place a DAILY LOSS LIMIT hit shows up ("Risk limit
+ * <id> was hit"): MetaCopier closes everything and blocks new trades until
+ * rollover without telling anyone. Those are recorded as `daily` rows on the
+ * Risk Limit Breaches screen and the trader is told. Equity ("Actual") breaches
+ * stay with breachMonitor, which compares equity with the absolute limit itself.
+ *
+ * Everything sent to a trader here is copied to the team's alerts channel.
+ *
  * Timing: the close happens within ~1s, far quicker than any poll. MetaCopier's
  * socket has no log stream, but it does push a history/positions update for the
  * account the moment the trade closes — so that push triggers a log read a
@@ -20,15 +28,29 @@
  * Note this reports the close; it cannot prevent it. By the time the guardrail
  * closes the incubator trade the copier has usually already opened it on live.
  */
-import { getAllActiveMagicNumbers, getAdminSetting, setAdminSetting } from "./db";
+import {
+  getAllActiveMagicNumbers,
+  getAdminSetting,
+  setAdminSetting,
+  createRiskLimitBreach,
+  hasDailyBreachSince,
+} from "./db";
 import { metaCopierService } from "./metacopier";
 import { socketEvents } from "./metacopierSocket";
 import { ENV } from "./_core/env";
 import { logEvent } from "./logStore";
 import { createSystemNotification } from "./systemNotifications";
-import { sendTelegramMessage, localizedTelegram } from "./telegram";
+import {
+  sendTelegramMessage,
+  localizedTelegram,
+  copyToAlertChannel,
+} from "./telegram";
 import { translate, type Language } from "@shared/i18n";
-import { FEATURE_MAX_OPEN_POSITIONS } from "./tradingControls";
+import {
+  FEATURE_MAX_OPEN_POSITIONS,
+  RISK_TYPE_ACTUAL,
+  RISK_TYPE_DAILY,
+} from "./tradingControls";
 
 const POLL_INTERVAL_MS = 30_000;
 // Wait for MetaCopier to have written the log line before reading it.
@@ -92,6 +114,35 @@ export function parseLimitClose(text: string): LimitClose | null {
   return null;
 }
 
+export interface RiskLimitHit {
+  riskLimitId: string;
+  /** Balance the loss is measured from. */
+  reference: number;
+  /** Equity when the limit was hit. */
+  actual: number;
+  loss: number;
+  drawdownPercent: number;
+  /** Present when it was the limit's absolute equity floor that was crossed. */
+  absoluteLimit: number | null;
+}
+
+const RISK_HIT_RE =
+  /^Risk limit ([0-9a-f-]{36}) was hit: reference ([\d.]+) \w+ <-> actual ([\d.]+) \w+\. Loss: ([\d.]+) \w+\. Drawdown ([\d.]+)%(?: \(absolute limit: ([\d.]+) \w+\))?/;
+
+/** Parse MetaCopier's "Risk limit <id> was hit" line; null for anything else. */
+export function parseRiskLimitHit(text: string): RiskLimitHit | null {
+  const m = RISK_HIT_RE.exec(text);
+  if (!m) return null;
+  return {
+    riskLimitId: m[1],
+    reference: parseFloat(m[2]),
+    actual: parseFloat(m[3]),
+    loss: parseFloat(m[4]),
+    drawdownPercent: parseFloat(m[5]),
+    absoluteLimit: m[6] ? parseFloat(m[6]) : null,
+  };
+}
+
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let triggerTimer: ReturnType<typeof setTimeout> | null = null;
 let socketListenerBound = false;
@@ -139,16 +190,26 @@ async function notifyTrader(trader: Trader, close: LimitClose): Promise<void> {
     console.warn(`[LimitCloseMonitor] In-app notify failed for ${trader.name}:`, e)
   );
 
+  await sendToTraderAndChannel(trader, key, params);
+}
+
+/** Telegram to the trader (if linked) in their language, and the English copy
+ *  to the alerts channel either way. */
+async function sendToTraderAndChannel(
+  trader: Trader,
+  key: "lotLimitClose" | "tradeLimitClose" | "tradeLimitCloseNoMax" | "dailyLossHit",
+  params: Record<string, string>
+): Promise<void> {
+  const { message, english, opts } = localizedTelegram(
+    (p: Record<string, string>, lang: Language) =>
+      translate(lang, `telegram.${key}`, {
+        ...p,
+        greeting: translate(lang, "telegram.greeting", { name: trader.name }),
+      }),
+    params,
+    trader.language
+  );
   if (trader.telegramChatId) {
-    const { message, opts } = localizedTelegram(
-      (p: Record<string, string>, lang: Language) =>
-        translate(lang, `telegram.${key}`, {
-          ...p,
-          greeting: translate(lang, "telegram.greeting", { name: trader.name }),
-        }),
-      params,
-      trader.language
-    );
     await sendTelegramMessage(
       trader.telegramHandle ?? "",
       message,
@@ -158,6 +219,84 @@ async function notifyTrader(trader: Trader, close: LimitClose): Promise<void> {
       console.warn(`[LimitCloseMonitor] Telegram to ${trader.name} failed:`, e)
     );
   }
+  await copyToAlertChannel(english);
+}
+
+/**
+ * A "Risk limit <id> was hit" line on a trader's account. Only the daily loss
+ * limit is acted on here; see the file header for why.
+ */
+async function handleRiskLimitHit(
+  trader: Trader,
+  hit: RiskLimitHit,
+  stale: boolean
+): Promise<void> {
+  const limits = await metaCopierService.getAccountRiskLimits(trader.mcAccountId!);
+  const limit = limits.find((l: any) => l.id === hit.riskLimitId);
+  const typeId: number | undefined = limit?.riskType?.id;
+  const who = `${trader.name} (${trader.magicNumber})`;
+  const detail = `equity $${hit.actual.toFixed(2)}, down ${hit.drawdownPercent}% ($${hit.loss.toFixed(2)}) from $${hit.reference.toFixed(2)}`;
+
+  if (typeId === RISK_TYPE_ACTUAL) {
+    // Crossing the absolute floor is breachMonitor's to record and announce.
+    // A percentage on an Actual limit is not something the dashboard models
+    // (or tells traders about), so just make it visible to the admin.
+    if (hit.absoluteLimit === null) {
+      logEvent(
+        "breach",
+        `${who}: MetaCopier hit the PERCENTAGE set on their Actual limit (${((limit?.riskLimit ?? 0) * 100).toFixed(1)}%) — ${detail}. Trades closed. The dashboard only tracks the Actual limit's absolute floor; check that percentage is intended.`,
+        "warn"
+      );
+    }
+    return;
+  }
+  if (typeId !== RISK_TYPE_DAILY) {
+    logEvent(
+      "breach",
+      `${who}: MetaCopier risk limit ${limit?.riskType?.name ?? hit.riskLimitId} was hit — ${detail}. Trades closed.`,
+      "warn"
+    );
+    return;
+  }
+
+  // One record per day: MetaCopier can log the same hit again while it holds.
+  const since = new Date(Date.now() - 20 * 60 * 60 * 1000);
+  if (await hasDailyBreachSince(trader.id, since)) return;
+
+  const allowedLoss = hit.reference * (limit?.riskLimit ?? 0);
+  await createRiskLimitBreach({
+    magicNumberId: trader.id,
+    breachType: "daily",
+    equityAtBreach: hit.actual.toFixed(2),
+    riskLimitAtBreach: (hit.reference - allowedLoss).toFixed(2),
+    referenceBalance: hit.reference.toFixed(2),
+    traderNotified: !stale,
+    adminNotified: !stale,
+    // Lifts by itself at rollover, so there is nothing for an admin to resolve.
+    resolvedAt: new Date(),
+  });
+  logEvent(
+    "breach",
+    `Daily loss limit: ${who} ${detail} — trades closed until rollover` +
+      (stale ? " — too old to notify the trader" : ""),
+    "warn"
+  );
+  if (stale) return;
+
+  const params = {
+    magicNumber: trader.magicNumber,
+    limit: allowedLoss.toFixed(2),
+    equity: hit.actual.toFixed(2),
+  };
+  await createSystemNotification({
+    magicNumberId: trader.id,
+    key: "dailyLossHit",
+    params,
+    type: "warning",
+  }).catch(e =>
+    console.warn(`[LimitCloseMonitor] In-app notify failed for ${trader.name}:`, e)
+  );
+  await sendToTraderAndChannel(trader, "dailyLossHit", params);
 }
 
 async function checkLog(): Promise<void> {
@@ -186,11 +325,21 @@ async function checkLog(): Promise<void> {
     if (fresh.length === 0) return;
 
     for (const line of fresh) {
-      const close = parseLimitClose(line.text ?? "");
-      const trader = close ? byAccount.get(line.accountId) : undefined;
-      if (!close || !trader) continue;
-
+      const trader = byAccount.get(line.accountId);
+      if (!trader) continue;
       const stale = Date.now() - new Date(line.date).getTime() > NOTIFY_MAX_AGE_MS;
+
+      const hit = parseRiskLimitHit(line.text ?? "");
+      if (hit) {
+        await handleRiskLimitHit(trader, hit, stale).catch(e =>
+          console.warn(`[LimitCloseMonitor] Risk limit hit for ${trader.name} failed:`, e)
+        );
+        continue;
+      }
+
+      const close = parseLimitClose(line.text ?? "");
+      if (!close) continue;
+
       const what =
         close.kind === "lots"
           ? `open lots on ${close.symbol} reached ${close.total}, limit ${close.limit}`

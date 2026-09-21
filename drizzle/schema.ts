@@ -256,6 +256,16 @@ export type InsertNotification = typeof notifications.$inferInsert;
 export const riskLimitBreaches = mysqlTable("risk_limit_breaches", {
   id: int("id").autoincrement().primaryKey(),
   magicNumberId: int("magicNumberId").notNull(),
+  // "equity": equity fell below the absolute (Actual) limit — a permanent
+  // breach that an admin resolves. "daily": the max daily loss was reached —
+  // MetaCopier lifts it at rollover, so these rows are stored already resolved
+  // and never count as active. For "daily", riskLimitAtBreach is the equity at
+  // which the daily limit bites and referenceBalance the balance it is measured
+  // from.
+  breachType: mysqlEnum("breachType", ["equity", "daily"])
+    .notNull()
+    .default("equity"),
+  referenceBalance: decimal("referenceBalance", { precision: 15, scale: 2 }),
   equityAtBreach: decimal("equityAtBreach", {
     precision: 15,
     scale: 2,

@@ -256,6 +256,11 @@ export const ar: Translations = {
       title: "[Magic {magicNumber}] تم استلام دفعة",
       message: "لقد استلمت دفعة بقيمة ${amount}. معرّف المعاملة (hash): {hash}",
     },
+    dailyLossHit: {
+      title: "[Magic {magicNumber}] تم بلوغ حد الخسارة اليومية",
+      message:
+        "تم بلوغ حد خسارتك اليومية البالغ ${limit}: انخفضت السيولة (Equity) في حساب Incubator الخاص بك إلى ${equity}. أُغلقت جميع الصفقات. يمكنك استئناف التداول بعد الترحيل اليومي (Rollover).",
+    },
     lotLimitClose: {
       title: "[Magic {magicNumber}] تم إغلاق الصفقة — تجاوز حد lots",
       message:
@@ -293,6 +298,8 @@ export const ar: Translations = {
       "[Magic {magicNumber}] ⚠️ <b>لم تُنسخ الصفقة إلى الحساب الحقيقي (Live)</b>\n\n{greeting}\n\nصفقتك على <b>{symbol}</b> لم يكن فيها <b>{missing}</b>، لذلك لم تُنسخ إلى حسابك الحقيقي (Live). وقد تم إغلاقها في حساب Incubator الخاص بك.\n\nضع دائماً stop-loss و take-profit حتى تُنسخ صفقاتك إلى الحساب الحقيقي.",
     payment:
       "[Magic {magicNumber}] 💰 <b>تم استلام دفعة</b>\n\n{greeting}\n\nتم إرسال دفعة بقيمة <b>{amount} USDT</b> إلى محفظتك.\n\n📋 <b>التفاصيل</b>\n• الشبكة: {network}\n• رسوم الشبكة: {fee} USDT\n• التاريخ: {date}\n• TX: {txLink}\n\nيمكنك الاطلاع على إثبات التحويل كاملاً في لوحة متداولي RFX.",
+    dailyLossHit:
+      "[Magic {magicNumber}] 🛑 <b>تم بلوغ حد الخسارة اليومية</b>\n\n{greeting}\n\nتم بلوغ حد خسارتك اليومية البالغ <b>${limit}</b>: انخفضت السيولة (Equity) في حساب Incubator الخاص بك إلى <b>${equity}</b>.\n\n<b>أُغلقت جميع الصفقات.</b> يمكنك استئناف التداول بعد الترحيل اليومي (Rollover).",
     lotLimitClose:
       "[Magic {magicNumber}] ⚠️ <b>تم إغلاق الصفقة — تجاوز حد lots</b>\n\n{greeting}\n\nصفقتك على <b>{symbol}</b> بحجم <b>{volume} lots</b> رفعت إجمالي lots المفتوحة لديك على {symbol} إلى <b>{total}</b>، وهو أعلى من حدّك البالغ <b>{limit}</b>، لذلك تم إغلاقها.\n\nحافظ على إجمالي lots المفتوحة ضمن حدّك.",
     tradeLimitClose:

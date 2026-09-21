@@ -27,4 +27,9 @@ export const ENV = {
   // MC_LIVE_STREAM=true (server) and VITE_LIVE_STREAM=true (client build).
   // Polling remains the fallback regardless.
   mcLiveStream: process.env.MC_LIVE_STREAM === "true",
+  // Telegram channel that gets a copy (in English) of the risk messages sent
+  // to traders: equity breaches, daily loss limits, lot/trade-limit closes and
+  // missed trades. A numeric chat id (-100…) or @channelusername; the bot must
+  // be an admin of the channel. Empty = no copies.
+  telegramAlertChannelId: process.env.TELEGRAM_ALERT_CHANNEL_ID ?? "",
 };

@@ -19,6 +19,7 @@ import {
   buildRiskLimitBreachMessage,
   buildAdminRiskLimitAlertMessage,
   localizedTelegram,
+  copyToAlertChannel,
 } from "./telegram";
 import { notifyOwner } from "./_core/notification";
 import { socketEvents } from "./metacopierSocket";
@@ -96,17 +97,19 @@ async function checkAllTraders(): Promise<void> {
             type: "warning",
           });
 
-          // Telegram notification to the trader (if connected)
+          // Telegram notification to the trader (if connected), copied to the
+          // team's alerts channel either way.
+          const { message: msg, english, opts } = localizedTelegram(
+            buildRiskLimitBreachMessage,
+            { traderName: trader.name, magicNumber: trader.magicNumber, equity, riskLimit },
+            trader.language
+          );
           if (trader.telegramChatId) {
-            const { message: msg, opts } = localizedTelegram(
-              buildRiskLimitBreachMessage,
-              { traderName: trader.name, magicNumber: trader.magicNumber, equity, riskLimit },
-              trader.language
-            );
             await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId, opts).catch(
               (e) => console.warn(`[BreachMonitor] Telegram to trader failed:`, e)
             );
           }
+          await copyToAlertChannel(english);
 
           // Admin notification
           await notifyOwner({

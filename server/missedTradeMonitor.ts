@@ -24,6 +24,7 @@ import {
   sendTelegramMessage,
   buildMissedTradeMessage,
   localizedTelegram,
+  copyToAlertChannel,
 } from "./telegram";
 import { logEvent } from "./logStore";
 
@@ -91,17 +92,19 @@ async function notifyMissedTrade(
   );
 
   // Telegram (if connected) — graceful fallback, in-app already delivered.
+  // Copied to the team's alerts channel either way.
+  const { message: msg, english, opts } = localizedTelegram(
+    (p: { traderName: string; magicNumber: string; symbol: string; missing: string }, lang: Language) =>
+      buildMissedTradeMessage({ ...p, missing: localizeMissingParts(lang, p.missing) }, lang),
+    { traderName: trader.name, magicNumber: trader.magicNumber, symbol, missing },
+    trader.language
+  );
   if (trader.telegramChatId) {
-    const { message: msg, opts } = localizedTelegram(
-      (p: { traderName: string; magicNumber: string; symbol: string; missing: string }, lang: Language) =>
-        buildMissedTradeMessage({ ...p, missing: localizeMissingParts(lang, p.missing) }, lang),
-      { traderName: trader.name, magicNumber: trader.magicNumber, symbol, missing },
-      trader.language
-    );
     await sendTelegramMessage(trader.telegramHandle ?? "", msg, trader.telegramChatId, opts).catch(
       (e) => console.warn(`[MissedTradeMonitor] Telegram to ${trader.name} failed:`, e)
     );
   }
+  await copyToAlertChannel(english);
 }
 
 async function checkAllTraders(): Promise<void> {

@@ -5,6 +5,39 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.6] — 2026-09-21
+
+### Added
+
+- **Daily loss limit hits are recorded and announced.** MetaCopier enforces the max daily loss
+  itself — closes everything, blocks new trades until rollover — and only logs it, so the
+  dashboard recorded nothing and the trader was never told. The log monitor now picks up
+  "Risk limit … was hit" lines, works out which limit it was, and for the daily one records
+  it, tells the trader in-app and on Telegram (en/ur/ar) what their daily limit was and that
+  they can resume after rollover, and logs it under Breach. One record per trader per day.
+- **Risk Limit Breaches screen shows both kinds.** Total-equity breaches keep the Active and
+  Resolved lists and "Re-enable Trading"; a new **Daily Loss Limit Hits** list shows the day's
+  starting balance, equity at the hit, the loss, the limit and "Blocked until rollover" or
+  "Lifted". Daily hits never count as active and have nothing to re-enable. New columns
+  `risk_limit_breaches.breachType` and `referenceBalance`.
+- **Alerts channel.** With `TELEGRAM_ALERT_CHANNEL_ID` set, an English copy of each risk
+  message sent to a trader — equity breach, daily loss limit, lot-limit and max-open-trades
+  closes, missed trade — also goes to that Telegram channel, whether or not the trader has
+  Telegram linked. The bot must be an admin of the channel.
+
+### Fixed
+
+- The "is there already an active breach?" check looked only at the trader's latest breach
+  row; it now looks for an unresolved equity breach, so a later row of another kind cannot
+  hide one and cause it to be recorded twice.
+- A percentage set on an *Actual* limit (not something the dashboard models) is now logged for
+  the admin when MetaCopier hits it, instead of passing unseen.
+
+### Deploy note
+
+- Schema: adds `risk_limit_breaches.breachType` and `referenceBalance`. Add the columns before
+  the new container starts, then confirm with `docker exec -it rfx-trader-dashboard pnpm db:push`.
+
 ## [4.0.5] — 2026-09-21
 
 ### Added

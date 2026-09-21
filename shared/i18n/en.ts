@@ -269,6 +269,11 @@ export const en = {
       message:
         "You have received a payment of ${amount}. Transaction hash: {hash}",
     },
+    dailyLossHit: {
+      title: "[Magic {magicNumber}] Daily Loss Limit Reached",
+      message:
+        "Your daily loss limit of ${limit} was reached: the equity in your incubator account dropped to ${equity}. All trades have been closed. You can resume trading after rollover.",
+    },
     lotLimitClose: {
       title: "[Magic {magicNumber}] Trade Closed — Lot Limit Exceeded",
       message:
@@ -307,6 +312,8 @@ export const en = {
       "[Magic {magicNumber}] ⚠️ <b>Trade Not Copied to Live</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade had no <b>{missing}</b>, so it was not copied to your live account. It has been closed on your incubator account.\n\nAlways set a stop-loss and take-profit so your trades copy to live.",
     payment:
       "[Magic {magicNumber}] 💰 <b>Payment Received</b>\n\n{greeting}\n\nA payment of <b>{amount} USDT</b> has been sent to your wallet.\n\n📋 <b>Details</b>\n• Network: {network}\n• Network Fee: {fee} USDT\n• Date: {date}\n• TX: {txLink}\n\nYou can view the full transmission proof in your RFX Trader dashboard.",
+    dailyLossHit:
+      "[Magic {magicNumber}] 🛑 <b>Daily Loss Limit Reached</b>\n\n{greeting}\n\nYour daily loss limit of <b>${limit}</b> was reached: the equity in your incubator account dropped to <b>${equity}</b>.\n\n<b>All trades have been closed.</b> You can resume trading after rollover.",
     lotLimitClose:
       "[Magic {magicNumber}] ⚠️ <b>Trade Closed — Lot Limit Exceeded</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade of <b>{volume} lots</b> took your open lots on {symbol} to <b>{total}</b>, above your limit of <b>{limit}</b>, so it was closed.\n\nKeep your total open lots within your limit.",
     tradeLimitClose:

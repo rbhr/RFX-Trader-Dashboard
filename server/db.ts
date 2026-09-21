@@ -1,4 +1,4 @@
-import { eq, desc, isNull, isNotNull, sql, or, and, gt, lt } from "drizzle-orm";
+import { eq, desc, isNull, isNotNull, sql, or, and, gt, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -477,17 +477,44 @@ export async function getActiveBreachByMagicNumberId(magicNumberId: number) {
   const db = await getDb();
   if (!db) return undefined;
 
+  // Equity breaches only. Looking at "the latest row" let a later daily-loss
+  // row hide an unresolved equity breach, and the monitor then re-recorded it.
   const result = await db
     .select()
     .from(riskLimitBreaches)
-    .where(eq(riskLimitBreaches.magicNumberId, magicNumberId))
+    .where(
+      and(
+        eq(riskLimitBreaches.magicNumberId, magicNumberId),
+        eq(riskLimitBreaches.breachType, "equity"),
+        isNull(riskLimitBreaches.resolvedAt)
+      )
+    )
     .orderBy(desc(riskLimitBreaches.createdAt))
     .limit(1);
 
-  // Return only if unresolved (no resolvedAt)
-  const breach = result[0];
-  if (breach && !breach.resolvedAt) return breach;
-  return undefined;
+  return result[0];
+}
+
+/** True if this trader's daily loss limit was already recorded since `since`. */
+export async function hasDailyBreachSince(
+  magicNumberId: number,
+  since: Date
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select({ id: riskLimitBreaches.id })
+    .from(riskLimitBreaches)
+    .where(
+      and(
+        eq(riskLimitBreaches.magicNumberId, magicNumberId),
+        eq(riskLimitBreaches.breachType, "daily"),
+        gte(riskLimitBreaches.createdAt, since)
+      )
+    )
+    .limit(1);
+  return result.length > 0;
 }
 
 export async function getAllRiskLimitBreaches() {
@@ -595,16 +622,20 @@ export async function clearResolvedRiskLimitBreaches(): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  // Resolved EQUITY breaches only — daily loss hits are stored resolved, and
+  // the button lives on the Resolved Breaches card, not theirs.
+  const resolvedEquity = and(
+    isNotNull(riskLimitBreaches.resolvedAt),
+    eq(riskLimitBreaches.breachType, "equity")
+  );
   const resolved = await db
     .select({ id: riskLimitBreaches.id })
     .from(riskLimitBreaches)
-    .where(isNotNull(riskLimitBreaches.resolvedAt));
+    .where(resolvedEquity);
 
   if (resolved.length === 0) return 0;
 
-  await db
-    .delete(riskLimitBreaches)
-    .where(isNotNull(riskLimitBreaches.resolvedAt));
+  await db.delete(riskLimitBreaches).where(resolvedEquity);
 
   return resolved.length;
 }
