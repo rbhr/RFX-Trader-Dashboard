@@ -3383,7 +3383,9 @@ export default function ManageTraders() {
 
         {/* Copiers Dialog */}
         <Dialog open={copiersDialogOpen} onOpenChange={setCopiersDialogOpen}>
-          <DialogContent className="sm:max-w-4xl">
+          {/* Sized by its content: as wide as the longest row needs, up to the
+              viewport, so the action buttons always fit. */}
+          <DialogContent className="w-auto max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)]">
             <DialogHeader>
               <DialogTitle>Copiers for {selectedTrader?.name}</DialogTitle>
               <DialogDescription>
@@ -3395,7 +3397,7 @@ export default function ManageTraders() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-full">To Account</TableHead>
+                      <TableHead className="whitespace-nowrap">To Account</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Actions</TableHead>
                     </TableRow>
@@ -3405,7 +3407,7 @@ export default function ManageTraders() {
                       <TableRow key={copier.id}>
                         <TableCell>
                           <div>
-                            <div className="font-medium truncate max-w-[22rem]" title={copier.toAccountAlias}>
+                            <div className="font-medium whitespace-nowrap">
                               {copier.toAccountAlias}
                             </div>
                             <div className="text-sm text-muted-foreground font-mono">
