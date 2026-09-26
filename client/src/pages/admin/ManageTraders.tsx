@@ -3383,7 +3383,7 @@ export default function ManageTraders() {
 
         {/* Copiers Dialog */}
         <Dialog open={copiersDialogOpen} onOpenChange={setCopiersDialogOpen}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="sm:max-w-4xl">
             <DialogHeader>
               <DialogTitle>Copiers for {selectedTrader?.name}</DialogTitle>
               <DialogDescription>
@@ -3395,9 +3395,9 @@ export default function ManageTraders() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>To Account</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="w-full">To Account</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3405,7 +3405,7 @@ export default function ManageTraders() {
                       <TableRow key={copier.id}>
                         <TableCell>
                           <div>
-                            <div className="font-medium">
+                            <div className="font-medium truncate max-w-[22rem]" title={copier.toAccountAlias}>
                               {copier.toAccountAlias}
                             </div>
                             <div className="text-sm text-muted-foreground font-mono">
@@ -3420,7 +3420,7 @@ export default function ManageTraders() {
                             {COPIER_STATUS[copierStatusOf(copier)].label}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             <CopierStatusButtons
                               current={copierStatusOf(copier)}
