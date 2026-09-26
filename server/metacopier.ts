@@ -8,6 +8,10 @@ import {
 import {
   DAILY_PROFIT_TARGET_DEFAULTS,
   DAILY_RESET_TIME,
+  FEATURE_MAXIMUM_LOT,
+  FEATURE_MAX_OPEN_POSITIONS,
+  MAX_OPEN_POSITIONS_DEFAULTS,
+  type CopierLimits,
   DEFAULT_DAILY_LOSS_PERCENT,
   DEFAULT_DAILY_PROFIT_PERCENT,
   FEATURE_DAILY_PROFIT_TARGET,
@@ -1069,6 +1073,57 @@ class MetaCopierService {
         setting: NEWS_FILTER_DEFAULTS,
       });
     }
+  }
+
+  /**
+   * Apply the copier-level mirror of a trader's limits: Maximum lot (feature
+   * 18, total open lots per symbol) and Max open positions (feature 17). Both
+   * SKIP a copy that would break the limit, which is what keeps an oversized
+   * trade off live — the account guardrail can only close it afterwards.
+   * 0 removes the feature (MetaCopier's "no limit").
+   */
+  async setCopierLimits(
+    toAccountId: string,
+    copierId: string,
+    limits: CopierLimits
+  ): Promise<void> {
+    const base = `/accounts/${toAccountId}/copiers/${copierId}/features`;
+    const features = (await this.fetchWithAuth<any[]>(base, 'GET')) || [];
+    const apply = async (typeId: number, value: number, setting: Record<string, unknown>) => {
+      const existing = features.find((f: any) => f?.type?.id === typeId);
+      if (value <= 0) {
+        if (existing) await this.fetchWithAuth(`${base}/${existing.id}`, 'DELETE');
+        return;
+      }
+      if (existing) {
+        await this.fetchWithAuth(`${base}/${existing.id}`, 'PUT', {
+          type: { id: typeId },
+          setting: { ...existing.setting, ...setting },
+        });
+      } else {
+        await this.fetchWithAuth(base, 'POST', { type: { id: typeId }, setting });
+      }
+    };
+    // Per-symbol total, matching the account guardrail's "aggregate per
+    // symbol": the global figure applies to every symbol on its own.
+    await apply(FEATURE_MAXIMUM_LOT, limits.maximumLot, {
+      maximumLot: limits.maximumLot,
+      symbolsConfiguration: {},
+    });
+    await apply(FEATURE_MAX_OPEN_POSITIONS, limits.maxOpenPositions, {
+      ...MAX_OPEN_POSITIONS_DEFAULTS,
+      maxOpenPositions: limits.maxOpenPositions,
+    });
+  }
+
+  /** The copier's current limit features, for drift checks. */
+  async getCopierLimits(toAccountId: string, copierId: string): Promise<CopierLimits> {
+    const features = await this.getCopierFeatures(toAccountId, copierId);
+    const setting = (typeId: number) => features.find((f: any) => f?.type?.id === typeId)?.setting;
+    return {
+      maximumLot: Number(setting(FEATURE_MAXIMUM_LOT)?.maximumLot ?? 0),
+      maxOpenPositions: Number(setting(FEATURE_MAX_OPEN_POSITIONS)?.maxOpenPositions ?? 0),
+    };
   }
 
   /**

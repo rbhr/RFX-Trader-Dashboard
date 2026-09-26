@@ -14,6 +14,8 @@ export const RISK_TYPE_ACTUAL = 4; // "Actual" — the absolute, permanent stopo
 /** MetaCopier feature type ids (GET /types/featureTypes). */
 export const FEATURE_DAILY_PROFIT_TARGET = 10;
 export const FEATURE_MAX_OPEN_POSITIONS = 17;
+/** Copier-level: total open lots of the copier, overall or per symbol. */
+export const FEATURE_MAXIMUM_LOT = 18;
 export const FEATURE_SKIP_POSITION = 31;
 export const FEATURE_TRADE_GUARDRAILS = 37;
 export const FEATURE_NEWS_FILTER = 49;
@@ -184,6 +186,40 @@ export function findActiveNewsBlock(
   }
   if (blocked.length === 0) return null;
   return { symbols: blocked, title, untilUtc: new Date(untilMs).toISOString() };
+}
+
+export interface CopierLimits {
+  /** Total open lots the copier may hold, per symbol. 0 = no limit. */
+  maximumLot: number;
+  /** Open positions the copier may hold. 0 = no limit. */
+  maxOpenPositions: number;
+}
+
+/**
+ * The copier-level limits that mirror a trader's account limits.
+ *
+ * The account guardrail measures the trader's own lots; the copier's Maximum
+ * lot measures the COPIED lots. So the trader's figure is passed through the
+ * copy settings: at 2x a 0.05 limit becomes 0.10 on live, at a fixed lot every
+ * trade is the same size so the cap is fixed lot × max open trades (no limit
+ * on lots when there is no limit on trades). Max open positions carries over
+ * unchanged. Everything is rounded to 2 decimals, the broker's lot step.
+ */
+export function copierLimitsFor(
+  account: { maxTotalLots: number; maxOpenTrades: number },
+  scaling: { mode: "multiplier" | "fixed"; value: number }
+): CopierLimits {
+  const round = (n: number) => Math.round(n * 100) / 100;
+  let maximumLot = 0;
+  if (scaling.mode === "fixed") {
+    if (account.maxOpenTrades > 0) {
+      maximumLot = round(scaling.value * account.maxOpenTrades);
+    }
+  } else if (account.maxTotalLots > 0) {
+    // Never round a live limit down to nothing.
+    maximumLot = Math.max(0.01, round(account.maxTotalLots * scaling.value));
+  }
+  return { maximumLot, maxOpenPositions: account.maxOpenTrades };
 }
 
 /**

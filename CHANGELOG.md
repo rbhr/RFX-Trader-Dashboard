@@ -5,6 +5,35 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.7] — 2026-09-26
+
+### Added
+
+- **Trader limits now mirrored onto their live copiers.** Saving max total lots or max open
+  trades in Edit Trader writes the account guardrail as before AND the copier-level
+  "Maximum lot" (total open lots, per symbol) and "Max open positions" on every live copier.
+  Those copier limits *skip* a copy that would break them, so an oversized trade now stays on
+  the incubator (where the guardrail closes it) instead of reaching live for a second and
+  losing money. The figure is converted through each copier's copy settings — a 0.05 limit
+  copied at 2x becomes 0.10 on the copier, a fixed-lot copier is capped at fixed lot × max
+  open trades. New live copiers and copy-setting changes inherit the limits; Edit Trader
+  shows a red note when a copier has drifted out of step. Existing copiers are brought in
+  line the next time a trader's limits are saved (57 of 68 currently have none).
+- **All-copiers D / M / A** in the Manage Traders header: sets every active trader's live
+  copiers to Disabled, Manage only or Active after a confirmation. Demo routing copiers are
+  never touched; the result is logged.
+
+### Fixed
+
+- **Copiers dialog showed no status and never greyed a button.** It read a `status` field
+  MetaCopier copiers don't have. State is now derived from `active` + `monitorOnly`; D
+  (Disabled, black), M (Manage only, yellow) and A (Active, blue) show the current one
+  depressed in its colour, and the account number appears.
+- **Removing a copier** checked the destination account for *any* open positions rather than
+  this trader's, and a failed check let the removal through. It now checks only the trader's
+  own positions on that account and blocks if the check fails. Removals and status changes
+  are logged.
+
 ## [4.0.6] — 2026-09-21
 
 ### Added

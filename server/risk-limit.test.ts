@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  copierLimitsFor,
   computeAccruedProfitShare,
   computeDailyLossLimit,
   findActiveNewsBlock,
@@ -120,6 +121,35 @@ describe("findActiveNewsBlock", () => {
     expect(
       findActiveNewsBlock(symbols, new Date("2026-09-25T13:30:00Z").getTime())
     ).toBeNull();
+  });
+});
+
+describe("copierLimitsFor", () => {
+  it("passes the trader's limits through a multiplier", () => {
+    expect(copierLimitsFor({ maxTotalLots: 0.05, maxOpenTrades: 2 }, { mode: "multiplier", value: 1 }))
+      .toEqual({ maximumLot: 0.05, maxOpenPositions: 2 });
+    expect(copierLimitsFor({ maxTotalLots: 0.05, maxOpenTrades: 2 }, { mode: "multiplier", value: 2 }))
+      .toEqual({ maximumLot: 0.1, maxOpenPositions: 2 });
+    expect(copierLimitsFor({ maxTotalLots: 0.05, maxOpenTrades: 2 }, { mode: "multiplier", value: 0.5 }))
+      .toEqual({ maximumLot: 0.03, maxOpenPositions: 2 });
+  });
+
+  it("never rounds a live limit down to zero", () => {
+    expect(copierLimitsFor({ maxTotalLots: 0.01, maxOpenTrades: 0 }, { mode: "multiplier", value: 0.1 }).maximumLot)
+      .toBe(0.01);
+  });
+
+  it("caps a fixed-lot copier by fixed lot × max open trades", () => {
+    expect(copierLimitsFor({ maxTotalLots: 0.04, maxOpenTrades: 2 }, { mode: "fixed", value: 0.01 }))
+      .toEqual({ maximumLot: 0.02, maxOpenPositions: 2 });
+    // No limit on trades means no meaningful cap on total lots either.
+    expect(copierLimitsFor({ maxTotalLots: 0.04, maxOpenTrades: 0 }, { mode: "fixed", value: 0.01 }))
+      .toEqual({ maximumLot: 0, maxOpenPositions: 0 });
+  });
+
+  it("0 on the account is 0 (no limit) on the copier", () => {
+    expect(copierLimitsFor({ maxTotalLots: 0, maxOpenTrades: 0 }, { mode: "multiplier", value: 1 }))
+      .toEqual({ maximumLot: 0, maxOpenPositions: 0 });
   });
 });
 

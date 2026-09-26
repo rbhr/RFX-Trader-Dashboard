@@ -36,16 +36,17 @@
 ---
 
 ## 🔴 HIGH PRIORITY — Keep oversized trades off live (copier-level max lots)
-**Status:** 🔴 Not started. Raised 2026-09-21 after Sameer (81301) lost $8.72 on live for nothing.
+**Status:** 🟡 Built 2026-09-26 (v4.0.7): Edit Trader writes max total lots / max open trades to the account AND to every live copier (Maximum lot feature 18 per symbol + Max open positions 17), converted through each copier's copy settings; new copiers and scaling changes inherit; Edit Trader flags drift. **Existing copiers are only brought in line when a trader's limits are next saved** — a one-off backfill is still open, and the "master is the reference" semantics need one live test.
 
 The account-level Trade Guardrail only *closes* an oversized trade after it has opened — by then the copier has already put it on live, so it opens and closes there within a second or two at a loss (Sameer: 0.25 lots vs a 0.04 limit, 08:00 UTC 2026-09-21, −$8.72 on 8220). Other accounts show the same guardrail closes in MetaCopier's log. The copier's own max lot size / max open positions *skip* the open instead ("Open skipped (exceeds max lot size)"), so the trade never reaches live.
 
 RR removed the copier-level limits (`zero-copier-limits.mjs`) because keeping account and copier levels in step by hand in MetaCopier was unmanageable. The fix is to make this platform the single place: **changing max total lots / max open trades in Edit Trader writes the account feature AND every live copier**, so they cannot drift.
 
-- [ ] Work out the copier-side equivalents and their semantics vs. the account guardrail: copier `maxLotSize` / `maximumLot` fields and feature type 19 ("Max lot size") are per-trade, the account guardrail is aggregated per symbol — confirm what the copier can enforce in aggregate, and how `maxOpenPositions` (field + feature 17 at copier level) behaves. Mind the copy ratio: the copier limit applies to the *copied* size (multiplier / fixed lot), not the trader's.
-- [ ] `updateTraderControls`: write max lots / max open trades to the account and to all live copiers (never the demo routing copier); `getTraderControls`: flag drift between the two levels.
-- [ ] New live copiers (`ensureLiveCopier`) inherit the trader's current limits.
-- [ ] One-off dry-run backfill to bring existing copiers in line with their account.
+- [x] Copier-side equivalents: feature 18 "Maximum lot" = total open lots (per symbol via the global figure), feature 17 = max open positions; both SKIP the copy. Converted through copy settings: multiplier × limit; fixed lot × max open trades. (`copierLimitsFor` in server/tradingControls.ts)
+- [x] `updateTraderControls` writes both levels; `getTraderControls` reports drift.
+- [x] New live copiers / scaling changes inherit the limits (`ensureLiveCopier`).
+- [ ] **Backfill**: as of 2026-09-26, 57 of 68 live copiers have no limits (dry run in session). Bring them in line — either save each trader's limits once in Edit Trader, or a one-off script calling `syncCopierLimits` per trader (dry run first).
+- [ ] **Verify on one live copier** that MetaCopier measures the copied size (docs: "the master account is the reference" — for us the trader's incubator is MC's master). If it measures the trader's original size instead, drop the multiplier conversion in `copierLimitsFor`.
 - [ ] Trader-facing wording if behaviour changes (skipped, not closed) — en/ur/ar.
 
 ---

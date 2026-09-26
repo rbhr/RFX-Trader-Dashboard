@@ -70,6 +70,7 @@ import {
 import {
   DAILY_PROFIT_TARGET_DEFAULTS,
   FEATURE_DAILY_PROFIT_TARGET,
+  FEATURE_MAXIMUM_LOT,
   FEATURE_MAX_OPEN_POSITIONS,
   FEATURE_NEWS_FILTER,
   FEATURE_TRADE_GUARDRAILS,
@@ -77,6 +78,7 @@ import {
   TRADE_GUARDRAILS_DEFAULTS,
   computeAccruedProfitShare,
   computeDailyLossLimit,
+  copierLimitsFor,
   findActualRiskLimit,
   findDailyRiskLimit,
   type NewsBlock,
@@ -663,6 +665,54 @@ const copyScalingInput = z.object({
   value: z.number().positive().max(1000),
 });
 
+/** The trader's account-level limits as the dashboard understands them. */
+async function readAccountLimits(mcAccountId: string): Promise<{
+  maxTotalLots: number;
+  maxOpenTrades: number;
+}> {
+  const features = await metaCopierService.getAccountFeatures(mcAccountId);
+  const setting = (typeId: number) =>
+    features.find((f: any) => f?.type?.id === typeId)?.setting;
+  const guardrails = setting(FEATURE_TRADE_GUARDRAILS);
+  return {
+    maxTotalLots:
+      guardrails?.enabled && guardrails.maxLotSizeThreshold
+        ? Number(guardrails.maxLotSizeThreshold)
+        : 0,
+    maxOpenTrades: Number(setting(FEATURE_MAX_OPEN_POSITIONS)?.maxOpenPositions ?? 0),
+  };
+}
+
+/** How a copier sizes trades, read back from MetaCopier. */
+function copierScaling(copier: any): CopyScaling {
+  const scaleTypeId: number = copier.scaleType?.id ?? copier.scaleType;
+  return scaleTypeId === 3
+    ? { mode: "fixed", value: Number(copier.fixedLotSize ?? 0.01) }
+    : { mode: "multiplier", value: Number(copier.multiplier ?? 1) };
+}
+
+/**
+ * Write the copier-level mirror of the trader's account limits to every live
+ * copier, each through its own copy settings. The one place both levels are
+ * set from, so they cannot drift apart.
+ */
+async function syncCopierLimits(
+  mcAccountId: string,
+  accountLimits?: { maxTotalLots: number; maxOpenTrades: number }
+): Promise<string[]> {
+  const limits = accountLimits ?? (await readAccountLimits(mcAccountId));
+  const copiers = await getTraderLiveCopiers(mcAccountId);
+  const applied: string[] = [];
+  for (const c of copiers) {
+    const target = copierLimitsFor(limits, copierScaling(c));
+    await metaCopierService.setCopierLimits(c.toAccountId, c.id, target);
+    applied.push(
+      `${c.toAccountAlias}: ${target.maximumLot || "no"} lots / ${target.maxOpenPositions || "no"} trades`
+    );
+  }
+  return applied;
+}
+
 /**
  * Make sure a copier runs from the trader's incubator account into a master
  * account. An existing one only has its lot sizing updated — never its active
@@ -690,10 +740,17 @@ async function ensureLiveCopier(opts: {
   ).find(
     (c: any) => c.fromAccountId === opts.mcAccountId
   );
+  const accountLimits = await readAccountLimits(opts.mcAccountId);
   if (existing) {
     if (opts.scaling) {
       await metaCopierService.setCopierScaling(masterId, existing.id, opts.scaling);
     }
+    // The copied size changed, so the copied limit must follow.
+    await metaCopierService.setCopierLimits(
+      masterId,
+      existing.id,
+      copierLimitsFor(accountLimits, opts.scaling ?? copierScaling(existing))
+    );
     return { created: false, masterAlias };
   }
   const result = await metaCopierService.createCopier({
@@ -703,9 +760,15 @@ async function ensureLiveCopier(opts: {
     newsFilter: opts.newsFilter ?? true,
     scaling: opts.scaling,
   });
-  if (!result.success) {
+  if (!result.success || !result.copierId) {
     throw new Error(result.message || "copier creation failed");
   }
+  // A new live copier inherits the trader's current limits.
+  await metaCopierService.setCopierLimits(
+    masterId,
+    result.copierId,
+    copierLimitsFor(accountLimits, opts.scaling ?? { mode: "multiplier", value: 1 })
+  );
   return { created: true, masterAlias };
 }
 
@@ -2765,8 +2828,49 @@ export const appRouter = router({
           input.copierId,
           input.status
         );
+        const statusTrader = await getMagicNumberById(input.traderId);
+        logEvent(
+          "metacopier",
+          `Copier ${input.copierId.slice(0, 8)} on ${input.toAccountId.slice(0, 8)} for ${statusTrader?.name ?? "?"} (${statusTrader?.magicNumber ?? "?"}) set to ${input.status}`
+        );
 
         return { success: true };
+      }),
+
+    // Set every live copier of every active trader to one state, e.g. to halt
+    // all copying in a hurry. The demo routing copiers are never touched.
+    setAllCopierStatus: adminProcedure
+      .input(z.object({ status: z.enum(["ACTIVE", "DISABLED", "MANAGE"]) }))
+      .mutation(async ({ input }) => {
+        const traders = (await getAllActiveMagicNumbers()).filter(
+          t => !t.isAdmin && !!t.mcAccountId
+        );
+        let changed = 0;
+        const failed: string[] = [];
+        for (const t of traders) {
+          let copiers: any[] = [];
+          try {
+            copiers = await getTraderLiveCopiers(t.mcAccountId!);
+          } catch (e: any) {
+            failed.push(`${t.name}: ${e.message}`);
+            continue;
+          }
+          for (const c of copiers) {
+            try {
+              await metaCopierService.updateCopierStatus(c.toAccountId, c.id, input.status);
+              changed++;
+            } catch (e: any) {
+              failed.push(`${t.name} → ${c.toAccountAlias}: ${e.message}`);
+            }
+          }
+        }
+        logEvent(
+          "metacopier",
+          `ALL live copiers set to ${input.status}: ${changed} changed` +
+            (failed.length ? `, ${failed.length} failed: ${failed.join("; ")}` : ""),
+          failed.length ? "warn" : "info"
+        );
+        return { changed, failed };
       }),
 
     // Remove copier
@@ -2786,18 +2890,40 @@ export const appRouter = router({
           });
         }
 
-        // Check for open positions
-        const hasOpenPositions = await metaCopierService.copierHasOpenPositions(
-          input.toAccountId
-        );
-        if (hasOpenPositions) {
+        const removeTrader = await getMagicNumberById(input.traderId);
+        if (!removeTrader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+
+        // Only THIS trader's open positions on that account matter (the master
+        // holds every trader's), and a failed check must block, not pass.
+        let open: number;
+        try {
+          open = (
+            await metaCopierService.getOpenPositionsFromAccount(
+              input.toAccountId,
+              removeTrader.magicNumber
+            )
+          ).length;
+        } catch (e: any) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Could not check open positions, copier not removed: ${e.message}`,
+          });
+        }
+        if (open > 0) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Cannot remove copier with open positions",
+            message: `Cannot remove copier: ${removeTrader.name} has ${open} open position(s) on that account`,
           });
         }
 
         await metaCopierService.removeCopier(input.toAccountId, input.copierId);
+        logEvent(
+          "metacopier",
+          `Removed copier ${input.copierId.slice(0, 8)} on ${input.toAccountId.slice(0, 8)} for ${removeTrader.name} (${removeTrader.magicNumber})`,
+          "warn"
+        );
 
         return { success: true };
       }),
@@ -2960,16 +3086,43 @@ export const appRouter = router({
         const dailyLimit = findDailyRiskLimit(limits);
         const guardrails = setting(FEATURE_TRADE_GUARDRAILS);
 
+        const accountLimits = {
+          maxTotalLots:
+            guardrails?.enabled && guardrails.maxLotSizeThreshold
+              ? Number(guardrails.maxLotSizeThreshold)
+              : 0,
+          maxOpenTrades: Number(
+            setting(FEATURE_MAX_OPEN_POSITIONS)?.maxOpenPositions ?? 0
+          ),
+        };
+
         // News trading is allowed unless every live copier filters it out.
+        // Same pass: do the copier limits still mirror the account's?
+        const copierDrift: string[] = [];
         const newsFilters = await Promise.all(
           liveCopiers.map(async c => {
             const copierFeatures = await metaCopierService.getCopierFeatures(
               c.toAccountId,
               c.id
             );
-            return !!copierFeatures.find(
-              (f: any) => f?.type?.id === FEATURE_NEWS_FILTER
-            )?.setting?.enableNewsFilter;
+            const featureSetting = (typeId: number) =>
+              copierFeatures.find((f: any) => f?.type?.id === typeId)?.setting;
+            const actual = {
+              maximumLot: Number(featureSetting(FEATURE_MAXIMUM_LOT)?.maximumLot ?? 0),
+              maxOpenPositions: Number(
+                featureSetting(FEATURE_MAX_OPEN_POSITIONS)?.maxOpenPositions ?? 0
+              ),
+            };
+            const expected = copierLimitsFor(accountLimits, copierScaling(c));
+            if (
+              actual.maximumLot !== expected.maximumLot ||
+              actual.maxOpenPositions !== expected.maxOpenPositions
+            ) {
+              copierDrift.push(
+                `${c.toAccountAlias}: has ${actual.maximumLot || "no"} lots / ${actual.maxOpenPositions || "no"} trades, should be ${expected.maximumLot || "no"} / ${expected.maxOpenPositions || "no"}`
+              );
+            }
+            return !!featureSetting(FEATURE_NEWS_FILTER)?.enableNewsFilter;
           })
         );
 
@@ -2995,6 +3148,9 @@ export const appRouter = router({
           newsTradingAllowed:
             liveCopiers.length === 0 || newsFilters.some(on => !on),
           liveCopierCount: liveCopiers.length,
+          // Live copiers whose limits no longer mirror the account's. Saving
+          // max lots or max trades rewrites all of them.
+          copierDrift,
         };
       }),
 
@@ -3065,6 +3221,13 @@ export const appRouter = router({
             MAX_OPEN_POSITIONS_DEFAULTS
           );
           changed.push(`max open trades ${input.maxOpenTrades}`);
+        }
+        // Mirror the limits onto every live copier (through each one's copy
+        // settings), so an oversized trade is skipped on live rather than
+        // copied and then closed by the account guardrail.
+        if (input.maxTotalLots !== undefined || input.maxOpenTrades !== undefined) {
+          const applied = await syncCopierLimits(mcAccountId);
+          if (applied.length > 0) changed.push(`copier limits → ${applied.join("; ")}`);
         }
         if (input.newsTradingAllowed !== undefined) {
           const liveCopiers = await getTraderLiveCopiers(mcAccountId);

@@ -60,6 +60,82 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
+type CopierStatus = "ACTIVE" | "MANAGE" | "DISABLED";
+
+// MetaCopier copiers have no status field: the state is `active` plus
+// `monitorOnly` (Manage = manage existing trades only, no new ones).
+function copierStatusOf(copier: { active?: boolean; monitorOnly?: boolean }): CopierStatus {
+  if (!copier.active) return "DISABLED";
+  return copier.monitorOnly ? "MANAGE" : "ACTIVE";
+}
+
+const COPIER_STATUS: Record<
+  CopierStatus,
+  { letter: "D" | "M" | "A"; label: string; title: string; pill: string; on: string; off: string }
+> = {
+  DISABLED: {
+    letter: "D",
+    label: "Disabled",
+    title: "Disable — stop copying",
+    pill: "bg-zinc-900 text-white",
+    on: "bg-zinc-900 text-white border-zinc-900 shadow-inner ring-2 ring-zinc-900/30 hover:bg-zinc-900",
+    off: "border-zinc-400 text-zinc-700 hover:bg-zinc-100",
+  },
+  MANAGE: {
+    letter: "M",
+    label: "Manage only",
+    title: "Manage existing trades only — no new trades copied",
+    pill: "bg-yellow-400 text-yellow-950",
+    on: "bg-yellow-400 text-yellow-950 border-yellow-500 shadow-inner ring-2 ring-yellow-400/40 hover:bg-yellow-400",
+    off: "border-yellow-500 text-yellow-700 hover:bg-yellow-50",
+  },
+  ACTIVE: {
+    letter: "A",
+    label: "Active",
+    title: "Activate — copy all trades",
+    pill: "bg-blue-600 text-white",
+    on: "bg-blue-600 text-white border-blue-600 shadow-inner ring-2 ring-blue-600/30 hover:bg-blue-600",
+    off: "border-blue-500 text-blue-700 hover:bg-blue-50",
+  },
+};
+
+// D / M / A. The current state is shown depressed, in its colour.
+function CopierStatusButtons({
+  current,
+  onChange,
+  disabled,
+  size = "sm",
+}: {
+  current: CopierStatus | null;
+  onChange: (next: CopierStatus) => void;
+  disabled?: boolean;
+  size?: "sm" | "default";
+}) {
+  return (
+    <div className="flex gap-1">
+      {(["DISABLED", "MANAGE", "ACTIVE"] as CopierStatus[]).map(status => {
+        const cfg = COPIER_STATUS[status];
+        const isCurrent = current === status;
+        return (
+          <Button
+            key={status}
+            type="button"
+            size={size}
+            variant="outline"
+            aria-pressed={isCurrent}
+            title={cfg.title}
+            disabled={disabled || isCurrent}
+            className={`min-w-9 font-bold disabled:opacity-100 ${isCurrent ? cfg.on : cfg.off}`}
+            onClick={() => onChange(status)}
+          >
+            {cfg.letter}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 type CopyMode = "multiplier" | "fixed";
 
 /** "0.5" -> 0.5, to 2 decimals; null when it isn't a positive number. */
@@ -513,6 +589,8 @@ export default function ManageTraders() {
   } | null>(null);
   // "Save Settings and Change Master Account?" confirmation.
   const [masterChangeOpen, setMasterChangeOpen] = useState(false);
+  // Page-wide D / M / A: which state is waiting for confirmation.
+  const [allCopiersTarget, setAllCopiersTarget] = useState<CopierStatus | null>(null);
   const [activateNewCopier, setActivateNewCopier] = useState(false);
 
   const utils = trpc.useUtils();
@@ -880,6 +958,20 @@ export default function ManageTraders() {
     },
   });
 
+  const setAllCopierStatus = trpc.admin.setAllCopierStatus.useMutation({
+    onSuccess: data => {
+      utils.admin.listTraders.invalidate();
+      refetchCopiers();
+      toast.success(`${data.changed} live copier${data.changed === 1 ? "" : "s"} updated`);
+      if (data.failed.length > 0) {
+        toast.error(`${data.failed.length} failed: ${data.failed.join("; ")}`, { duration: 15000 });
+      }
+    },
+    onError: error => {
+      toast.error(error.message);
+    },
+  });
+
   const removeCopier = trpc.admin.removeCopier.useMutation({
     onSuccess: () => {
       toast.success("Copier removed successfully");
@@ -890,35 +982,28 @@ export default function ManageTraders() {
     },
   });
 
-  const handleCopierAction = (copier: any, action: "D" | "M" | "A" | "X") => {
+  const handleCopierRemove = (copier: any) => {
     if (!selectedTrader) return;
-
-    if (action === "X") {
-      if (
-        confirm(
-          `Remove copier to ${copier.toAccountAlias}? This will check for open positions first.`
-        )
-      ) {
-        removeCopier.mutate({
-          traderId: selectedTrader.id,
-          toAccountId: copier.toAccountId,
-          copierId: copier.id,
-        });
-      }
-      return;
+    if (
+      confirm(
+        `Remove copier to ${copier.toAccountAlias}? It is only removed if ${selectedTrader.name} has no open positions on that account.`
+      )
+    ) {
+      removeCopier.mutate({
+        traderId: selectedTrader.id,
+        toAccountId: copier.toAccountId,
+        copierId: copier.id,
+      });
     }
+  };
 
-    const statusMap = {
-      D: "DISABLED" as const,
-      M: "MANAGE" as const,
-      A: "ACTIVE" as const,
-    };
-
+  const handleCopierStatus = (copier: any, status: CopierStatus) => {
+    if (!selectedTrader) return;
     updateCopierStatus.mutate({
       traderId: selectedTrader.id,
       toAccountId: copier.toAccountId,
       copierId: copier.id,
-      status: statusMap[action],
+      status,
     });
   };
 
@@ -1196,6 +1281,17 @@ export default function ManageTraders() {
               <option value="RFX">RFX</option>
               <option value="RFX - Group 2">RFX - Group 2</option>
             </select>
+            {/* Every trader's live copiers at once (demo routing copiers untouched) */}
+            <div className="flex items-center gap-2 rounded-md border px-2 py-1">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                All copiers
+              </span>
+              <CopierStatusButtons
+                current={null}
+                disabled={setAllCopierStatus.isPending}
+                onChange={setAllCopiersTarget}
+              />
+            </div>
             {/* Broadcast message button */}
             <Button
               variant="outline"
@@ -2713,6 +2809,18 @@ export default function ManageTraders() {
                         </p>
                       </div>
                     </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Both limits are also written to the trader's live copiers,
+                      converted through their copy settings, so an oversized
+                      trade is skipped on live instead of copied and closed.
+                      {traderControls && traderControls.copierDrift.length > 0 && (
+                        <span className="block text-destructive mt-1">
+                          Out of step in MetaCopier —{" "}
+                          {traderControls.copierDrift.join("; ")}. Save either
+                          limit to bring the copiers in line.
+                        </span>
+                      )}
+                    </p>
                     <div className="mt-4 space-y-1">
                       <div className="flex items-center gap-2">
                         <Checkbox
@@ -3006,6 +3114,42 @@ export default function ManageTraders() {
           </DialogContent>
         </Dialog>
 
+        {/* All-copiers confirmation */}
+        <AlertDialog
+          open={allCopiersTarget !== null}
+          onOpenChange={open => !open && setAllCopiersTarget(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Set every live copier to{" "}
+                {allCopiersTarget ? COPIER_STATUS[allCopiersTarget].label : ""}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {allCopiersTarget === "DISABLED"
+                  ? "No trader's trades will be copied to any live account until copiers are re-enabled. Open live positions are left as they are."
+                  : allCopiersTarget === "MANAGE"
+                    ? "Existing live positions stay managed (closes and modifications still copy), but no new trades are copied for any trader."
+                    : "Every active trader's live copiers start copying. Traders whose copier was deliberately off will be switched on too."}{" "}
+                This covers all live copiers of all active traders; the demo routing
+                copiers are not touched. Each change is logged.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className={allCopiersTarget ? COPIER_STATUS[allCopiersTarget].on : ""}
+                onClick={() => {
+                  if (allCopiersTarget) setAllCopierStatus.mutate({ status: allCopiersTarget });
+                  setAllCopiersTarget(null);
+                }}
+              >
+                Set all to {allCopiersTarget ? COPIER_STATUS[allCopiersTarget].label : ""}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Master account change confirmation */}
         <AlertDialog open={masterChangeOpen} onOpenChange={setMasterChangeOpen}>
           <AlertDialogContent>
@@ -3237,58 +3381,30 @@ export default function ManageTraders() {
                             <div className="font-medium">
                               {copier.toAccountAlias}
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              {copier.toAccountNumber}
+                            <div className="text-sm text-muted-foreground font-mono">
+                              {copier.toAccountLogin}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              copier.status === "ACTIVE"
-                                ? "bg-green-100 text-green-800"
-                                : copier.status === "DISABLED"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                            }`}
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${COPIER_STATUS[copierStatusOf(copier)].pill}`}
                           >
-                            {copier.status}
+                            {COPIER_STATUS[copierStatusOf(copier)].label}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCopierAction(copier, "D")}
-                              disabled={copier.status === "DISABLED"}
-                              title="Disable copier"
-                            >
-                              D
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCopierAction(copier, "M")}
-                              disabled={copier.status === "MANAGE"}
-                              title="Manage mode (no new trades)"
-                            >
-                              M
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCopierAction(copier, "A")}
-                              disabled={copier.status === "ACTIVE"}
-                              title="Activate copier"
-                            >
-                              A
-                            </Button>
+                          <div className="flex items-center gap-3">
+                            <CopierStatusButtons
+                              current={copierStatusOf(copier)}
+                              disabled={updateCopierStatus.isPending}
+                              onChange={status => handleCopierStatus(copier, status)}
+                            />
                             <Button
                               variant="destructive"
                               size="sm"
-                              onClick={() => handleCopierAction(copier, "X")}
-                              title="Remove copier (checks for open positions)"
+                              onClick={() => handleCopierRemove(copier)}
+                              title="Remove copier (only if this trader has no open positions on that account)"
                             >
                               X
                             </Button>
