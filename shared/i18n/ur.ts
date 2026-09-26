@@ -275,6 +275,19 @@ export const ur: Translations = {
       message:
         "آپ کی {symbol} پر {volume} lots کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں کھلی ٹریڈز کی آپ کی زیادہ سے زیادہ تعداد پہلے ہی پوری ہو چکی تھی۔",
     },
+    copierActive: {
+      title: "[Magic {magicNumber}] Live اکاؤنٹ میں کاپی آن",
+      message: "اب آپ کی ٹریڈز Live اکاؤنٹ میں کاپی ہو رہی ہیں۔",
+    },
+    copierManage: {
+      title: "[Magic {magicNumber}] نئی ٹریڈز کاپی نہیں ہوں گی",
+      message:
+        "نئی ٹریڈز اب Live اکاؤنٹ میں کاپی نہیں ہوں گی؛ آپ کی کھلی ٹریڈز کا انتظام جاری رہے گا۔",
+    },
+    copierDisabled: {
+      title: "[Magic {magicNumber}] Live اکاؤنٹ میں کاپی آف",
+      message: "اب آپ کی ٹریڈز Live اکاؤنٹ میں کاپی نہیں ہو رہیں۔",
+    },
     tradingReenabled: {
       title: "[Magic {magicNumber}] ٹریڈنگ دوبارہ فعال کر دی گئی",
       message:
@@ -305,6 +318,12 @@ export const ur: Translations = {
       "[Magic {magicNumber}] ⚠️ <b>ٹریڈ بند کر دی گئی — کھلی ٹریڈز بہت زیادہ</b>\n\n{greeting}\n\nآپ کی <b>{symbol}</b> پر <b>{volume} lots</b> کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں آپ کی زیادہ سے زیادہ <b>{limit}</b> ٹریڈز پہلے ہی کھلی تھیں۔",
     tradeLimitCloseNoMax:
       "[Magic {magicNumber}] ⚠️ <b>ٹریڈ بند کر دی گئی — کھلی ٹریڈز بہت زیادہ</b>\n\n{greeting}\n\nآپ کی <b>{symbol}</b> پر <b>{volume} lots</b> کی ٹریڈ بند کر دی گئی، کیونکہ ایک ہی وقت میں کھلی ٹریڈز کی آپ کی زیادہ سے زیادہ تعداد پہلے ہی پوری ہو چکی تھی۔",
+    copierActive:
+      "[Magic {magicNumber}] ✅ <b>Live اکاؤنٹ میں کاپی آن</b>\n\n{greeting}\n\nاب آپ کی ٹریڈز Live اکاؤنٹ میں کاپی ہو رہی ہیں۔",
+    copierManage:
+      "[Magic {magicNumber}] ⏸ <b>نئی ٹریڈز کاپی نہیں ہوں گی</b>\n\n{greeting}\n\nنئی ٹریڈز اب Live اکاؤنٹ میں کاپی نہیں ہوں گی؛ آپ کی کھلی ٹریڈز کا انتظام جاری رہے گا۔",
+    copierDisabled:
+      "[Magic {magicNumber}] ⛔ <b>Live اکاؤنٹ میں کاپی آف</b>\n\n{greeting}\n\nاب آپ کی ٹریڈز Live اکاؤنٹ میں کاپی نہیں ہو رہیں۔",
     loginDetailsHeading: "لاگ اِن کی تفصیلات",
     verificationCode:
       "[Magic {magicNumber}] 🔐 <b>تصدیقی کوڈ</b>\n\n{greeting}\n\n<b>{purpose}</b> کے لیے آپ کا تصدیقی کوڈ یہ ہے:\n\n<code>{code}</code>\n\nیہ کوڈ 5 منٹ میں ختم ہو جائے گا۔ اگر آپ نے یہ درخواست نہیں کی تو اس پیغام کو نظر انداز کریں۔",

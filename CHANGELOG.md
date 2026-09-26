@@ -5,6 +5,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.9] — 2026-09-26
+
+### Added
+
+- **Traders are told when their live copier's state changes.** Setting a copier to Active,
+  Manage only or Disabled — from the copiers dialog or the all-copiers header — sends the
+  trader an in-app notification and a Telegram message in their language, and an English copy
+  to the alerts channel. The all-copiers action sends one message per trader. The demo
+  routing copier never triggers a message.
+
 ## [4.0.8] — 2026-09-26
 
 ### Changed

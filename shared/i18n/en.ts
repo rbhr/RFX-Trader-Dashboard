@@ -289,6 +289,19 @@ export const en = {
       message:
         "Your {symbol} trade of {volume} lots was closed because you already had your maximum number of trades open at the same time.",
     },
+    copierActive: {
+      title: "[Magic {magicNumber}] Copying to Live Account On",
+      message: "Your trades are now being copied into the Live Account.",
+    },
+    copierManage: {
+      title: "[Magic {magicNumber}] New Trades Not Copied",
+      message:
+        "New trades are no longer copied to the Live Account; your open trades are still managed.",
+    },
+    copierDisabled: {
+      title: "[Magic {magicNumber}] Copying to Live Account Off",
+      message: "Your trades are no longer being copied into the Live Account.",
+    },
     tradingReenabled: {
       title: "[Magic {magicNumber}] Trading Re-enabled",
       message:
@@ -320,6 +333,12 @@ export const en = {
       "[Magic {magicNumber}] ⚠️ <b>Trade Closed — Too Many Open Trades</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade of <b>{volume} lots</b> was closed because you already had your maximum of <b>{limit}</b> trades open at the same time.",
     tradeLimitCloseNoMax:
       "[Magic {magicNumber}] ⚠️ <b>Trade Closed — Too Many Open Trades</b>\n\n{greeting}\n\nYour <b>{symbol}</b> trade of <b>{volume} lots</b> was closed because you already had your maximum number of trades open at the same time.",
+    copierActive:
+      "[Magic {magicNumber}] ✅ <b>Copying to Live Account On</b>\n\n{greeting}\n\nYour trades are now being copied into the Live Account.",
+    copierManage:
+      "[Magic {magicNumber}] ⏸ <b>New Trades Not Copied</b>\n\n{greeting}\n\nNew trades are no longer copied to the Live Account; your open trades are still managed.",
+    copierDisabled:
+      "[Magic {magicNumber}] ⛔ <b>Copying to Live Account Off</b>\n\n{greeting}\n\nYour trades are no longer being copied into the Live Account.",
     loginDetailsHeading: "LOGIN DETAILS",
     verificationCode:
       "[Magic {magicNumber}] 🔐 <b>Verification Code</b>\n\n{greeting}\n\nYour verification code for <b>{purpose}</b> is:\n\n<code>{code}</code>\n\nThis code expires in 5 minutes. If you didn't request this, ignore this message.",

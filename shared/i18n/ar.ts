@@ -276,6 +276,19 @@ export const ar: Translations = {
       message:
         "تم إغلاق صفقتك على {symbol} بحجم {volume} lots لأنك بلغت بالفعل الحد الأقصى لعدد الصفقات المفتوحة في الوقت نفسه.",
     },
+    copierActive: {
+      title: "[Magic {magicNumber}] تم تشغيل النسخ إلى الحساب الحقيقي (Live)",
+      message: "يجري الآن نسخ صفقاتك إلى الحساب الحقيقي (Live).",
+    },
+    copierManage: {
+      title: "[Magic {magicNumber}] لن تُنسخ الصفقات الجديدة",
+      message:
+        "لم تعد الصفقات الجديدة تُنسخ إلى الحساب الحقيقي (Live)؛ ما زالت صفقاتك المفتوحة تُدار.",
+    },
+    copierDisabled: {
+      title: "[Magic {magicNumber}] تم إيقاف النسخ إلى الحساب الحقيقي (Live)",
+      message: "لم تعد صفقاتك تُنسخ إلى الحساب الحقيقي (Live).",
+    },
     tradingReenabled: {
       title: "[Magic {magicNumber}] تمت إعادة تفعيل التداول",
       message:
@@ -306,6 +319,12 @@ export const ar: Translations = {
       "[Magic {magicNumber}] ⚠️ <b>تم إغلاق الصفقة — عدد الصفقات المفتوحة كبير</b>\n\n{greeting}\n\nتم إغلاق صفقتك على <b>{symbol}</b> بحجم <b>{volume} lots</b> لأن لديك بالفعل الحد الأقصى البالغ <b>{limit}</b> من الصفقات المفتوحة في الوقت نفسه.",
     tradeLimitCloseNoMax:
       "[Magic {magicNumber}] ⚠️ <b>تم إغلاق الصفقة — عدد الصفقات المفتوحة كبير</b>\n\n{greeting}\n\nتم إغلاق صفقتك على <b>{symbol}</b> بحجم <b>{volume} lots</b> لأنك بلغت بالفعل الحد الأقصى لعدد الصفقات المفتوحة في الوقت نفسه.",
+    copierActive:
+      "[Magic {magicNumber}] ✅ <b>تم تشغيل النسخ إلى الحساب الحقيقي (Live)</b>\n\n{greeting}\n\nيجري الآن نسخ صفقاتك إلى الحساب الحقيقي (Live).",
+    copierManage:
+      "[Magic {magicNumber}] ⏸ <b>لن تُنسخ الصفقات الجديدة</b>\n\n{greeting}\n\nلم تعد الصفقات الجديدة تُنسخ إلى الحساب الحقيقي (Live)؛ ما زالت صفقاتك المفتوحة تُدار.",
+    copierDisabled:
+      "[Magic {magicNumber}] ⛔ <b>تم إيقاف النسخ إلى الحساب الحقيقي (Live)</b>\n\n{greeting}\n\nلم تعد صفقاتك تُنسخ إلى الحساب الحقيقي (Live).",
     loginDetailsHeading: "بيانات تسجيل الدخول",
     verificationCode:
       "[Magic {magicNumber}] 🔐 <b>رمز التحقق</b>\n\n{greeting}\n\nرمز التحقق الخاص بك من أجل <b>{purpose}</b> هو:\n\n<code>{code}</code>\n\nتنتهي صلاحية هذا الرمز خلال 5 دقائق. إذا لم تطلب ذلك فتجاهل هذه الرسالة.",

@@ -665,6 +665,46 @@ const copyScalingInput = z.object({
   value: z.number().positive().max(1000),
 });
 
+/**
+ * Tell a trader their live copier changed state: in-app, Telegram in their
+ * language, and an English copy to the alerts channel. Never throws.
+ */
+async function notifyCopierStatus(
+  trader: NonNullable<Awaited<ReturnType<typeof getMagicNumberById>>>,
+  status: "ACTIVE" | "DISABLED" | "MANAGE"
+): Promise<void> {
+  const key =
+    status === "ACTIVE"
+      ? "copierActive"
+      : status === "MANAGE"
+        ? "copierManage"
+        : "copierDisabled";
+  const params = { magicNumber: trader.magicNumber };
+  try {
+    await createSystemNotification({
+      magicNumberId: trader.id,
+      key,
+      params,
+      type: status === "ACTIVE" ? "info" : "warning",
+    });
+    const { message, english, opts } = localizedTelegram(
+      (p: Record<string, string>, lang: Language) =>
+        translate(lang, `telegram.${key}`, {
+          ...p,
+          greeting: translate(lang, "telegram.greeting", { name: trader.name }),
+        }),
+      params,
+      trader.language
+    );
+    if (trader.telegramChatId) {
+      await sendTelegramMessage(trader.telegramHandle ?? "", message, trader.telegramChatId, opts);
+    }
+    await copyToAlertChannel(english);
+  } catch (e: any) {
+    console.warn(`[Copier] Status notification to ${trader.name} failed:`, e?.message ?? e);
+  }
+}
+
 /** The trader's account-level limits as the dashboard understands them. */
 async function readAccountLimits(mcAccountId: string): Promise<{
   maxTotalLots: number;
@@ -2833,6 +2873,11 @@ export const appRouter = router({
           "metacopier",
           `Copier ${input.copierId.slice(0, 8)} on ${input.toAccountId.slice(0, 8)} for ${statusTrader?.name ?? "?"} (${statusTrader?.magicNumber ?? "?"}) set to ${input.status}`
         );
+        // The demo routing copier is invisible to the trader; only a live one
+        // is worth a message.
+        if (statusTrader && input.toAccountId !== DEMO_SLAVE_ACCOUNT_ID) {
+          await notifyCopierStatus(statusTrader, input.status);
+        }
 
         return { success: true };
       }),
@@ -2855,14 +2900,18 @@ export const appRouter = router({
             failed.push(`${t.name}: ${e.message}`);
             continue;
           }
+          let touched = 0;
           for (const c of copiers) {
             try {
               await metaCopierService.updateCopierStatus(c.toAccountId, c.id, input.status);
               changed++;
+              touched++;
             } catch (e: any) {
               failed.push(`${t.name} → ${c.toAccountAlias}: ${e.message}`);
             }
           }
+          // One message per trader, however many live copiers they have.
+          if (touched > 0) await notifyCopierStatus(t, input.status);
         }
         logEvent(
           "metacopier",
