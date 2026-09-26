@@ -1271,7 +1271,7 @@ export default function ManageTraders() {
               Add, edit, and manage trader accounts
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <select
               value={managerFilter}
               onChange={e => setManagerFilter(e.target.value)}
@@ -1282,7 +1282,7 @@ export default function ManageTraders() {
               <option value="RFX - Group 2">RFX - Group 2</option>
             </select>
             {/* Every trader's live copiers at once (demo routing copiers untouched) */}
-            <div className="flex items-center gap-2 rounded-md border px-2 py-1">
+            <div className="flex shrink-0 items-center gap-2 rounded-md border px-2 py-1">
               <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
                 All copiers
               </span>
