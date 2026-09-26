@@ -3385,7 +3385,7 @@ export default function ManageTraders() {
         <Dialog open={copiersDialogOpen} onOpenChange={setCopiersDialogOpen}>
           {/* Sized by its content: as wide as the longest row needs, up to the
               viewport, so the action buttons always fit. */}
-          <DialogContent className="w-auto max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)]">
+          <DialogContent className="w-auto max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Copiers for {selectedTrader?.name}</DialogTitle>
               <DialogDescription>
