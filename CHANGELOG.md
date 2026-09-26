@@ -5,6 +5,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.0.8] — 2026-09-26
+
+### Changed
+
+- **Manage Traders column choices follow the admin.** They were kept in the browser only, so
+  another device or a cleared browser lost them. They are now saved on the server per admin
+  (the browser copy remains as the first paint).
+
 ## [4.0.7] — 2026-09-26
 
 ### Added

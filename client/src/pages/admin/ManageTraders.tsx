@@ -531,30 +531,57 @@ export default function ManageTraders() {
     status: true,
   };
 
+  // Column choices are saved on the server per admin, so they follow you to
+  // any browser or device. The browser copy is only the first paint and the
+  // fallback while the saved one loads.
+  const parseColumns = (raw: string | null | undefined) => {
+    try {
+      if (raw) {
+        // Merge with defaults so any new columns added later are visible by default
+        return { ...defaultColumns, ...(JSON.parse(raw) as Record<string, boolean>) };
+      }
+    } catch {
+      // ignore parse errors
+    }
+    return null;
+  };
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
     () => {
       try {
-        const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as Record<string, boolean>;
-          // Merge with defaults so any new columns added later are visible by default
-          return { ...defaultColumns, ...parsed };
-        }
+        return parseColumns(localStorage.getItem(COLUMN_STORAGE_KEY)) ?? defaultColumns;
       } catch {
-        // ignore parse errors
+        return defaultColumns;
       }
-      return defaultColumns;
     }
   );
+  const { data: savedColumns } = trpc.admin.getUiPreference.useQuery(
+    { key: "manage-traders-columns" },
+    { staleTime: Infinity }
+  );
+  useEffect(() => {
+    const parsed = parseColumns(savedColumns);
+    if (parsed) {
+      setVisibleColumns(parsed);
+      try {
+        localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // ignore storage errors
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedColumns]);
+  const saveColumns = trpc.admin.setUiPreference.useMutation();
 
   const toggleColumn = (col: string) => {
     setVisibleColumns(prev => {
       const next = { ...prev, [col]: !prev[col] };
+      const json = JSON.stringify(next);
       try {
-        localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(COLUMN_STORAGE_KEY, json);
       } catch {
         // ignore storage errors
       }
+      saveColumns.mutate({ key: "manage-traders-columns", value: json });
       return next;
     });
   };

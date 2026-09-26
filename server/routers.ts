@@ -3427,6 +3427,27 @@ export const appRouter = router({
       return { ok: true };
     }),
 
+    // Per-admin UI preferences (e.g. which Manage Traders columns are shown),
+    // kept server-side so they follow the admin across browsers and devices.
+    getUiPreference: adminProcedure
+      .input(z.object({ key: z.string().min(1).max(64) }))
+      .query(async ({ ctx, input }) => {
+        const val = await getAdminSetting(
+          `ui:${ctx.tradingSession.magicNumber.id}:${input.key}`
+        );
+        return val ?? null;
+      }),
+
+    setUiPreference: adminProcedure
+      .input(z.object({ key: z.string().min(1).max(64), value: z.string().max(4000) }))
+      .mutation(async ({ ctx, input }) => {
+        await setAdminSetting(
+          `ui:${ctx.tradingSession.magicNumber.id}:${input.key}`,
+          input.value
+        );
+        return { success: true };
+      }),
+
     getTrailingRiskLimitConfig: tradingProcedure.query(async ({ ctx }) => {
       if (!ctx.tradingSession.magicNumber.isAdmin) {
         throw new TRPCError({
