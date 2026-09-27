@@ -5,6 +5,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.0] — 2026-09-27
+
+### Added
+
+- **Copy Flow Map** (admin sidebar). Every MetaCopier account as a node and every copier as an
+  arrow — incubators left, RFX masters and other live accounts right, sized by how many
+  copiers touch them; green = active, yellow = manage only, grey dashed = disabled. Select an
+  account to see its balance, equity, limits and two lists, *Copies to* and *Copies from*,
+  each link showing copy ratio, lot/trade caps, news filter, skip-without-SL/TP and magic
+  settings; select a link for its full copier settings. Search by name, login or magic; hide
+  disabled copiers or show the demo routing copiers. Live from MetaCopier (cached a minute,
+  Refresh forces a re-read). Adds `d3`.
+
 ## [4.0.9] — 2026-09-26
 
 ### Added

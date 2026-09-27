@@ -15,6 +15,7 @@ import ManagePayments from "./pages/admin/ManagePayments";
 import ProcessPayouts from "./pages/admin/ProcessPayouts";
 import RiskLimitBreaches from "./pages/admin/RiskLimitBreaches";
 import Logs from "./pages/admin/Logs";
+import CopyFlowMap from "./pages/admin/CopyFlowMap";
 
 function Router() {
   return (
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/admin/payouts" component={ProcessPayouts} />
       <Route path="/admin/risk-breaches" component={RiskLimitBreaches} />
       <Route path="/admin/logs" component={Logs} />
+      <Route path="/admin/copy-map" component={CopyFlowMap} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

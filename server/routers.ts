@@ -94,6 +94,7 @@ import {
   copyToAlertChannel,
 } from "./telegram";
 import { createSystemNotification } from "./systemNotifications";
+import { getCopyFlowMap } from "./copyFlowMap";
 import { toLanguage, translate, type Language } from "@shared/i18n";
 import { maybeActivateOnboarding } from "./onboarding";
 import { notifyOwner } from "./_core/notification";
@@ -3131,6 +3132,11 @@ export const appRouter = router({
         }
         return { success: true };
       }),
+
+    // Every MetaCopier account and copier, for the Copy Flow Map page.
+    getCopyFlowMap: adminProcedure
+      .input(z.object({ refresh: z.boolean().optional() }).optional())
+      .query(async ({ input }) => getCopyFlowMap(!!input?.refresh)),
 
     // Trading controls held in MetaCopier for one trader: max daily loss,
     // daily profit limit, news trading, total open lots and max open trades.

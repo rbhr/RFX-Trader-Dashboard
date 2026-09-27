@@ -13,6 +13,7 @@ import {
   TrendingUp,
   ShieldAlert,
   ScrollText,
+  Waypoints,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -92,6 +93,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { title: "Trader Dashboard", href: "/admin/dashboard", icon: LayoutDashboard, badge: 0 },
     { title: "Manage Traders", href: "/admin/traders", icon: Users, badge: 0 },
     { title: "Manage MetaCopier", href: "/admin/metacopier", icon: Settings, badge: 0 },
+    { title: "Copy Flow Map", href: "/admin/copy-map", icon: Waypoints, badge: 0 },
     { title: "Manage Payments", href: "/admin/payments", icon: CreditCard, badge: 0 },
     { title: "Risk Limit Breaches", href: "/admin/risk-breaches", icon: ShieldAlert, badge: activeBreachCount },
     { title: "System Logs", href: "/admin/logs", icon: ScrollText, badge: 0 },

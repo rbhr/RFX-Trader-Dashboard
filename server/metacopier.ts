@@ -1342,6 +1342,11 @@ class MetaCopierService {
   /**
    * Get MetaCopier account ID by login account number
    */
+  /** Every account in the project (30s cache shared with the other lookups). */
+  async getAllAccounts(): Promise<any[]> {
+    return this.getCachedAccounts();
+  }
+
   /** The MetaCopier account (id + alias) behind an MT login number, or null. */
   async getAccountByLoginNumber(
     loginAccountNumber: string
