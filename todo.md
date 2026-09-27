@@ -45,7 +45,8 @@ RR removed the copier-level limits (`zero-copier-limits.mjs`) because keeping ac
 - [x] Copier-side equivalents: feature 18 "Maximum lot" = total open lots (per symbol via the global figure), feature 17 = max open positions; both SKIP the copy. Converted through copy settings: multiplier × limit; fixed lot × max open trades. (`copierLimitsFor` in server/tradingControls.ts)
 - [x] `updateTraderControls` writes both levels; `getTraderControls` reports drift.
 - [x] New live copiers / scaling changes inherit the limits (`ensureLiveCopier`).
-- [ ] **Backfill**: as of 2026-09-26, 57 of 68 live copiers have no limits (dry run in session). Bring them in line — either save each trader's limits once in Edit Trader, or a one-off script calling `syncCopierLimits` per trader (dry run first).
+- [x] **Backfill** (2026-09-27): 28 copiers written, scope = trader on an Exness demo/trial server copying into an Exness live server. Every read-back matched. Deliberately NOT done (37 copiers): all TCT / Kodo / KODO_PROP / Darwinex-DZero destinations and the three Darwinex-sourced traders (Ali DZero, Sheeraz DZero, Zeeshan DZero) — those need the override decision below first. **Until then, do not save max lots / max trades in Edit Trader for Ayaz, Faizan, Farhan, Ghulam, Gsm, Mudasir Ali, Ramzan, Richard, Samad or Sheeraz** — the save would mirror onto their prop-firm/DZero copiers too.
+- [ ] Override for out-of-scope copiers: "RFX Master"-label rule (only mirror onto labelled masters) or per-copier Follow/None/Custom setting.
 - [ ] **Verify on one live copier** that MetaCopier measures the copied size (docs: "the master account is the reference" — for us the trader's incubator is MC's master). If it measures the trader's original size instead, drop the multiplier conversion in `copierLimitsFor`.
 - [ ] Trader-facing wording if behaviour changes (skipped, not closed) — en/ur/ar.
 
