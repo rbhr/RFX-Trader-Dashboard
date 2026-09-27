@@ -666,8 +666,25 @@ const copyScalingInput = z.object({
 });
 
 /**
- * Tell a trader their live copier changed state: in-app, Telegram in their
- * language, and an English copy to the alerts channel. Never throws.
+ * True when `toAccountId` is the trader's own master account (their
+ * liveAccountNumber in the dashboard) — the one copier a status message is
+ * about. The demo routing copier and any extra copiers (prop firms, DZeros,
+ * other masters) change state without a word to the trader.
+ */
+async function isTraderMainCopier(
+  trader: { liveAccountNumber: string | null },
+  toAccountId: string
+): Promise<boolean> {
+  if (!trader.liveAccountNumber) return false;
+  const master = await metaCopierService.getAccountByLoginNumber(
+    trader.liveAccountNumber
+  );
+  return master?.id === toAccountId;
+}
+
+/**
+ * Tell a trader their main live copier changed state: in-app, Telegram in
+ * their language, and an English copy to the alerts channel. Never throws.
  */
 async function notifyCopierStatus(
   trader: NonNullable<Awaited<ReturnType<typeof getMagicNumberById>>>,
@@ -2873,9 +2890,11 @@ export const appRouter = router({
           "metacopier",
           `Copier ${input.copierId.slice(0, 8)} on ${input.toAccountId.slice(0, 8)} for ${statusTrader?.name ?? "?"} (${statusTrader?.magicNumber ?? "?"}) set to ${input.status}`
         );
-        // The demo routing copier is invisible to the trader; only a live one
-        // is worth a message.
-        if (statusTrader && input.toAccountId !== DEMO_SLAVE_ACCOUNT_ID) {
+        // Only the copier into the trader's own master account gets a message.
+        if (
+          statusTrader &&
+          (await isTraderMainCopier(statusTrader, input.toAccountId))
+        ) {
           await notifyCopierStatus(statusTrader, input.status);
         }
 
@@ -2900,18 +2919,18 @@ export const appRouter = router({
             failed.push(`${t.name}: ${e.message}`);
             continue;
           }
-          let touched = 0;
+          let mainChanged = false;
           for (const c of copiers) {
             try {
               await metaCopierService.updateCopierStatus(c.toAccountId, c.id, input.status);
               changed++;
-              touched++;
+              if (await isTraderMainCopier(t, c.toAccountId)) mainChanged = true;
             } catch (e: any) {
               failed.push(`${t.name} → ${c.toAccountAlias}: ${e.message}`);
             }
           }
-          // One message per trader, however many live copiers they have.
-          if (touched > 0) await notifyCopierStatus(t, input.status);
+          // One message per trader, and only if their main copier changed.
+          if (mainChanged) await notifyCopierStatus(t, input.status);
         }
         logEvent(
           "metacopier",

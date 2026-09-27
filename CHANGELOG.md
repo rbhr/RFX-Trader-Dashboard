@@ -12,8 +12,10 @@ hash.
 - **Traders are told when their live copier's state changes.** Setting a copier to Active,
   Manage only or Disabled — from the copiers dialog or the all-copiers header — sends the
   trader an in-app notification and a Telegram message in their language, and an English copy
-  to the alerts channel. The all-copiers action sends one message per trader. The demo
-  routing copier never triggers a message.
+  to the alerts channel. Only the copier into the trader's own master account (their Live
+  Account Number) triggers it; the demo routing copier and any additional copiers (prop
+  firms, DZeros, other masters — the "Other Copiers" in Edit Trader) change silently. The
+  all-copiers action sends one message per trader whose main copier changed.
 
 ## [4.0.8] — 2026-09-26
 
