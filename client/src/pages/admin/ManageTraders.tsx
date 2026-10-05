@@ -985,11 +985,21 @@ export default function ManageTraders() {
     },
   });
 
+  const { data: copierPause } = trpc.admin.getCopierPause.useQuery();
   const setAllCopierStatus = trpc.admin.setAllCopierStatus.useMutation({
     onSuccess: data => {
       utils.admin.listTraders.invalidate();
+      utils.admin.getCopierPause.invalidate();
       refetchCopiers();
-      toast.success(`${data.changed} live copier${data.changed === 1 ? "" : "s"} updated`);
+      toast.success(
+        data.restored
+          ? `${data.changed} copier${data.changed === 1 ? "" : "s"} put back as ${data.changed === 1 ? "it was" : "they were"}` +
+              (data.skipped ? `, ${data.skipped} left alone` : "")
+          : data.changed === 0 && data.skipped === 0
+            ? "Nothing was paused with this button, so nothing to restore"
+            : `${data.changed} live copier${data.changed === 1 ? "" : "s"} paused` +
+              (data.skipped ? `, ${data.skipped} already off or unchanged` : "")
+      );
       if (data.failed.length > 0) {
         toast.error(`${data.failed.length} failed: ${data.failed.join("; ")}`, { duration: 15000 });
       }
@@ -1312,6 +1322,12 @@ export default function ManageTraders() {
             <div className="flex shrink-0 items-center gap-2 rounded-md border px-2 py-1">
               <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
                 All copiers
+                {copierPause && copierPause.entries.length > 0 && (
+                  <span className="block text-[10px] text-amber-600">
+                    {copierPause.entries.length} paused{" "}
+                    {new Date(copierPause.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
               </span>
               <CopierStatusButtons
                 current={null}
@@ -3149,17 +3165,20 @@ export default function ManageTraders() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Set every live copier to{" "}
-                {allCopiersTarget ? COPIER_STATUS[allCopiersTarget].label : ""}?
+                {allCopiersTarget === "ACTIVE"
+                  ? "Resume copying?"
+                  : `Pause every running copier to ${allCopiersTarget ? COPIER_STATUS[allCopiersTarget].label : ""}?`}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {allCopiersTarget === "DISABLED"
-                  ? "No trader's trades will be copied to any live account until copiers are re-enabled. Open live positions are left as they are."
+                  ? "Every live copier that is currently running is switched off and remembered. Copiers that were already off are left off and not remembered, so Resume won't touch them. Open live positions are left as they are."
                   : allCopiersTarget === "MANAGE"
-                    ? "Existing live positions stay managed (closes and modifications still copy), but no new trades are copied for any trader."
-                    : "Every active trader's live copiers start copying. Traders whose copier was deliberately off will be switched on too."}{" "}
-                This covers all live copiers of all active traders; the demo routing
-                copiers are not touched. Each change is logged.
+                    ? "Every live copier that is currently running is set to manage only (closes and modifications still copy, no new trades) and remembered. Copiers already off or already in manage mode are left as they are."
+                    : copierPause && copierPause.entries.length > 0
+                      ? `Puts back the ${copierPause.entries.length} copier${copierPause.entries.length === 1 ? "" : "s"} paused ${new Date(copierPause.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} by ${copierPause.by}, each to what it was doing before. Copiers that were already off stay off. One changed by hand since the pause is left as it is.`
+                      : "Nothing was paused with this button, so there is nothing to resume. To switch a single copier on, use its A button in the trader's copiers dialog."}{" "}
+                Demo routing copiers are never touched. Each change is logged and traders
+                whose main copier changes are told.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -3171,7 +3190,9 @@ export default function ManageTraders() {
                   setAllCopiersTarget(null);
                 }}
               >
-                Set all to {allCopiersTarget ? COPIER_STATUS[allCopiersTarget].label : ""}
+                {allCopiersTarget === "ACTIVE"
+                  ? "Resume"
+                  : `Pause to ${allCopiersTarget ? COPIER_STATUS[allCopiersTarget].label : ""}`}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

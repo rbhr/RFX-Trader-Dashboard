@@ -5,6 +5,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.1] — 2026-10-05
+
+### Changed
+
+- **All-copiers D / M / A is now pause and resume.** D and M pause only the live copiers
+  that are currently running, remembering what each was doing; copiers that were already off
+  are left off and not remembered. A puts back only the remembered copiers, each to its prior
+  state, and skips any changed by hand in between — so a copier that was deliberately
+  disabled before a news pause stays disabled after Resume. The header shows how many are
+  paused and since when. With nothing paused, A does nothing.
+
 ## [4.1.0] — 2026-09-27
 
 ### Added

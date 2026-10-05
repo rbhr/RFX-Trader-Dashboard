@@ -666,6 +666,32 @@ const copyScalingInput = z.object({
   value: z.number().positive().max(1000),
 });
 
+// --- all-copiers pause snapshot (admin_settings)
+const COPIER_PAUSE_KEY = "copier_pause_snapshot";
+interface CopierPause {
+  at: string;
+  by: string;
+  entries: Array<{
+    copierId: string;
+    toAccountId: string;
+    toAccountAlias: string;
+    traderId: number;
+    prior: "ACTIVE" | "MANAGE";
+    pausedTo: "DISABLED" | "MANAGE";
+  }>;
+}
+async function readCopierPause(): Promise<CopierPause | null> {
+  const raw = await getAdminSetting(COPIER_PAUSE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as CopierPause;
+  } catch {
+    return null;
+  }
+}
+const writeCopierPause = (p: CopierPause) => setAdminSetting(COPIER_PAUSE_KEY, JSON.stringify(p));
+const clearCopierPause = () => setAdminSetting(COPIER_PAUSE_KEY, "");
+
 /**
  * True when `toAccountId` is the trader's own master account (their
  * liveAccountNumber in the dashboard) — the one copier a status message is
@@ -2904,14 +2930,68 @@ export const appRouter = router({
 
     // Set every live copier of every active trader to one state, e.g. to halt
     // all copying in a hurry. The demo routing copiers are never touched.
+    // The pause snapshot: what every live copier was doing before the
+    // all-copiers D/M button changed it, so the A button can put back only
+    // those — a copier that was already off stays off.
+    getCopierPause: adminProcedure.query(async () => readCopierPause()),
+
+    // All-copiers D / M / A. D and M PAUSE: every live copier that is currently
+    // running (or, for D, in manage mode) is recorded with its prior state and
+    // set to the target; copiers already in that state or already disabled are
+    // left alone and not recorded. A RESTORES: only copiers in the snapshot go
+    // back to their recorded state, and only if nobody changed them in between.
     setAllCopierStatus: adminProcedure
       .input(z.object({ status: z.enum(["ACTIVE", "DISABLED", "MANAGE"]) }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const traders = (await getAllActiveMagicNumbers()).filter(
           t => !t.isAdmin && !!t.mcAccountId
         );
+        const byId = new Map(traders.map(t => [t.id, t]));
         let changed = 0;
+        let skipped = 0;
         const failed: string[] = [];
+        const stateOf = (c: any): "ACTIVE" | "MANAGE" | "DISABLED" =>
+          !c.active ? "DISABLED" : c.monitorOnly ? "MANAGE" : "ACTIVE";
+
+        if (input.status === "ACTIVE") {
+          const pause = await readCopierPause();
+          if (!pause || pause.entries.length === 0) {
+            return { changed: 0, skipped: 0, failed: [], restored: false };
+          }
+          const mainChangedFor = new Set<number>();
+          for (const entry of pause.entries) {
+            const t = byId.get(entry.traderId);
+            if (!t?.mcAccountId) { skipped++; continue; }
+            try {
+              const current = (await metaCopierService.getCopiersByAccount(entry.toAccountId, true))
+                .find((c: any) => c.id === entry.copierId);
+              // Gone, or changed by hand since we paused it: not ours to touch.
+              if (!current || stateOf(current) !== entry.pausedTo) { skipped++; continue; }
+              await metaCopierService.updateCopierStatus(entry.toAccountId, entry.copierId, entry.prior);
+              changed++;
+              if (await isTraderMainCopier(t, entry.toAccountId)) mainChangedFor.add(t.id);
+            } catch (e: any) {
+              failed.push(`${t.name} → ${entry.toAccountAlias}: ${e.message}`);
+            }
+          }
+          for (const id of Array.from(mainChangedFor)) await notifyCopierStatus(byId.get(id)!, "ACTIVE");
+          if (failed.length === 0) await clearCopierPause();
+          logEvent(
+            "metacopier",
+            `Restored ${changed} live copier(s) paused ${pause.at.slice(0, 16).replace("T", " ")}; ${skipped} left as they were` +
+              (failed.length ? `; ${failed.length} failed: ${failed.join("; ")}` : ""),
+            failed.length ? "warn" : "info"
+          );
+          return { changed, skipped, failed, restored: true };
+        }
+
+        // D or M: pause, recording what each copier was doing first.
+        const existing = (await readCopierPause()) ?? {
+          at: new Date().toISOString(),
+          by: ctx.tradingSession.magicNumber.name,
+          entries: [],
+        };
+        const recorded = new Set(existing.entries.map(e => e.copierId));
         for (const t of traders) {
           let copiers: any[] = [];
           try {
@@ -2922,24 +3002,38 @@ export const appRouter = router({
           }
           let mainChanged = false;
           for (const c of copiers) {
+            const prior = stateOf(c);
+            // Already off, or already where we want it: leave it, don't record it.
+            if (prior === "DISABLED" || prior === input.status) { skipped++; continue; }
             try {
               await metaCopierService.updateCopierStatus(c.toAccountId, c.id, input.status);
               changed++;
+              if (!recorded.has(c.id)) {
+                existing.entries.push({
+                  copierId: c.id,
+                  toAccountId: c.toAccountId,
+                  toAccountAlias: c.toAccountAlias ?? "",
+                  traderId: t.id,
+                  prior,
+                  pausedTo: input.status,
+                });
+                recorded.add(c.id);
+              }
               if (await isTraderMainCopier(t, c.toAccountId)) mainChanged = true;
             } catch (e: any) {
               failed.push(`${t.name} → ${c.toAccountAlias}: ${e.message}`);
             }
           }
-          // One message per trader, and only if their main copier changed.
           if (mainChanged) await notifyCopierStatus(t, input.status);
         }
+        if (existing.entries.length > 0) await writeCopierPause(existing);
         logEvent(
           "metacopier",
-          `ALL live copiers set to ${input.status}: ${changed} changed` +
+          `Paused live copiers to ${input.status}: ${changed} changed, ${skipped} already off or unchanged` +
             (failed.length ? `, ${failed.length} failed: ${failed.join("; ")}` : ""),
           failed.length ? "warn" : "info"
         );
-        return { changed, failed };
+        return { changed, skipped, failed, restored: false };
       }),
 
     // Remove copier
