@@ -421,7 +421,9 @@ export default function Dashboard(props: {
         { equity: accountEquity, riskLimit },
         {
           onSuccess: (result) => {
-            if (!('alreadyReported' in result)) {
+            // The server confirms the reading with a fresh MetaCopier read and
+            // may reject a glitch — only announce a breach it actually recorded.
+            if ('reported' in result && result.reported) {
               toast.error(
                 t("dashboard.breachToast", {
                   equity: `$${accountEquity.toFixed(2)}`,

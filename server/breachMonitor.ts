@@ -14,6 +14,7 @@ import {
 import { createSystemNotification } from "./systemNotifications";
 import { metaCopierService } from "./metacopier";
 import { findActualRiskLimit } from "./tradingControls";
+import { confirmEquityBreach } from "./breachConfirm";
 import {
   sendTelegramMessage,
   buildRiskLimitBreachMessage,
@@ -57,8 +58,8 @@ async function checkAllTraders(): Promise<void> {
           metaCopierService.getAccountRiskLimits(trader.mcAccountId),
         ]);
 
-        const equity = accountInfo?.equity;
-        if (equity == null || equity === 0) continue; // Skip null/zero — zero usually means API returned bad data
+        const observedEquity = accountInfo?.equity;
+        if (observedEquity == null || observedEquity === 0) continue; // Skip null/zero — zero usually means API returned bad data
 
         // Only the absolute "Actual" limit is a permanent breach. The daily
         // loss limit also closes all trades, but lifts again at rollover.
@@ -67,10 +68,28 @@ async function checkAllTraders(): Promise<void> {
 
         const riskLimit = activeLimit.absoluteRiskLimit as number;
 
-        if (equity < riskLimit) {
+        if (observedEquity < riskLimit) {
           // Check if there's already an active (unresolved) breach for this trader
           const existingBreach = await getActiveBreachByMagicNumberId(trader.id);
           if (existingBreach) continue; // Already recorded — skip
+
+          // One sample is not a breach. The first reading usually comes from
+          // the socket cache; confirm it with a direct API read before telling
+          // anyone their account is permanently breached.
+          const verdict = await confirmEquityBreach({
+            observedEquity,
+            riskLimit,
+            fetchFresh: () => metaCopierService.getAccountInfoByIdFresh(trader.mcAccountId!),
+          });
+          if (!verdict.ok) {
+            logEvent(
+              "breach",
+              `Breach NOT recorded: ${trader.name} (${trader.magicNumber}) read equity $${observedEquity.toFixed(2)} < limit $${riskLimit.toFixed(2)} — ${verdict.reason}`,
+              "warn"
+            );
+            continue;
+          }
+          const equity = verdict.equity;
 
           logEvent(
             "breach",

@@ -5,6 +5,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.2] — 2026-10-16
+
+### Fixed
+
+- A single bad equity reading can no longer mark a trader permanently breached.
+  On 2026-10-15 one MetaCopier snapshot reported Varun's equity as -$6,113.64 on a
+  ~$2,550 demo account; MetaCopier itself never closed anything, but the breach
+  monitor recorded the breach and sent the Telegram, alerts-channel copy and in-app
+  notification from that one sample. Now a negative equity is rejected outright,
+  and any other below-limit reading (from the monitor or the trader's dashboard)
+  must be confirmed by a fresh direct API read before anything is recorded or
+  announced. Rejected readings are written to the Logs under Breaches as
+  "Breach NOT recorded".
+
 ## [4.1.1] — 2026-10-05
 
 ### Changed

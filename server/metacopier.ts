@@ -368,6 +368,14 @@ class MetaCopierService {
     );
   }
 
+  /**
+   * Account info straight from the REST API, bypassing the socket cache. Used
+   * to confirm a breach reading with a second, independent sample.
+   */
+  async getAccountInfoByIdFresh(accountId: string): Promise<AccountInfo> {
+    return this.fetchWithAuth<AccountInfo>(`/accounts/${accountId}/information`);
+  }
+
   /** The default (project) MetaCopier account id. */
   get defaultAccountId(): string {
     return this.accountId;

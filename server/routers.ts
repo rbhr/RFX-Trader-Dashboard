@@ -99,6 +99,7 @@ import { toLanguage, translate, type Language } from "@shared/i18n";
 import { maybeActivateOnboarding } from "./onboarding";
 import { notifyOwner } from "./_core/notification";
 import { getLastCheckedAt } from "./breachMonitor";
+import { confirmEquityBreach } from "./breachConfirm";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
 import { logEvent, type LogCategory } from "./logStore";
 import { socketStatus, reconnectMetaCopierSocket } from "./metacopierSocket";
@@ -1704,13 +1705,32 @@ export const appRouter = router({
         // Avoid duplicate breach records — only create one if no active breach exists
         const existing = await getActiveBreachByMagicNumberId(trader.id);
         if (existing) {
-          return { alreadyReported: true };
+          return { alreadyReported: true as const };
         }
+
+        // The dashboard's figure came from the same feed the monitor reads.
+        // Confirm it with a fresh direct read before recording anything.
+        const verdict = trader.mcAccountId
+          ? await confirmEquityBreach({
+              observedEquity: input.equity,
+              riskLimit: input.riskLimit,
+              fetchFresh: () => metaCopierService.getAccountInfoByIdFresh(trader.mcAccountId!),
+            })
+          : { ok: false as const, reason: "no MetaCopier account to confirm against" };
+        if (!verdict.ok) {
+          logEvent(
+            "breach",
+            `Breach NOT recorded (dashboard report): ${trader.name} (${trader.magicNumber}) read equity $${input.equity.toFixed(2)} < limit $${input.riskLimit.toFixed(2)} — ${verdict.reason}`,
+            "warn"
+          );
+          return { reported: false as const };
+        }
+        const equity = verdict.equity;
 
         // Record the breach
         await createRiskLimitBreach({
           magicNumberId: trader.id,
-          equityAtBreach: String(input.equity),
+          equityAtBreach: String(equity),
           riskLimitAtBreach: String(input.riskLimit),
           traderNotified: false,
           adminNotified: false,
@@ -1722,7 +1742,7 @@ export const appRouter = router({
           key: "breach",
           params: {
             magicNumber: trader.magicNumber,
-            equity: input.equity.toFixed(2),
+            equity: equity.toFixed(2),
             riskLimit: input.riskLimit.toFixed(2),
           },
           type: "error",
@@ -1739,7 +1759,7 @@ export const appRouter = router({
           {
             traderName: trader.name,
             magicNumber: trader.magicNumber,
-            equity: input.equity,
+            equity,
             riskLimit: input.riskLimit,
           },
           trader.language
@@ -1758,13 +1778,13 @@ export const appRouter = router({
         try {
           await notifyOwner({
             title: `Risk Limit Breach: ${trader.name}`,
-            content: `Trader ${trader.name} (Magic: ${trader.magicNumber}) breached their risk limit. Equity: $${input.equity.toFixed(2)}, Limit: $${input.riskLimit.toFixed(2)}.`,
+            content: `Trader ${trader.name} (Magic: ${trader.magicNumber}) breached their risk limit. Equity: $${equity.toFixed(2)}, Limit: $${input.riskLimit.toFixed(2)}.`,
           });
         } catch {
           // Non-fatal
         }
 
-        return { reported: true, traderTelegramSent };
+        return { reported: true as const, traderTelegramSent };
       }),
 
     // Get open positions
