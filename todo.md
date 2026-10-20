@@ -121,13 +121,37 @@ Fixes, highest leverage first:
       v4.1.4 had only done the admin branch, leaving the path 31 traders actually poll at 4 calls.
       Also revealed that this path had been returning **HTTP 500** under load, not slow successes
       (64 in the 10-19 16:00 hour alone), and that nothing logged tRPC failures — now fixed.
-- [ ] **Cache `getCopiersByAccount`.** `admin.listTraders` calls it once per trader: 32 calls for
-      only 4 distinct URLs (32 active traders share masters 8220×19, 8234×5, 8230×5, 8224×2). That
-      path still averaged 31s and peaked at 62s after v4.1.4. Needs a staleness decision first —
-      admin screens would show copier state up to N seconds old, and copiers get edited often.
+- [x] **~~Cache `getCopiersByAccount`~~ — dropped as unnecessary (2026-10-20).** `admin.listTraders`
+      does call it once per trader (32 calls for only 4 distinct URLs), but those go to the *light*
+      `/accounts` endpoint, which sustains 145 req/s. Measured after v4.1.5 that path fell from
+      p90 31.65s / max 125s to **1.93s** with no cache added: it was only ever slow because it
+      queued behind history calls serving out 15s backoffs. Not worth the staleness risk on admin
+      screens, since copiers are edited often.
 - [ ] **Persist closed history in MySQL.** Closed positions are immutable; re-downloading 58k unchanging
       rows every minute is the underlying waste, and it is what makes `admin.listTraders` take 65 s.
 - [ ] **Honour `Retry-After` with jitter** instead of a fixed chain that can reach 15 s.
+
+### 💸 Payouts block the admin's request for the whole on-chain confirmation
+
+`admin.sendWalletPayment` holds the HTTP request open until GasFree confirms. One real payout in the
+access log took **63.5s** (10-17, status 200). Of that, under a second is ours — the three pre-submit
+GasFree GETs are the same calls `admin.getWalletInfo` makes every 30s at 0.18–0.48s — so essentially
+all of it is GasFree's own confirmation time.
+
+- [x] **Stop wasting time inside the poll** — shipped in v4.1.6 (2026-10-20): the loop asked only
+      *after* a fixed 3s sleep, so every payout paid 3s before its first question; it now asks
+      immediately and polls at 1s for the first 10s before settling to 3s. Also fixed a trap where
+      a transfer GasFree reported as `SUCCESS` without yet publishing a hash kept polling the full
+      120s and then threw "confirmation timed out" at the admin — it now gets a 15s grace and a
+      message saying the funds almost certainly moved and must be confirmed, never re-sent.
+- [ ] **Decide whether payouts should stop blocking at all.** The real fix is to record the payment
+      the moment GasFree returns a transfer id, hand the admin back control, and confirm in the
+      background, with the payments list showing `pending → confirmed`. That is a UX and
+      money-handling change, so it needs a decision, not a patch. Until then a payout can still
+      legitimately take a minute, and a slow GasFree still surfaces as a 500 after 120s.
+- [ ] **Alert on `TxPendingError`.** It means money probably moved but is recorded as
+      `PENDING-<timestamp>`. Today that is a console warning and a scary admin toast; it should
+      page someone, because the hash has to be reconciled by hand.
 
 **Agreed plan (2026-10-20).** MySQL becomes the system of record for realized P&L; MetaCopier stays
 the live feed. Phases: 0 stop the bleeding · 1 instrument MC call counts per request · 2 immutable

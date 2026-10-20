@@ -5,6 +5,36 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.6] — 2026-10-20
+
+### Fixed
+
+- Payouts no longer pay a fixed 3-second wait before checking whether they have
+  landed. `sendWalletPayment` holds the admin's request open until GasFree
+  confirms the transfer, and the confirmation loop slept 3s *before* its first
+  status check — so every payout, however fast, paid that 3s, and then learned
+  of success up to 3s after the fact. It now checks immediately and polls every
+  second for the first ten before settling to the slower cadence. The bulk of a
+  payout's latency is GasFree's own confirmation time (one real transfer took
+  63.5s end to end, of which under a second was ours), so this trims rather than
+  transforms it; making payouts non-blocking is tracked separately in `todo.md`.
+- A transfer that GasFree reported as `SUCCESS` before publishing its
+  transaction hash used to keep polling for the full 120-second budget and then
+  tell the admin "confirmation timed out" — for a transfer that had plainly
+  succeeded. It now waits 15 seconds for the hash and then reports that the
+  funds have almost certainly moved and need confirming on TronScan. As before
+  the payment is recorded either way, so it is never silently re-sendable.
+
+### Added
+
+- First test coverage for the custodial payout confirmation path
+  (`server/tron.gasfree.test.ts`), which had none: that a confirmed transfer
+  returns without a pre-wait, that a rejected one raises `TxFailedError` so no
+  payment is recorded, and that both an unconfirmed transfer and a hash-less
+  success raise `TxPendingError` with the right message. Poll timings moved to
+  an exported `GASFREE_POLL` object so the tests can shrink the waits instead of
+  sitting out real minutes.
+
 ## [4.1.5] — 2026-10-20
 
 ### Fixed

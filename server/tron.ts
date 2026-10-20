@@ -9,6 +9,33 @@ const GASFREE_API_BASE = "https://open.gasfree.io/tron";
 const GASFREE_BASE_PATH = "/tron"; // base path for HMAC signature
 const TRON_MAINNET_CHAIN_ID = Number("0x2b6653dc");
 
+// GasFree's terminal states. Anything else ("PENDING", "PROCESSING", ...) means
+// the transfer is still working and we keep polling.
+const GASFREE_SUCCESS_STATES = new Set([
+  "SUCCESS",
+  "SUCCEED",
+  "COMPLETED",
+  "CONFIRMED",
+]);
+const GASFREE_FAILED_STATES = new Set(["FAILED", "REJECTED", "EXPIRED"]);
+
+/**
+ * Timings for the GasFree confirmation poll. This wait is the whole latency of
+ * a payout — the admin's HTTP request is held open for it — so the first poll
+ * is immediate and the cadence is tight while a fast confirmation is still
+ * plausible. Exported as a mutable object so tests can shrink the waits.
+ */
+export const GASFREE_POLL = {
+  /** Total time to wait for a terminal state before giving up. */
+  budgetMs: 120_000,
+  /** Poll at `fastIntervalMs` for this long, then back off. */
+  fastWindowMs: 10_000,
+  fastIntervalMs: 1_000,
+  slowIntervalMs: 3_000,
+  /** Extra time allowed for the hash after GasFree reports success. */
+  hashGraceMs: 15_000,
+};
+
 let _tronWeb: TronWeb | null = null;
 
 function getTronWeb(): TronWeb {
@@ -201,41 +228,78 @@ async function sendUsdtGasFree(
 
   console.log(`[TRON] GasFree transfer submitted, ID: ${transferId}`);
 
-  // 7. Poll for completion (max 120 seconds)
-  const maxAttempts = 40;
+  // 7. Poll for completion. Timings and their reasoning live in GASFREE_POLL.
+  const startedAt = Date.now();
   let lastTxnHash: string | null = null;
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
+  let succeededAt: number | null = null;
+  let polls = 0;
 
-    let state: string | undefined;
-    let txnHash: string | undefined;
+  while (Date.now() - startedAt < GASFREE_POLL.budgetMs) {
+    polls++;
+
     let statusData: any;
+    let polled = false;
     try {
       const status = await gasFreeGet(`/api/v1/gasfree/${transferId}`);
       statusData = status.data;
-      state = statusData?.state;
-      txnHash = statusData?.txnHash;
+      polled = true;
     } catch (err: any) {
-      // Network error polling status — log and keep trying
-      console.warn(`[TRON] GasFree poll error (attempt ${i + 1}):`, err?.message);
-      continue;
+      // Network error polling status — keep trying, but still pay the interval
+      // below so a failing status endpoint is not hammered.
+      console.warn(`[TRON] GasFree poll error (poll ${polls}):`, err?.message);
     }
 
-    console.log(`[TRON] GasFree poll ${i + 1}/${maxAttempts}: state=${state}, txnHash=${txnHash || "none"}`);
-    if (txnHash) lastTxnHash = txnHash;
+    if (polled) {
+      const state: string | undefined = statusData?.state;
+      const txnHash: string | undefined = statusData?.txnHash;
+      console.log(
+        `[TRON] GasFree poll ${polls} at ${Math.round((Date.now() - startedAt) / 1000)}s: state=${state}, txnHash=${txnHash || "none"}`
+      );
+      if (txnHash) lastTxnHash = txnHash;
 
-    const upperState = (state || "").toUpperCase();
-    if (upperState === "SUCCESS" || upperState === "SUCCEED" || upperState === "COMPLETED" || upperState === "CONFIRMED") {
-      if (txnHash) return txnHash;
+      const upperState = (state || "").toUpperCase();
+      if (GASFREE_SUCCESS_STATES.has(upperState)) {
+        if (txnHash) return txnHash;
+        if (succeededAt === null) succeededAt = Date.now();
+      }
+      if (GASFREE_FAILED_STATES.has(upperState)) {
+        throw new TxFailedError(
+          `GasFree transfer ${upperState}: ${JSON.stringify(statusData)}`
+        );
+      }
+      if (
+        succeededAt !== null &&
+        Date.now() - succeededAt >= GASFREE_POLL.hashGraceMs
+      ) {
+        break;
+      }
     }
-    if (upperState === "FAILED" || upperState === "REJECTED" || upperState === "EXPIRED") {
-      throw new TxFailedError(`GasFree transfer ${upperState}: ${JSON.stringify(statusData)}`);
-    }
-    // Any other state (PENDING, PROCESSING, etc.) — keep polling
+
+    const interval =
+      Date.now() - startedAt < GASFREE_POLL.fastWindowMs
+        ? GASFREE_POLL.fastIntervalMs
+        : GASFREE_POLL.slowIntervalMs;
+    await new Promise((r) => setTimeout(r, interval));
   }
 
-  // Timeout: transfer was submitted but we couldn't confirm it.
-  console.warn(`[TRON] GasFree transfer ${transferId} — polling timed out, transfer may still complete`);
+  // Submitted, but we never saw a hash. Either GasFree called it successful
+  // without publishing one, or it never reached a terminal state in time.
+  // Both mean "may well have moved the money" — never "safe to re-send".
+  if (succeededAt !== null) {
+    console.warn(
+      `[TRON] GasFree transfer ${transferId} reported success but published no transaction hash after ${polls} polls`
+    );
+    throw new TxPendingError(
+      `GasFree reported the transfer (ID: ${transferId}) as successful but published no ` +
+      `transaction hash. The funds have almost certainly moved — confirm on TronScan ` +
+      `and record the hash against this payment.`,
+      lastTxnHash
+    );
+  }
+
+  console.warn(
+    `[TRON] GasFree transfer ${transferId} — polling timed out after ${polls} polls, transfer may still complete`
+  );
   throw new TxPendingError(
     `GasFree transfer submitted (ID: ${transferId}) but confirmation timed out. ` +
     `The transfer may still complete — check TronScan or the GasFree dashboard.`,
