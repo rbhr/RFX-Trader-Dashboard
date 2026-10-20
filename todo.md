@@ -72,9 +72,13 @@ Findings:
 
 **Root cause.** `trading.getPnLSummary`'s admin branch (`showAllData && isAdmin`, `server/routers.ts`)
 does a nested `Promise.all`: 8 accounts labelled "RFX Master" × 4 date windows (today / week / month /
-all-time) = **32 concurrent history GETs in one burst**. The MetaCopier API key tolerates roughly
-**8 concurrent in-flight requests** — measured: 4 parallel calls on one account are fine, 8 parallel
-across 8 different accounts already return 429. The surplus gets HTTP 429, and `fetchWithAuth`
+all-time) = **32 history GETs in one burst**. **Corrected 2026-10-20 (second pass):** this is NOT a
+concurrency cap. A light endpoint (`GET /accounts/{id}`) sustains **145 req/s across 12 parallel
+callers with zero 429s**, while the *history* endpoint returns 429 even when called **strictly
+serially**, and recovers after ~10s. So the quota is specific to `history/positions` and
+burst/token-shaped. Consequence: **request scheduling cannot fix this — only issuing fewer and
+non-repeating history queries can.** That makes the TTL and window-collapse items below the real
+cure, and the archive the permanent one. The surplus gets HTTP 429, and `fetchWithAuth`
 (`server/metacopier.ts`) then sleeps `2^attempt` seconds over 4 attempts = **1+2+4+8 = exactly 15 s**,
 which is also its axios timeout — hence the hard 15.2–15.37 s ceiling in the access log.
 
@@ -103,9 +107,11 @@ Fixes, highest leverage first:
       live within the 30s accounts cache, no deploy. NB `PUT /accounts/{id}` requires
       `loginAccountPassword` and GET returns it as `""`; a read-modify-write PUT was verified safe
       (credentials survive) by testing on the throwaway new demo account first.
-- [ ] **Global concurrency limiter in `fetchWithAuth`** (semaphore of 4–6). One change; makes 429s
-      structurally impossible across every call site, not just this one. **Still needed:** 28 parallel
-      calls per poll is still well over the ~8 cap, so two overlapping admin loads will 429 again.
+- [x] **Global concurrency limiter in `fetchWithAuth`** — shipped in v4.1.3 (2026-10-20): FIFO,
+      5 concurrent, `METACOPIER_MAX_CONCURRENCY` to tune, releases its slot before backing off.
+      Measured one admin poll 3.3s → 1.1s. **But it does not eliminate 429s** — see the correction
+      above; it smooths bursts and keeps the breach/trailing-risk monitors from being starved, and
+      that is all it does. The two items below are now the critical path, not the nice-to-haves.
 - [ ] **Collapse the 4 date windows into 1** — fetch all-time per master once, derive today/week/month
       by filtering locally. 32 calls → 8, 20.7 MB → ~13 MB. `computeTraderProfitSummary` already works
       this way; the admin branch predates it.

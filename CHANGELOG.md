@@ -9,12 +9,16 @@ hash.
 
 ### Fixed
 
-- Dashboard requests that were taking 13-65s now complete in well under a second.
-  The MetaCopier API rate-limits on requests in flight per API key — four parallel
-  reads of one account are fine, but eight parallel reads across eight accounts
-  already return 429 — and the admin P&L aggregate asked for 8 master accounts x 4
-  date windows at once, 32 calls. The surplus 429'd, and each 429 cost 1+2+4+8s of
-  backoff, which is why so many requests landed on a hard 15.3s ceiling.
+- Dashboard requests that were taking 13-65s are much faster. The admin P&L
+  aggregate asked for 8 master accounts x 4 date windows at once, 32 history calls
+  per poll; a third of them returned 429, and each 429 cost 1+2+4+8s of backoff,
+  which is why so many requests landed on a hard 15.3s ceiling (also `fetchWithAuth`'s
+  axios timeout). The quota turns out to be specific to the history endpoint and
+  burst-shaped rather than a concurrency cap: a light endpoint sustains 145 req/s
+  across 12 parallel callers without a single 429, while history calls are rejected
+  even issued strictly one at a time, recovering after roughly 10 seconds. So
+  limiting concurrency smooths bursts but cannot eliminate these 429s — only making
+  fewer, non-repeating history calls will (see todo.md).
   `fetchWithAuth` now queues every REST call through a global FIFO limiter
   (5 concurrent by default, `METACOPIER_MAX_CONCURRENCY` to tune) and gives its slot
   up before backing off, so a waiting caller can use it. The queue being FIFO also
