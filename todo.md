@@ -117,6 +117,14 @@ Fixes, highest leverage first:
       server window exactly (verified on 8220: identical ids, P&L equal to the cent).
 - [x] **Raise `HISTORY_TTL_MS` above the 60 s poll interval** — shipped in v4.1.4 (2026-10-20):
       30 s → 90 s, so repeats across polls stop entirely.
+- [x] **Collapse the windows on the trader (non-admin) path too** — shipped in v4.1.5 (2026-10-20);
+      v4.1.4 had only done the admin branch, leaving the path 31 traders actually poll at 4 calls.
+      Also revealed that this path had been returning **HTTP 500** under load, not slow successes
+      (64 in the 10-19 16:00 hour alone), and that nothing logged tRPC failures — now fixed.
+- [ ] **Cache `getCopiersByAccount`.** `admin.listTraders` calls it once per trader: 32 calls for
+      only 4 distinct URLs (32 active traders share masters 8220×19, 8234×5, 8230×5, 8224×2). That
+      path still averaged 31s and peaked at 62s after v4.1.4. Needs a staleness decision first —
+      admin screens would show copier state up to N seconds old, and copiers get edited often.
 - [ ] **Persist closed history in MySQL.** Closed positions are immutable; re-downloading 58k unchanging
       rows every minute is the underlying waste, and it is what makes `admin.listTraders` take 65 s.
 - [ ] **Honour `Retry-After` with jitter** instead of a fixed chain that can reach 15 s.

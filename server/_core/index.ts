@@ -54,6 +54,19 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // Log every failure. Without this a procedure that threw returned a bare
+      // 500 to the browser and logged nothing at all, so the trader dashboard
+      // failing on MetaCopier's history quota was visible only as status codes
+      // in Caddy's access log — the P&L panel had been erroring, not merely
+      // loading slowly, and nothing said so. Input is deliberately not logged:
+      // it carries passwords and 2FA codes.
+      onError({ error, path, type }) {
+        const cause =
+          error.cause instanceof Error ? ` — cause: ${error.cause.message}` : "";
+        console.error(
+          `[trpc] ${type} ${path ?? "<unknown>"} failed: ${error.code} ${error.message}${cause}`
+        );
+      },
     })
   );
   // Live position stream (SSE, Phase 2). No-op unless MC_LIVE_STREAM=true.

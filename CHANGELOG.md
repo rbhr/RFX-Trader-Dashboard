@@ -5,6 +5,32 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.5] — 2026-10-20
+
+### Fixed
+
+- The trader P&L panel was **failing**, not just loading slowly. Under load it
+  returned HTTP 500 after 15s: `getPnLSummary` asked the MetaCopier history
+  endpoint for today, week, month and all-time separately, that endpoint enforces
+  a burst quota, and once it was exhausted `fetchWithAuth` ran out its five
+  attempts (1+2+4+8s of backoff) and rethrew. Caddy's access log had been
+  recording these as 500s since 10-19 — 64 of them in one hour — while the app
+  logged nothing. The three narrow windows are now sliced locally out of a single
+  wide fetch of the current account, taking that path from four history calls per
+  poll to one. The endpoint filters on close time, so the slicing reproduces each
+  server-side window exactly (verified on 8220: identical position ids, P&L equal
+  to the cent). Scope is unchanged: still the current magic number on the current
+  account, so previous magics and previous masters stay confined to the all-time
+  figure as before.
+
+### Added
+
+- Every failing tRPC procedure is now logged with its path, error code and cause.
+  Until now a procedure that threw returned a bare 500 and logged nothing, which
+  is why the above went unnoticed: it was only visible as status codes in the
+  proxy's access log. Request input is deliberately not logged, as it carries
+  passwords and 2FA codes.
+
 ## [4.1.4] — 2026-10-20
 
 ### Fixed

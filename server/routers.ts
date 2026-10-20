@@ -2062,63 +2062,53 @@ export const appRouter = router({
 
         // Day/week/month use current magic + current account only.
         // All-time aggregates across historical magic numbers & master accounts.
-        const [
-          openPositions,
-          todayPositions,
-          weekPositions,
-          monthPositions,
-          allTimePositions,
-        ] = await Promise.all([
-          liveAccountId
-            ? metaCopierService.getOpenPositionsFromAccount(
-                liveAccountId,
-                magicNumber
-              )
-            : metaCopierService.getOpenPositions(
-                showAllData ? undefined : magicNumber,
-                showAllData
-              ),
-          liveAccountId
-            ? metaCopierService.getHistoricalPositionsFromAccount(
-                liveAccountId,
-                getStartOfToday(),
-                getEndOfToday(),
-                magicNumber
-              )
-            : metaCopierService.getHistoricalPositions(
-                getStartOfToday(),
-                getEndOfToday(),
-                showAllData ? undefined : magicNumber,
-                showAllData
-              ),
-          liveAccountId
-            ? metaCopierService.getHistoricalPositionsFromAccount(
-                liveAccountId,
-                getStartOfWeek(),
-                getEndOfToday(),
-                magicNumber
-              )
-            : metaCopierService.getHistoricalPositions(
-                getStartOfWeek(),
-                getEndOfToday(),
-                showAllData ? undefined : magicNumber,
-                showAllData
-              ),
-          liveAccountId
-            ? metaCopierService.getHistoricalPositionsFromAccount(
-                liveAccountId,
-                getStartOfMonth(),
-                getEndOfToday(),
-                magicNumber
-              )
-            : metaCopierService.getHistoricalPositions(
-                getStartOfMonth(),
-                getEndOfToday(),
-                showAllData ? undefined : magicNumber,
-                showAllData
-              ),
-          fetchAggregatedLifetimePositions(trader),
-        ]);
+        //
+        // One wide fetch for the current account, sliced locally for the three
+        // windows. Asking for today, week and month separately was three extra
+        // history calls for data the all-time response already contains, and
+        // those extra calls are what spent the history endpoint's burst quota —
+        // when it ran out, fetchWithAuth exhausted its retries and the whole
+        // procedure 500'd, which is what traders saw as a broken P&L panel.
+        // The endpoint filters on close time, so slicing on closeTime
+        // reproduces each server-side window exactly (verified 2026-10-20 on
+        // 8220: identical position ids, P&L equal to the cent; openTime would
+        // have been wrong). Scope is unchanged — still the current magic on the
+        // current account, which is why these cannot be sliced out of
+        // allTimePositions: that set deliberately spans previous magic numbers
+        // and previous master accounts.
+        const [openPositions, currentAccountHistory, allTimePositions] =
+          await Promise.all([
+            liveAccountId
+              ? metaCopierService.getOpenPositionsFromAccount(
+                  liveAccountId,
+                  magicNumber
+                )
+              : metaCopierService.getOpenPositions(
+                  showAllData ? undefined : magicNumber,
+                  showAllData
+                ),
+            liveAccountId
+              ? metaCopierService.getHistoricalPositionsFromAccount(
+                  liveAccountId,
+                  getAllTimeStart(),
+                  getEndOfToday(),
+                  magicNumber
+                )
+              : metaCopierService.getHistoricalPositions(
+                  getAllTimeStart(),
+                  getEndOfToday(),
+                  showAllData ? undefined : magicNumber,
+                  showAllData
+                ),
+            fetchAggregatedLifetimePositions(trader),
+          ]);
+        const closedSince = (start: string) =>
+          currentAccountHistory.filter(
+            p => p.closeTime && p.closeTime >= start
+          );
+        const todayPositions = closedSince(getStartOfToday());
+        const weekPositions = closedSince(getStartOfWeek());
+        const monthPositions = closedSince(getStartOfMonth());
 
         const floatingPnL = calculatePnL(openPositions);
         // Manual profit correction is folded into the week, month and all-time
