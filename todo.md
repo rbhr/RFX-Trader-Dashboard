@@ -112,12 +112,11 @@ Fixes, highest leverage first:
       Measured one admin poll 3.3s → 1.1s. **But it does not eliminate 429s** — see the correction
       above; it smooths bursts and keeps the breach/trailing-risk monitors from being starved, and
       that is all it does. The two items below are now the critical path, not the nice-to-haves.
-- [ ] **Collapse the 4 date windows into 1** — fetch all-time per master once, derive today/week/month
-      by filtering locally. 32 calls → 8, 20.7 MB → ~13 MB. `computeTraderProfitSummary` already works
-      this way; the admin branch predates it.
-- [ ] **Raise `HISTORY_TTL_MS` (30 s) above the 60 s poll interval** (e.g. 90 s). As it stands the entry
-      is always expired when the next poll arrives, so the cache only helps within a single request and
-      never across polls.
+- [x] **Collapse the 4 date windows into 1** — shipped in v4.1.4 (2026-10-20). 28 history calls per
+      poll → 7. The endpoint filters on closeTime, so the local closeTime filter reproduces each
+      server window exactly (verified on 8220: identical ids, P&L equal to the cent).
+- [x] **Raise `HISTORY_TTL_MS` above the 60 s poll interval** — shipped in v4.1.4 (2026-10-20):
+      30 s → 90 s, so repeats across polls stop entirely.
 - [ ] **Persist closed history in MySQL.** Closed positions are immutable; re-downloading 58k unchanging
       rows every minute is the underlying waste, and it is what makes `admin.listTraders` take 65 s.
 - [ ] **Honour `Retry-After` with jitter** instead of a fixed chain that can reach 15 s.

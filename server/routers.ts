@@ -2017,19 +2017,22 @@ export const appRouter = router({
             const perMaster = await Promise.all(masters.map(m => fetcher(m.id)));
             return perMaster.flat();
           };
-          const [
-            openPositions,
-            todayPositions,
-            weekPositions,
-            monthPositions,
-            allTimePositions,
-          ] = await Promise.all([
+          // One wide history fetch per master, then slice the windows locally.
+          // Asking the API for today/week/month/all-time separately was four
+          // times the history calls for data already contained in the all-time
+          // response, and those extra calls are what tripped MetaCopier's burst
+          // quota. The API filters this endpoint on closeTime, so filtering on
+          // closeTime here reproduces each server-side window exactly (verified
+          // 2026-10-20: identical position ids and P&L to the cent).
+          const [openPositions, allTimePositions] = await Promise.all([
             aggregate(id => metaCopierService.getOpenPositionsFromAccount(id)),
-            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getStartOfToday(), getEndOfToday())),
-            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getStartOfWeek(), getEndOfToday())),
-            aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getStartOfMonth(), getEndOfToday())),
             aggregate(id => metaCopierService.getHistoricalPositionsFromAccount(id, getAllTimeStart(), getEndOfToday())),
           ]);
+          const closedSince = (start: string) =>
+            allTimePositions.filter(p => p.closeTime && p.closeTime >= start);
+          const todayPositions = closedSince(getStartOfToday());
+          const weekPositions = closedSince(getStartOfWeek());
+          const monthPositions = closedSince(getStartOfMonth());
 
           const floatingPnL = calculatePnL(openPositions);
           const todayRealizedPnL = calculatePnL(todayPositions);

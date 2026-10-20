@@ -5,6 +5,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.4] — 2026-10-20
+
+### Fixed
+
+- The admin dashboard now makes a quarter of the history calls it used to, which is
+  what actually stops the 429s behind the 13-65s page loads. Two changes:
+  `getPnLSummary`'s admin branch fetched today, week, month and all-time as four
+  separate API calls per master account, even though the all-time response already
+  contains the other three; it now fetches all-time once per master and slices the
+  windows locally. The endpoint filters on close time, so a local close-time filter
+  reproduces each server-side window exactly — verified against the live API on
+  8220: identical position ids and P&L to the cent. Per poll that is 28 history
+  calls down to 7.
+- The history cache TTL went from 30s to 90s, so it now outlives the dashboard's 60s
+  poll interval. At 30s the entry had always expired by the time the next poll
+  arrived, so every poll re-issued every query — and an immediate repeat of an
+  identical history query is the single most reliable way to be rejected (the first
+  succeeds, the repeat 429s). The cache previously only helped within one request.
+
 ## [4.1.3] — 2026-10-20
 
 ### Fixed

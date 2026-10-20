@@ -36,7 +36,12 @@ const POS_TTL_MS = 45_000;
 // every load and on 30–60s polls — the same (account, range) window fetched many
 // times over. Cache the raw history briefly and coalesce concurrent identical
 // requests so that storm collapses to one REST call per window.
-const HISTORY_TTL_MS = 30_000;
+// Must stay ABOVE the dashboard's poll interval (60s, client/src/pages/Dashboard.tsx).
+// At 30s the entry had always expired by the time the next poll arrived, so every
+// poll re-issued every history query — and repeating an identical history query is
+// exactly what MetaCopier's burst quota rejects hardest (first call succeeds, an
+// immediate repeat 429s). The cache only ever helped within a single request.
+const HISTORY_TTL_MS = 90_000;
 // Blackout windows are published days ahead and only shift when a release is
 // rescheduled, so the news-filter preview is safe to reuse for a few minutes.
 const NEWS_PREVIEW_TTL_MS = 5 * 60_000;
