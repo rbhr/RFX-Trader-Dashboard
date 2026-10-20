@@ -66,6 +66,69 @@ Findings:
 
 ---
 
+## 🐢 HIGH PRIORITY — MetaCopier API saturation makes the dashboard 13–65s slow
+**Status:** 🔴 Diagnosed 2026-10-20, not started. Not a regression (deployed image unchanged since
+2026-10-16) and not a resource problem (host load 0.06, 6 GB free, containers under 5%).
+
+**Root cause.** `trading.getPnLSummary`'s admin branch (`showAllData && isAdmin`, `server/routers.ts`)
+does a nested `Promise.all`: 8 accounts labelled "RFX Master" × 4 date windows (today / week / month /
+all-time) = **32 concurrent history GETs in one burst**. The MetaCopier API key tolerates roughly
+**8 concurrent in-flight requests** — measured: 4 parallel calls on one account are fine, 8 parallel
+across 8 different accounts already return 429. The surplus gets HTTP 429, and `fetchWithAuth`
+(`server/metacopier.ts`) then sleeps `2^attempt` seconds over 4 attempts = **1+2+4+8 = exactly 15 s**,
+which is also its axios timeout — hence the hard 15.2–15.37 s ceiling in the access log.
+
+**Measured cost.** One admin poll = 32 calls, **58,379 position rows, 20.7 MB of JSON**, repeated every
+60 s (`client/src/pages/Dashboard.tsx:272`) ⇒ ~1.2 GB/hour and 1,680 calls/hour per open admin tab.
+Caddy's `tradersdash.log`: `getPnLSummary` mean **12.81 s** over 162 requests; `admin.listTraders`
+batch max **64.79 s**. Latency tracks concurrency, not the clock — sub-second in quiet hours, 10–11 s
+when traffic exceeds ~85 req/hour. The all-time window grows forever: `exness Demo` is now 25,594 rows
+/ 8.9 MB / 7.3 s per fetch, `exness Master 2722` another 17,329.
+
+**New demo/slave account (2026-10-20):** `474776952` = "06 - exness Master Demo",
+MC id `fda0e4b2-83c8-48f7-8b12-9664cdd0bd6e`, 0 copiers, **no labels — must stay unlabelled**.
+Replaces `exness Demo` (260244444, id `b94cabc8-946d-4a99-9b81-286f8553cc63`), which is a
+magic-number factory only and must never be read for P&L: it is labelled "RFX Master", which put
+25,597 demo positions and **+$97,315.85 of phantom profit** (24%) into the admin all-time figure.
+The old id is hardcoded in `server/metacopier.ts:1383` and `server/routers.ts:658` — make it an
+env var when switching. Also `METACOPIER_ACCOUNT_ID` currently points at `253cb74c-...` =
+"Exness bomb" (249833260), a dead account with 0 copiers that is absent from `/accounts`.
+
+Fixes, highest leverage first:
+
+- [x] **Phase 0.1 — removed the `"RFX Master"` label from `exness Demo`** (2026-10-20). Measured
+      before → after: admin all-time P&L **$403,196.69 → $305,970.57** (−$97,226.12 of demo profit
+      that was never real), rows per poll **58,379 → 35,513**, payload **20.7 MB → 13.8 MB**, calls
+      **32 → 28**, 429s on an isolated burst **4 → 0**, wall clock 5.6s → 4.3s. MetaCopier-side only,
+      live within the 30s accounts cache, no deploy. NB `PUT /accounts/{id}` requires
+      `loginAccountPassword` and GET returns it as `""`; a read-modify-write PUT was verified safe
+      (credentials survive) by testing on the throwaway new demo account first.
+- [ ] **Global concurrency limiter in `fetchWithAuth`** (semaphore of 4–6). One change; makes 429s
+      structurally impossible across every call site, not just this one. **Still needed:** 28 parallel
+      calls per poll is still well over the ~8 cap, so two overlapping admin loads will 429 again.
+- [ ] **Collapse the 4 date windows into 1** — fetch all-time per master once, derive today/week/month
+      by filtering locally. 32 calls → 8, 20.7 MB → ~13 MB. `computeTraderProfitSummary` already works
+      this way; the admin branch predates it.
+- [ ] **Raise `HISTORY_TTL_MS` (30 s) above the 60 s poll interval** (e.g. 90 s). As it stands the entry
+      is always expired when the next poll arrives, so the cache only helps within a single request and
+      never across polls.
+- [ ] **Persist closed history in MySQL.** Closed positions are immutable; re-downloading 58k unchanging
+      rows every minute is the underlying waste, and it is what makes `admin.listTraders` take 65 s.
+- [ ] **Honour `Retry-After` with jitter** instead of a fixed chain that can reach 15 s.
+
+**Agreed plan (2026-10-20).** MySQL becomes the system of record for realized P&L; MetaCopier stays
+the live feed. Phases: 0 stop the bleeding · 1 instrument MC call counts per request · 2 immutable
+`closed_positions` archive behind the single `getHistoryRaw` chokepoint (`server/metacopier.ts:304`),
+fed by the socket's already-arriving-but-discarded `UpdateHistoryDTO` (`metacopierSocket.ts:172`,
+currently zero consumers) · 3 `trader_pnl_snapshots` written on master moves **and monthly**
+(decided: Option B — a monthly snapshot bounds how far a dropped trade can silently corrupt a
+lifetime figure, and gives reconciliation a checkpoint) · 4 push instead of poll.
+Guard: `computeCumulativeRealizedProfit` feeds payouts, so the archive ships read-only behind a flag
+with archive-vs-REST reconciliation per trader, and payouts only move over after a clean payout
+cycle. The isolated test DB above becomes a prerequisite, not a nice-to-have.
+
+---
+
 ## 📰 MetaCopier News Filter / News Protection
 **Status:** 🟡 News filter chosen and wired into the dashboard 2026-09-19. Reference config is the copier "RFX - Bisma - 81279" → "01 exness Master 8220" (HIGH impact, 60 min before/after, blocks modifications, `bnd` category excluded). Edit Trader has a "News trading allowed" checkbox (default off) that switches the filter on every live copier; new live copiers get it automatically. Remaining copiers still need it switched on — per trader from Edit Trader, or with a backfill script. MetaCopier shipped the economic calendar plus both news features on 2026-09-06 (PRO plan).
 

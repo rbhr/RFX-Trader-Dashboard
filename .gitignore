@@ -135,6 +135,7 @@ update-guardrails.mjs
 update-trader-telegram.mjs
 zarab-switch-live.mjs
 zero-copier-limits.mjs
+replicate-uzo-copiers.mjs
 
 # graphify knowledge-graph output (generated locally)
 graphify-out/
