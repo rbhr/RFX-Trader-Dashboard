@@ -5,6 +5,30 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.1.3] — 2026-10-20
+
+### Fixed
+
+- Dashboard requests that were taking 13-65s now complete in well under a second.
+  The MetaCopier API rate-limits on requests in flight per API key — four parallel
+  reads of one account are fine, but eight parallel reads across eight accounts
+  already return 429 — and the admin P&L aggregate asked for 8 master accounts x 4
+  date windows at once, 32 calls. The surplus 429'd, and each 429 cost 1+2+4+8s of
+  backoff, which is why so many requests landed on a hard 15.3s ceiling.
+  `fetchWithAuth` now queues every REST call through a global FIFO limiter
+  (5 concurrent by default, `METACOPIER_MAX_CONCURRENCY` to tune) and gives its slot
+  up before backing off, so a waiting caller can use it. The queue being FIFO also
+  means a burst of dashboard reads delays the breach and trailing-risk monitors
+  rather than starving them — they compete for the same budget, and a saturated key
+  previously showed up as "[LimitCloseMonitor] Read failed" in the logs.
+- The admin dashboard no longer counts demo trades as real profit. `exness Demo`
+  exists only to mint magic numbers for new accounts, but it carried the
+  "RFX Master" label, so its 25,597 positions and $97,226 of profit were summed
+  into the admin all-time figure. The label was removed MetaCopier-side on
+  2026-10-20: the all-time figure went from $403,196.69 to $305,970.57, and the
+  payload behind every poll from 20.7 MB to 13.8 MB. No trader-facing figure was
+  affected — no trader has that account as their live account.
+
 ## [4.1.2] — 2026-10-16
 
 ### Fixed

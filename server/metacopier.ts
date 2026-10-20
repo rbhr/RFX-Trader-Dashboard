@@ -167,6 +167,43 @@ function socketPositions(accountId: string): Position[] | null {
   return dtos.map(mapSocketPosition);
 }
 
+/**
+ * Global ceiling on concurrent MetaCopier REST calls.
+ *
+ * The API rate-limits on requests in flight per API key — not per account and
+ * not per minute. Measured 2026-10-20: four parallel reads of a single account
+ * all succeed, but eight parallel reads across eight accounts already return
+ * 429. Fan-out loops went well past that (the admin P&L aggregate asked for
+ * 8 master accounts x 4 date windows at once, 32 calls), and because a 429
+ * costs 1+2+4+8s of backoff in fetchWithAuth, every overflowing request stalled
+ * for ~15s — which is what turned a modest page load into a 13-65s one.
+ * Queueing for a slot is strictly cheaper than being rejected and retrying.
+ *
+ * FIFO, so a burst of dashboard reads delays the breach and trailing-risk
+ * monitors rather than starving them: they share this one budget.
+ */
+const MAX_CONCURRENT_REQUESTS = Math.max(
+  1,
+  Number(process.env.METACOPIER_MAX_CONCURRENCY) || 5
+);
+let inFlightRequests = 0;
+const waitingForSlot: Array<() => void> = [];
+
+function acquireRequestSlot(): Promise<void> {
+  if (inFlightRequests < MAX_CONCURRENT_REQUESTS) {
+    inFlightRequests++;
+    return Promise.resolve();
+  }
+  return new Promise<void>(resolve => waitingForSlot.push(resolve));
+}
+
+function releaseRequestSlot(): void {
+  const next = waitingForSlot.shift();
+  // Hand the slot straight over; the in-flight count is unchanged.
+  if (next) next();
+  else inFlightRequests--;
+}
+
 class MetaCopierService {
   private apiKey: string;
   private accountId: string;
@@ -220,6 +257,8 @@ class MetaCopierService {
   private async fetchWithAuth<T>(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET', data?: any): Promise<T> {
     const maxRetries = 4;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let retryInMs: number | null = null;
+      await acquireRequestSlot();
       try {
         const response = await axios({
           method,
@@ -240,11 +279,17 @@ class MetaCopierService {
           throw new Error(`MetaCopier API timeout for ${method} ${endpoint}`);
         }
         if (error.response?.status === 429 && attempt < maxRetries) {
-          const delay = Math.pow(2, attempt) * 1000;
-          await new Promise(r => setTimeout(r, delay));
-          continue;
+          retryInMs = Math.pow(2, attempt) * 1000;
+        } else {
+          throw error;
         }
-        throw error;
+      } finally {
+        releaseRequestSlot();
+      }
+      // Back off *after* giving the slot up, so a queued caller can use it
+      // while we wait instead of the whole queue stalling behind us.
+      if (retryInMs !== null) {
+        await new Promise(r => setTimeout(r, retryInMs));
       }
     }
     throw new Error(`MetaCopier API failed after ${maxRetries} retries for ${method} ${endpoint}`);
