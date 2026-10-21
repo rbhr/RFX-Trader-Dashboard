@@ -353,6 +353,9 @@ export async function markPaymentConfirmed(
     .set({
       status: "Confirmed",
       confirmedAt: new Date(),
+      // Confirmation is immediately followed by announcing the payment, which
+      // is what recordConfirmedPayment flags at insert for a settled payment.
+      notificationSent: true,
       ...(transactionHash ? { transactionHash } : {}),
     })
     .where(eq(payments.id, id));
