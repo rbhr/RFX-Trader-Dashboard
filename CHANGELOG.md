@@ -5,6 +5,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.4.1] — 2026-10-21
+
+### Changed
+
+- The demo copier is now created **disabled and without the skip-position
+  filter**. It exists only so MetaCopier hands back the source account's short
+  id, which is the trader's magic number — it is not meant to copy trades onto
+  the demo master, so an active copier with a trade filter on it was two things
+  it had no business having. Both had to be undone by hand after every trader
+  create or edit.
+
+  Live copiers are unaffected: `createCopier`'s new `skipPositionFeature` option
+  defaults on, and the live path still creates them active with the filter.
+  Both shapes are now pinned by tests
+  (`server/metacopier.createCopier.test.ts`).
+
 ## [4.4.0] — 2026-10-21
 
 ### Removed

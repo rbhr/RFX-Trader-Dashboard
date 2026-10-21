@@ -141,11 +141,21 @@ Fixes, highest leverage first:
       the wrong fix: a shared fallback account attributes its trades to whichever trader has none of
       their own. Every read now names its account and "no account" returns empty. Only the
       Administrator row reached it.
-- [ ] **Decide what admin position lists should show.** With the fallback gone, `getTodayPositions`,
-      `getWeekPositions`, `getMonthPositions` and `getOpenPositions` return empty for the
-      Administrator row, where they previously returned a 500 — so nothing is lost, but
-      `getPnLSummary`'s admin branch *does* aggregate across the RFX master accounts. Totals without
-      rows is inconsistent; these four could aggregate the same way if that is what you want to see.
+- [ ] **Aggregate the admin position lists across the masters — agreed 2026-10-21, not yet built.**
+      `getTodayPositions`, `getWeekPositions`, `getMonthPositions` and `getOpenPositions` return
+      empty for the Administrator row now that the dead default account is gone, while
+      `getPnLSummary`'s admin branch already aggregates across the RFX master accounts — so the
+      admin sees totals with no rows behind them. These four should aggregate the same way.
+      Notes for whoever builds it:
+      - `getPnLSummary`'s admin branch has the pattern already (`aggregate(...)` over the accounts
+        carrying the `RFX Master` label); it is local to that procedure and wants extracting into a
+        shared helper rather than copying four times.
+      - Mind the history-call budget: one wide all-time fetch per master sliced locally by
+        `closeTime`, not one call per window per master. That is the v4.1.4/4.1.5 lesson and the
+        thing that made these procedures slow in the first place
+        (see [[metacopier-api-concurrency-cap]]).
+      - Admin-only: the trader branch of each procedure must keep naming the trader's own live
+        account, or a trader would see the masters' aggregate as their own P&L.
 - [ ] **`pnpm check` does not typecheck tests.** `tsconfig.json` excludes `**/*.test.ts`, so a test
       file can call APIs that no longer exist and tsc stays green — `metacopier.test.ts` referenced
       three deleted methods with a clean typecheck. Only vitest catches it, and only for suites that

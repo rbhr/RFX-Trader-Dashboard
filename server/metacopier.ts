@@ -758,6 +758,13 @@ class MetaCopierService {
     status?: 'ACTIVE' | 'DISABLED' | 'MANAGE';
     /** Live copiers only: block new trades around high-impact news. */
     newsFilter?: boolean;
+    /**
+     * Add the "skip position if SL or TP missing" filter (feature type 31).
+     * Defaults on, which is what a live copier wants. The demo copier exists
+     * only to mint a magic number and never copies a trade, so it has nothing
+     * to filter.
+     */
+    skipPositionFeature?: boolean;
     /** Lot sizing; defaults to No scaling at 1x (what the demo copier needs). */
     scaling?: CopyScaling;
   }): Promise<{ success: boolean; copierId?: string; fromAccountShortId?: string; message?: string }> {
@@ -813,7 +820,7 @@ class MetaCopierService {
       }
 
       // Add "Skip position if SL or TP missing" feature (type 31)
-      if (copierId) {
+      if (copierId && (params.skipPositionFeature ?? true)) {
         try {
           await this.addCopierSkipPositionFeature(params.toAccountId, copierId);
         } catch (e) {

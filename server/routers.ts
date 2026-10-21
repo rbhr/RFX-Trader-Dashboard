@@ -803,6 +803,12 @@ async function linkTraderToMetaCopier(
       const copierResult = await metaCopierService.createCopier({
         fromAccountId: mcAccountId,
         toAccountId: DEMO_SLAVE_ACCOUNT_ID,
+        // This copier exists only so MetaCopier hands back the source
+        // account's short id, which is the trader's magic number. It must
+        // never copy a trade onto the demo master, so it is created disabled
+        // and without the skip-position filter — there is nothing to filter.
+        status: "DISABLED",
+        skipPositionFeature: false,
       });
       if (copierResult.success && copierResult.fromAccountShortId) {
         realMagic = copierResult.fromAccountShortId;
