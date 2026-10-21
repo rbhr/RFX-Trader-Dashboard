@@ -217,6 +217,24 @@ export const payments = mysqlTable("payments", {
   payoutPeriodFrom: timestamp("payoutPeriodFrom"),
   payoutPeriodTo: timestamp("payoutPeriodTo"),
   notificationSent: boolean("notificationSent").notNull().default(false),
+  /**
+   * Settlement state. A wallet payout is recorded the moment it is broadcast,
+   * before the network confirms it, so the row exists even if the server dies
+   * mid-confirmation and the admin can never be told "failed" about money that
+   * actually moved. `paymentConfirmer` moves Pending to Confirmed or Failed.
+   *
+   * Defaults to Confirmed so manually recorded payments — which are settled by
+   * definition — and every pre-existing row keep their meaning.
+   */
+  status: mysqlEnum("status", ["Confirmed", "Pending", "Failed"])
+    .notNull()
+    .default("Confirmed"),
+  /** GasFree transfer id, needed to confirm a TRC-20 payout later. */
+  confirmTransferId: varchar("confirmTransferId", { length: 128 }),
+  /** When settlement was confirmed on-chain. */
+  confirmedAt: timestamp("confirmedAt"),
+  /** Why settlement failed, for a Failed row. */
+  failureReason: varchar("failureReason", { length: 500 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

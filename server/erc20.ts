@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { ENV } from "./_core/env";
-import { TxFailedError, TxPendingError } from "./walletErrors";
+import type { ConfirmationResult, SendResult } from "./walletErrors";
 
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -61,15 +61,17 @@ export async function getNativeBalance(): Promise<string> {
 /**
  * Sends USDT to a recipient address.
  * Pre-checks native balance to avoid cryptic gas errors.
- * Waits for 1 block confirmation before returning.
+ *
+ * Returns as soon as the transfer is broadcast, without waiting for a
+ * confirmation — `paymentConfirmer` settles it from the receipt. Blocking here
+ * meant the caller's HTTP request could time out after the money had moved.
  * @param recipientAddress - EVM hex address (0x...)
  * @param amount - Human-readable USDT amount (e.g. 50.00)
- * @returns Transaction hash string
  */
 export async function sendUsdtErc20(
   recipientAddress: string,
   amount: number,
-): Promise<string> {
+): Promise<SendResult> {
   const { contract, provider, wallet } = getInstances();
 
   if (!ethers.isAddress(recipientAddress)) {
@@ -88,29 +90,48 @@ export async function sendUsdtErc20(
 
   const rawAmount = BigInt(Math.round(amount * Number(USDT_DECIMALS)));
 
+  // Anything that throws before this line never reached the network, so it is
+  // safe to report as a failure. Once `transfer` resolves we hold a broadcast
+  // transaction and the hash must never be lost, or the caller may retry and
+  // double-send real funds.
   const tx = await contract.transfer(recipientAddress, rawAmount);
   const txHash = tx.hash as string;
 
-  // The transfer is broadcast at this point — from here on the hash must
-  // never be lost, or the caller may retry and double-send real funds.
-  try {
-    const receipt = await tx.wait(1, 90_000);
-    if (receipt && receipt.status === 0) {
-      throw new TxFailedError(`ERC-20 transfer reverted on-chain (tx: ${txHash})`);
-    }
-  } catch (err: any) {
-    if (err instanceof TxFailedError) throw err;
-    // ethers v6 throws CALL_EXCEPTION when the mined tx reverted — definitive failure
-    if (err?.code === "CALL_EXCEPTION") {
-      throw new TxFailedError(`ERC-20 transfer reverted on-chain (tx: ${txHash})`);
-    }
-    // RPC error or confirmation timeout — the tx is on the network and may
-    // still mine. Surface the hash so the payment gets recorded as pending.
-    throw new TxPendingError(
-      `ERC-20 transfer broadcast (tx: ${txHash}) but confirmation did not complete: ${err?.message ?? "unknown error"}`,
-      txHash
-    );
-  }
+  console.log(`[EVM] USDT transfer broadcast: ${txHash}`);
+  return { txHash, confirmed: false, transferId: null };
+}
 
-  return txHash;
+/**
+ * Confirms an ERC-20 transfer from its receipt, for `paymentConfirmer`.
+ * An unreachable RPC reads as pending, never as failed — reporting a failure
+ * we cannot prove would invite re-sending money that already moved.
+ */
+export async function getErc20TxStatus(
+  txHash: string,
+): Promise<ConfirmationResult> {
+  try {
+    const { provider } = getInstances();
+    const receipt = await provider.getTransactionReceipt(txHash);
+    if (!receipt) {
+      return { settled: "pending", txHash, detail: "not yet mined" };
+    }
+    if (receipt.status === 0) {
+      return {
+        settled: "failed",
+        txHash,
+        detail: `transfer reverted on-chain in block ${receipt.blockNumber}`,
+      };
+    }
+    return {
+      settled: "confirmed",
+      txHash,
+      detail: `mined in block ${receipt.blockNumber}`,
+    };
+  } catch (err: any) {
+    return {
+      settled: "pending",
+      txHash,
+      detail: `receipt lookup failed: ${err?.message ?? "unknown error"}`,
+    };
+  }
 }

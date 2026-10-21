@@ -26,3 +26,27 @@ export class TxPendingError extends Error {
     this.txHash = txHash;
   }
 }
+
+/**
+ * What a send call reports back. A payout is recorded as soon as it is
+ * broadcast, so the caller needs the hash (or the relayer id to find it later)
+ * and whether the network has already settled it — not a single hash string
+ * that can only be produced by blocking until confirmation.
+ */
+export type SendResult = {
+  /** The real network transaction hash, or null if only a relayer id exists. */
+  txHash: string | null;
+  /** True when the network/relayer already reported final success. */
+  confirmed: boolean;
+  /** GasFree transfer id, needed to confirm a TRC-20 payout later. */
+  transferId: string | null;
+};
+
+/** How a later confirmation check came out. */
+export type ConfirmationResult = {
+  settled: "confirmed" | "failed" | "pending";
+  /** The real hash, once the network publishes it. */
+  txHash: string | null;
+  /** Human-readable detail for a failure. */
+  detail: string;
+};

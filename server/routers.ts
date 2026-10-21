@@ -94,6 +94,11 @@ import {
   copyToAlertChannel,
 } from "./telegram";
 import { createSystemNotification } from "./systemNotifications";
+import {
+  recordConfirmedPayment,
+  recordPendingPayment,
+  creditAndAnnouncePayment,
+} from "./paymentRecord";
 import { getCopyFlowMap } from "./copyFlowMap";
 import { toLanguage, translate, type Language } from "@shared/i18n";
 import { maybeActivateOnboarding } from "./onboarding";
@@ -119,7 +124,7 @@ import {
   isEvmConfigured,
 } from "./erc20";
 import { ENV } from "./_core/env";
-import { TxFailedError, TxPendingError } from "./walletErrors";
+import { TxFailedError, type SendResult } from "./walletErrors";
 import { checkRateLimit, resetRateLimit } from "./rateLimit";
 import { randomInt } from "crypto";
 
@@ -547,113 +552,6 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 /** Shared helper: record a payment and send notifications. */
-async function recordPaymentAndNotify(params: {
-  magicNumberId: number;
-  amount: number;
-  transactionHash: string;
-  networkFee?: number;
-  network?: "TRC20" | "ERC20";
-  paymentDate: Date;
-  narration?: string;
-  paymentType?: string;
-  payoutPeriodFrom?: Date;
-  payoutPeriodTo?: Date;
-  /** Skip trader notifications (Telegram + in-app) — used for test payouts. */
-  silent?: boolean;
-  /** Skip incrementing the trader's lifetimeIncome — used for test payouts. */
-  skipLifetime?: boolean;
-}) {
-  const {
-    magicNumberId,
-    transactionHash,
-    network,
-    paymentDate,
-    narration,
-    payoutPeriodFrom,
-    payoutPeriodTo,
-    silent,
-    skipLifetime,
-  } = params;
-  // Round to cents before persisting into decimal(15,2) columns
-  const amount = Math.round(params.amount * 100) / 100;
-  const networkFee = Math.round((params.networkFee ?? 0) * 100) / 100;
-
-  await createPayment({
-    magicNumberId,
-    amount: amount.toFixed(2),
-    networkFee: networkFee.toFixed(2),
-    transactionHash,
-    paymentDate,
-    network: network ?? null,
-    narration: narration ?? null,
-    paymentType: params.paymentType ?? "Profit Share",
-    payoutPeriodFrom: payoutPeriodFrom ?? null,
-    payoutPeriodTo: payoutPeriodTo ?? null,
-    notificationSent: true,
-  });
-
-  const trader = await getMagicNumberById(magicNumberId);
-  if (trader) {
-    if (!skipLifetime) {
-      await incrementLifetimeIncome(magicNumberId, amount);
-    }
-
-    logEvent(
-      "payment",
-      `Paid $${amount.toFixed(2)}${network ? ` (${network})` : ""} to ${trader.name} (${trader.magicNumber}) — tx ${transactionHash.slice(0, 10)}…`
-    );
-
-    if (silent) {
-      return;
-    }
-
-    await createSystemNotification({
-      magicNumberId,
-      key: "payment",
-      params: {
-        magicNumber: trader.magicNumber,
-        amount: amount.toFixed(2),
-        hash: transactionHash,
-      },
-      type: "payment",
-    });
-    console.log(
-      `[Payment] In-app notification sent to ${trader.name} for payment of $${amount}`
-    );
-
-    if (trader.telegramHandle && trader.telegramChatId) {
-      const { message: telegramMsg, opts: telegramOpts } = localizedTelegram(
-        buildPaymentMessage,
-        {
-          traderName: trader.name,
-          magicNumber: trader.magicNumber,
-          amount,
-          network: network || trader.usdtNetwork || "TRC20",
-          networkFee,
-          transactionHash,
-          paymentDate,
-        },
-        trader.language
-      );
-      const sent = await sendTelegramMessage(
-        trader.telegramHandle,
-        telegramMsg,
-        trader.telegramChatId,
-        telegramOpts
-      );
-      if (sent) {
-        console.log(
-          `[Payment] Telegram notification sent to ${trader.telegramHandle}`
-        );
-      } else {
-        console.warn(
-          `[Payment] Telegram notification failed for ${trader.telegramHandle} — in-app notification still delivered`
-        );
-      }
-    }
-  }
-}
-
 // Reusable demo/slave account for magic-number routing.
 const DEMO_SLAVE_ACCOUNT_ID = "b94cabc8-946d-4a99-9b81-286f8553cc63";
 
@@ -1416,7 +1314,11 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
         const magicNumberId = trader.id;
-        const payments = await getPaymentsByMagicNumberId(magicNumberId);
+        const allPayments = await getPaymentsByMagicNumberId(magicNumberId);
+        // Settled payments only: a broadcast payout is still unconfirmed for
+        // about a minute, and a trader must never see money that may not
+        // arrive, nor a failed row they can do nothing about.
+        const payments = allPayments.filter(p => p.status === "Confirmed");
 
         return payments.map(p => ({
           id: p.id,
@@ -3737,6 +3639,9 @@ export const appRouter = router({
           paymentType: p.paymentType || "Profit Share",
           payoutPeriodFrom: p.payoutPeriodFrom,
           payoutPeriodTo: p.payoutPeriodTo,
+          status: p.status,
+          confirmedAt: p.confirmedAt,
+          failureReason: p.failureReason || null,
         };
       });
     }),
@@ -3763,7 +3668,7 @@ export const appRouter = router({
         }
 
         const trader = await getMagicNumberById(input.magicNumberId);
-        await recordPaymentAndNotify({
+        await recordConfirmedPayment({
           magicNumberId: input.magicNumberId,
           amount: input.amount,
           transactionHash: input.transactionHash,
@@ -4029,46 +3934,28 @@ export const appRouter = router({
           }
 
           const network = trader.usdtNetwork as "TRC20" | "ERC20";
-          let txHash: string;
+          let sent: SendResult;
 
           try {
             if (network === "TRC20") {
               if (!isTronConfigured()) {
                 throw new Error("TRON wallet is not configured on this server");
               }
-              txHash = await sendUsdt(trader.usdtAddress, input.amount);
+              sent = await sendUsdt(trader.usdtAddress, input.amount);
             } else {
               if (!isEvmConfigured()) {
                 throw new Error("EVM wallet is not configured on this server");
               }
-              txHash = await sendUsdtErc20(trader.usdtAddress, input.amount);
+              sent = await sendUsdtErc20(trader.usdtAddress, input.amount);
             }
           } catch (err: any) {
-            if (err instanceof TxPendingError) {
-              // Broadcast but unconfirmed — record it (with the real hash when
-              // we have one) so the admin never re-sends manually.
-              const recordedHash = err.txHash ?? `PENDING-${Date.now()}`;
-              await recordPaymentAndNotify({
-                magicNumberId: input.magicNumberId,
-                amount: input.amount,
-                transactionHash: recordedHash,
-                network,
-                paymentDate: new Date(),
-                narration: input.narration,
-              });
-              console.warn(
-                `[Payment] Recorded unconfirmed payment ${recordedHash} for ${trader.name} — ${err.message}`
-              );
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: `Payment was sent but confirmation timed out. It has been recorded${err.txHash ? "" : " as pending"} — verify on the block explorer${err.txHash ? "" : " and update the transaction hash"}.`,
-              });
-            }
-
+            // Both send paths only throw for failures that happened *before*
+            // the transfer reached the network, so nothing was sent and no
+            // payment is recorded.
             if (err instanceof TxFailedError) {
               throw new TRPCError({
                 code: "INTERNAL_SERVER_ERROR",
-                message: `Transfer failed on-chain — no funds were sent. ${err.message}`,
+                message: `Transfer failed — no funds were sent. ${err.message}`,
               });
             }
 
@@ -4078,16 +3965,42 @@ export const appRouter = router({
             });
           }
 
-          await recordPaymentAndNotify({
+          // Broadcast. Record it before returning, so the payout survives a
+          // crash here and the admin is never told it failed.
+          const recordedHash =
+            sent.txHash ??
+            (sent.transferId
+              ? `GASFREE-${sent.transferId}`
+              : `PENDING-${Date.now()}`);
+          const paymentDetails = {
             magicNumberId: input.magicNumberId,
             amount: input.amount,
-            transactionHash: txHash,
+            transactionHash: recordedHash,
             network,
             paymentDate: new Date(),
             narration: input.narration,
-          });
+          };
 
-          return { success: true, txHash, network };
+          if (sent.confirmed) {
+            await recordConfirmedPayment(paymentDetails);
+          } else {
+            const paymentId = await recordPendingPayment({
+              ...paymentDetails,
+              confirmTransferId: sent.transferId,
+            });
+            console.log(
+              `[Payment] Recorded payment ${paymentId} as pending for ${trader.name} — ${recordedHash}`
+            );
+          }
+
+          return {
+            success: true,
+            txHash: recordedHash,
+            network,
+            // The UI uses this to say "sent, confirming" rather than claiming
+            // the money has landed.
+            confirmed: sent.confirmed,
+          };
         } finally {
           inFlightWalletPayments.delete(input.magicNumberId);
         }
@@ -4133,6 +4046,9 @@ export const appRouter = router({
         const lastPaidMap = new Map<number, Date>();
         for (const p of allPayments) {
           if (p.paymentType !== "Profit Share") continue;
+          // A pending payout still gates — it has been broadcast and will
+          // probably land. A failed one must not gate a real payout.
+          if (p.status === "Failed") continue;
           // Skip testing-mode payouts ([TEST] narration) — they must not gate
           // real payouts' waiting period.
           if (p.narration && p.narration.startsWith("[TEST]")) continue;
@@ -4354,47 +4270,27 @@ export const appRouter = router({
             ? { silent: true as const, skipLifetime: true as const }
             : {};
 
-          let txHash: string;
+          let sent: SendResult;
           try {
             if (network === "TRC20") {
               if (!isTronConfigured()) {
                 throw new Error("TRON wallet is not configured on this server");
               }
-              txHash = await sendUsdt(destination, payout);
+              sent = await sendUsdt(destination, payout);
             } else {
               if (!isEvmConfigured()) {
                 throw new Error("EVM wallet is not configured on this server");
               }
-              txHash = await sendUsdtErc20(destination, payout);
+              sent = await sendUsdtErc20(destination, payout);
             }
           } catch (err: any) {
-            if (err instanceof TxPendingError) {
-              const recordedHash = err.txHash ?? `PENDING-${Date.now()}`;
-              await recordPaymentAndNotify({
-                magicNumberId: input.magicNumberId,
-                amount: payout,
-                transactionHash: recordedHash,
-                network,
-                paymentDate: new Date(),
-                narration,
-                paymentType: "Profit Share",
-                payoutPeriodFrom: input.from,
-                payoutPeriodTo: input.to,
-                ...recordExtras,
-              });
-              // Baseline is NOT raised here — confirmation is uncertain.
-              console.warn(
-                `[Payouts] Recorded unconfirmed payout ${recordedHash} for ${trader.name} — ${err.message}`
-              );
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: `Payout was sent but confirmation timed out. It has been recorded${err.txHash ? "" : " as pending"} — verify on the block explorer. Baseline was not advanced; re-check before re-paying.`,
-              });
-            }
+            // Both send paths only throw for failures that happened before the
+            // transfer reached the network, so nothing was sent, nothing is
+            // recorded and the baseline is untouched.
             if (err instanceof TxFailedError) {
               throw new TRPCError({
                 code: "INTERNAL_SERVER_ERROR",
-                message: `Transfer failed on-chain — no funds were sent. ${err.message}`,
+                message: `Transfer failed — no funds were sent. ${err.message}`,
               });
             }
             throw new TRPCError({
@@ -4403,10 +4299,15 @@ export const appRouter = router({
             });
           }
 
-          await recordPaymentAndNotify({
+          const recordedHash =
+            sent.txHash ??
+            (sent.transferId
+              ? `GASFREE-${sent.transferId}`
+              : `PENDING-${Date.now()}`);
+          const payoutDetails = {
             magicNumberId: input.magicNumberId,
             amount: payout,
-            transactionHash: txHash,
+            transactionHash: recordedHash,
             network,
             paymentDate: new Date(),
             narration,
@@ -4414,16 +4315,33 @@ export const appRouter = router({
             payoutPeriodFrom: input.from,
             payoutPeriodTo: input.to,
             ...recordExtras,
-          });
+          };
+
+          if (sent.confirmed) {
+            await recordConfirmedPayment(payoutDetails);
+          } else {
+            await recordPendingPayment({
+              ...payoutDetails,
+              confirmTransferId: sent.transferId,
+            });
+          }
 
           // Raise the high-water-mark only for real payouts.
+          //
+          // Deliberately raised on broadcast rather than on confirmation: the
+          // funds have left, and leaving the baseline low would let the next
+          // run compute the same payout again and double-pay real money. The
+          // opposite error — a baseline raised for a transfer that is later
+          // rejected — leaves the trader under-credited, which paymentConfirmer
+          // alerts on and an admin can correct.
           if (!input.testingMode) {
             await setProfitShareBaseline(input.magicNumberId, cumulative);
           }
 
           return {
             success: true,
-            txHash,
+            txHash: recordedHash,
+            confirmed: sent.confirmed,
             network,
             payout,
             newBaseline: input.testingMode ? baseline : cumulative,

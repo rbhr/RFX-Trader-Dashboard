@@ -304,6 +304,75 @@ export async function createPayment(data: InsertPayment) {
   return result;
 }
 
+/**
+ * Inserts a payment and returns its id, so a broadcast-but-unconfirmed payout
+ * can be found again by `paymentConfirmer`.
+ */
+export async function createPaymentReturningId(
+  data: InsertPayment
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result: any = await db.insert(payments).values(data);
+  // mysql2 returns the ResultSetHeader first; drizzle surfaces it as [header].
+  const insertId = Array.isArray(result)
+    ? result[0]?.insertId
+    : result?.insertId;
+  if (!insertId) {
+    throw new Error("Payment insert returned no id");
+  }
+  return Number(insertId);
+}
+
+/** Payouts that were broadcast but not yet settled, oldest first. */
+export async function getPendingPayments() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(payments)
+    .where(eq(payments.status, "Pending"))
+    .orderBy(payments.id);
+}
+
+/**
+ * Marks a pending payout settled. `transactionHash` is passed when the real
+ * hash only became known after the row was written.
+ */
+export async function markPaymentConfirmed(
+  id: number,
+  transactionHash?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(payments)
+    .set({
+      status: "Confirmed",
+      confirmedAt: new Date(),
+      ...(transactionHash ? { transactionHash } : {}),
+    })
+    .where(eq(payments.id, id));
+}
+
+/**
+ * Marks a pending payout failed. Only for transfers the network definitively
+ * rejected — never for one we merely could not confirm, because that would
+ * invite a re-send of money that already moved.
+ */
+export async function markPaymentFailed(id: number, reason: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(payments)
+    .set({ status: "Failed", failureReason: reason.slice(0, 500) })
+    .where(eq(payments.id, id));
+}
+
 export async function getPaymentsByMagicNumberId(magicNumberId: number) {
   const db = await getDb();
   if (!db) return [];

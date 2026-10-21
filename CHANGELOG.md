@@ -5,6 +5,52 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.2.0] — 2026-10-21
+
+### Changed
+
+- **Payouts no longer block on the network.** A wallet payout used to hold the
+  admin's HTTP request open until the transfer confirmed. On a real 1 USDT
+  payout that took 61.3 seconds, the browser gave up at its own ~60s limit, and
+  the admin was shown "load failed" for a payment that had completed — recorded,
+  announced and settled. The natural response to that toast is to send again,
+  and nothing would have stopped a second transfer.
+
+  A payout is now recorded the moment it is broadcast and returns in about a
+  second, because the transaction hash is published almost immediately — in that
+  same payout it existed after 1 second while confirmation took 60. The new
+  `paymentConfirmer` monitor settles the payment afterwards, every 15 seconds,
+  moving it from Pending to Confirmed or Failed.
+
+  The trader is told nothing until settlement is confirmed: a pending payout
+  does not credit their lifetime income, does not notify them, and does not
+  appear in their payment history. Admin screens show it as "Confirming".
+
+- The profit-share high-water-mark now advances when a payout is **broadcast**
+  rather than when it confirms. Leaving it low would let the next run compute
+  the same payout again and double-pay real money; the opposite error leaves a
+  trader under-credited, which the confirmer alerts on and an admin can correct.
+
+- Both send paths now throw only for failures that happened *before* the
+  transfer reached the network, so "an error" once again means "no funds moved".
+  Everything after broadcast is a recorded payment with a settlement state.
+
+### Added
+
+- `payments.status` (Confirmed/Pending/Failed) plus `confirmTransferId`,
+  `confirmedAt` and `failureReason`. Existing rows default to Confirmed, which
+  is what a manually recorded payment is by definition.
+- `paymentConfirmer`, which settles broadcast payouts and alerts the owner on a
+  definitive rejection or on a payout still unsettled after 30 minutes. It marks
+  a payment Failed **only** on a definitive rejection from the network — an
+  unreachable node, an API error or a slow confirmation all read as still
+  pending, because reporting a failure we cannot prove would invite re-sending
+  money that already moved.
+- Tests for the settlement rules (`server/paymentConfirmer.test.ts`): that a
+  trader is credited and told only once confirmed, that a rejection never
+  reaches the trader but does reach the admin, that an unreachable lookup is not
+  treated as failure, and that one bad payment cannot stop the others settling.
+
 ## [4.1.6] — 2026-10-20
 
 ### Fixed

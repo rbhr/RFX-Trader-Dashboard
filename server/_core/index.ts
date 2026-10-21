@@ -13,6 +13,7 @@ import { startBreachMonitor } from "../breachMonitor";
 import { startTrailingRiskLimitMonitor } from "../trailingRiskLimit";
 import { startMissedTradeMonitor } from "../missedTradeMonitor";
 import { startLimitCloseMonitor } from "../limitCloseMonitor";
+import { startPaymentConfirmer } from "../paymentConfirmer";
 import { startMetaCopierSocket } from "../metacopierSocket";
 import { registerLiveStreamRoutes } from "../liveStream";
 
@@ -111,6 +112,10 @@ async function startServer() {
   // trade for exceeding their lot or open-trade limit (socket-triggered, with
   // a 30s poll behind it)
   startLimitCloseMonitor();
+
+  // Start payout settlement monitor — confirms payouts that were recorded the
+  // moment they were broadcast, so no request waits on the network.
+  startPaymentConfirmer();
 }
 
 startServer().catch(console.error);

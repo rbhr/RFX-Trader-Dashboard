@@ -1,7 +1,11 @@
 import { TronWeb } from "tronweb";
 import { createHmac } from "crypto";
 import { ENV } from "./_core/env";
-import { TxFailedError, TxPendingError } from "./walletErrors";
+import {
+  TxFailedError,
+  type ConfirmationResult,
+  type SendResult,
+} from "./walletErrors";
 
 const USDT_DECIMALS = 1_000_000;
 
@@ -20,20 +24,23 @@ const GASFREE_SUCCESS_STATES = new Set([
 const GASFREE_FAILED_STATES = new Set(["FAILED", "REJECTED", "EXPIRED"]);
 
 /**
- * Timings for the GasFree confirmation poll. This wait is the whole latency of
- * a payout — the admin's HTTP request is held open for it — so the first poll
- * is immediate and the cadence is tight while a fast confirmation is still
- * plausible. Exported as a mutable object so tests can shrink the waits.
+ * Timings for the wait between submitting a transfer and learning its hash.
+ *
+ * We no longer wait for GasFree to confirm — in a real payout the hash was
+ * published after 1 second while confirmation took 60, and blocking for that
+ * minute is what made a browser time out and report a successful payout as
+ * failed. We wait only for the hash, which is what makes the payment
+ * recordable and verifiable; `paymentConfirmer` settles it afterwards.
+ *
+ * Exported as a mutable object so tests can shrink the waits.
  */
 export const GASFREE_POLL = {
-  /** Total time to wait for a terminal state before giving up. */
-  budgetMs: 120_000,
+  /** How long to wait for a transaction hash before recording without one. */
+  hashWaitMs: 20_000,
   /** Poll at `fastIntervalMs` for this long, then back off. */
   fastWindowMs: 10_000,
   fastIntervalMs: 1_000,
   slowIntervalMs: 3_000,
-  /** Extra time allowed for the hash after GasFree reports success. */
-  hashGraceMs: 15_000,
 };
 
 let _tronWeb: TronWeb | null = null;
@@ -154,7 +161,7 @@ async function gasFreePost(path: string, body: any): Promise<any> {
 async function sendUsdtGasFree(
   recipientAddress: string,
   amount: number,
-): Promise<string> {
+): Promise<SendResult> {
   const tronWeb = getTronWeb();
   const userAddress = getWalletAddress();
 
@@ -228,13 +235,12 @@ async function sendUsdtGasFree(
 
   console.log(`[TRON] GasFree transfer submitted, ID: ${transferId}`);
 
-  // 7. Poll for completion. Timings and their reasoning live in GASFREE_POLL.
+  // 7. Wait only until GasFree publishes the transaction hash. Settlement is
+  // left to paymentConfirmer: see GASFREE_POLL for why.
   const startedAt = Date.now();
-  let lastTxnHash: string | null = null;
-  let succeededAt: number | null = null;
   let polls = 0;
 
-  while (Date.now() - startedAt < GASFREE_POLL.budgetMs) {
+  while (Date.now() - startedAt < GASFREE_POLL.hashWaitMs) {
     polls++;
 
     let statusData: any;
@@ -255,23 +261,21 @@ async function sendUsdtGasFree(
       console.log(
         `[TRON] GasFree poll ${polls} at ${Math.round((Date.now() - startedAt) / 1000)}s: state=${state}, txnHash=${txnHash || "none"}`
       );
-      if (txnHash) lastTxnHash = txnHash;
 
       const upperState = (state || "").toUpperCase();
-      if (GASFREE_SUCCESS_STATES.has(upperState)) {
-        if (txnHash) return txnHash;
-        if (succeededAt === null) succeededAt = Date.now();
-      }
+      // A definitive rejection is the one case where nothing was sent, so it is
+      // the one case the caller may safely treat as "no payment happened".
       if (GASFREE_FAILED_STATES.has(upperState)) {
         throw new TxFailedError(
           `GasFree transfer ${upperState}: ${JSON.stringify(statusData)}`
         );
       }
-      if (
-        succeededAt !== null &&
-        Date.now() - succeededAt >= GASFREE_POLL.hashGraceMs
-      ) {
-        break;
+      if (txnHash) {
+        return {
+          txHash: txnHash,
+          confirmed: GASFREE_SUCCESS_STATES.has(upperState),
+          transferId,
+        };
       }
     }
 
@@ -282,29 +286,79 @@ async function sendUsdtGasFree(
     await new Promise((r) => setTimeout(r, interval));
   }
 
-  // Submitted, but we never saw a hash. Either GasFree called it successful
-  // without publishing one, or it never reached a terminal state in time.
-  // Both mean "may well have moved the money" — never "safe to re-send".
-  if (succeededAt !== null) {
-    console.warn(
-      `[TRON] GasFree transfer ${transferId} reported success but published no transaction hash after ${polls} polls`
-    );
-    throw new TxPendingError(
-      `GasFree reported the transfer (ID: ${transferId}) as successful but published no ` +
-      `transaction hash. The funds have almost certainly moved — confirm on TronScan ` +
-      `and record the hash against this payment.`,
-      lastTxnHash
-    );
+  // Submitted, but no hash yet. The transfer id is enough to find it again, so
+  // this is still a recordable payout — never a failure.
+  console.warn(
+    `[TRON] GasFree transfer ${transferId} — no transaction hash after ${polls} polls, recording against the transfer id`
+  );
+  return { txHash: null, confirmed: false, transferId };
+}
+
+/**
+ * Looks up a submitted GasFree transfer so a recorded payout can be settled.
+ * Never throws for an unknown or unreachable transfer — an error here must not
+ * be mistaken for a failed transfer.
+ */
+export async function getGasFreeTransferStatus(
+  transferId: string
+): Promise<ConfirmationResult> {
+  let statusData: any;
+  try {
+    const status = await gasFreeGet(`/api/v1/gasfree/${transferId}`);
+    statusData = status.data;
+  } catch (err: any) {
+    return {
+      settled: "pending",
+      txHash: null,
+      detail: `status lookup failed: ${err?.message ?? "unknown error"}`,
+    };
   }
 
-  console.warn(
-    `[TRON] GasFree transfer ${transferId} — polling timed out after ${polls} polls, transfer may still complete`
-  );
-  throw new TxPendingError(
-    `GasFree transfer submitted (ID: ${transferId}) but confirmation timed out. ` +
-    `The transfer may still complete — check TronScan or the GasFree dashboard.`,
-    lastTxnHash
-  );
+  const state = (statusData?.state || "").toUpperCase();
+  const txHash: string | null = statusData?.txnHash ?? null;
+
+  if (GASFREE_SUCCESS_STATES.has(state)) {
+    return { settled: "confirmed", txHash, detail: state };
+  }
+  if (GASFREE_FAILED_STATES.has(state)) {
+    return {
+      settled: "failed",
+      txHash,
+      detail: `GasFree reported ${state}: ${JSON.stringify(statusData)}`,
+    };
+  }
+  return { settled: "pending", txHash, detail: state || "unknown state" };
+}
+
+/**
+ * Confirms a TRC-20 transfer by hash, for the standard (non-GasFree) path.
+ * As above, an unreachable node reads as pending, never as failed.
+ */
+export async function getTronTxStatus(
+  txHash: string
+): Promise<ConfirmationResult> {
+  try {
+    const info: any = await getTronWeb().trx.getTransactionInfo(txHash);
+    // An empty object means the node has not seen it in a block yet.
+    if (!info || Object.keys(info).length === 0 || info.blockNumber == null) {
+      return { settled: "pending", txHash, detail: "not yet in a block" };
+    }
+    const result = info.receipt?.result;
+    if (result && result !== "SUCCESS") {
+      return {
+        settled: "failed",
+        txHash,
+        detail: `on-chain result ${result}`,
+      };
+    }
+    return { settled: "confirmed", txHash, detail: "SUCCESS" };
+  } catch (err: any) {
+    return {
+      settled: "pending",
+      txHash,
+      detail: `lookup failed: ${err?.message ?? "unknown error"}`,
+    };
+  }
 }
 
 // ─── GasFree account info ─────────────────────────────────────────
@@ -344,7 +398,7 @@ export async function getGasFreeAccountInfo(): Promise<{
 export async function sendUsdt(
   recipientAddress: string,
   amount: number,
-): Promise<string> {
+): Promise<SendResult> {
   const tronWeb = getTronWeb();
 
   if (!tronWeb.isAddress(recipientAddress)) {
@@ -354,9 +408,11 @@ export async function sendUsdt(
   // Use GasFree if configured — no fallback to avoid double-sending
   if (isGasFreeConfigured()) {
     console.log("[TRON] Sending via GasFree...");
-    const hash = await sendUsdtGasFree(recipientAddress, amount);
-    console.log("[TRON] GasFree transfer complete:", hash);
-    return hash;
+    const result = await sendUsdtGasFree(recipientAddress, amount);
+    console.log(
+      `[TRON] GasFree transfer broadcast: ${result.txHash ?? `(no hash yet, id ${result.transferId})`}${result.confirmed ? " — already confirmed" : ""}`
+    );
+    return result;
   }
 
   // Standard TRC-20 transfer (requires TRX for fees)
@@ -364,9 +420,10 @@ export async function sendUsdt(
   const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
   const rawAmount = Math.round(amount * USDT_DECIMALS);
 
-  const txHash = await contract
+  const txHash = (await contract
     .transfer(recipientAddress, rawAmount)
-    .send({ feeLimit: 100_000_000 });
+    .send({ feeLimit: 100_000_000 })) as string;
 
-  return txHash as string;
+  // Broadcast, not yet confirmed — paymentConfirmer settles it by hash.
+  return { txHash, confirmed: false, transferId: null };
 }

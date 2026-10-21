@@ -134,7 +134,18 @@ export default function ManagePayments() {
           amount: parseFloat(amount),
           narration: narration || undefined,
         });
-        toast.success(`Payment sent on-chain! TX: ${result.txHash.substring(0, 12)}...`);
+        // A payout is recorded as soon as it is broadcast, so this returns in
+        // a second or two and the network confirms afterwards. Never claim it
+        // has landed before the confirmer says so.
+        if (result.confirmed) {
+          toast.success(
+            `Payment confirmed on-chain — TX ${result.txHash.substring(0, 12)}…`
+          );
+        } else {
+          toast.success(
+            `Payment broadcast — TX ${result.txHash.substring(0, 12)}… Confirming on-chain; the status updates here shortly.`
+          );
+        }
       } else {
         const fee = parseFloat(networkFee);
         await makePaymentMutation.mutateAsync({
@@ -152,7 +163,14 @@ export default function ManagePayments() {
       resetForm();
       refetchPayments();
     } catch (error: any) {
-      toast.error(error?.message || "Payment failed");
+      if (paymentMode === "wallet") {
+        toast.error(
+          `${error?.message || "Payment failed"} — check the payment history below before re-sending: a broadcast payout is recorded even if this request failed.`
+        );
+        refetchPayments();
+      } else {
+        toast.error(error?.message || "Payment failed");
+      }
     }
   };
 
@@ -550,6 +568,24 @@ export default function ManagePayments() {
                             <Badge variant="secondary" className="text-xs font-normal">
                               {payment.paymentType || "Profit Share"}
                             </Badge>
+                            {payment.status === "Pending" && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs font-normal border-amber-500 text-amber-600"
+                                title="Broadcast to the network, waiting on confirmation"
+                              >
+                                Confirming
+                              </Badge>
+                            )}
+                            {payment.status === "Failed" && (
+                              <Badge
+                                variant="destructive"
+                                className="text-xs font-normal"
+                                title={payment.failureReason ?? "Rejected by the network — no funds moved"}
+                              >
+                                Failed
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-sm text-muted-foreground">
                             {new Date(payment.paymentDate).toLocaleDateString('en-US', {

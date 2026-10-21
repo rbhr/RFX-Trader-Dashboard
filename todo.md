@@ -144,14 +144,19 @@ all of it is GasFree's own confirmation time.
       a transfer GasFree reported as `SUCCESS` without yet publishing a hash kept polling the full
       120s and then threw "confirmation timed out" at the admin — it now gets a 15s grace and a
       message saying the funds almost certainly moved and must be confirmed, never re-sent.
-- [ ] **Decide whether payouts should stop blocking at all.** The real fix is to record the payment
-      the moment GasFree returns a transfer id, hand the admin back control, and confirm in the
-      background, with the payments list showing `pending → confirmed`. That is a UX and
-      money-handling change, so it needs a decision, not a patch. Until then a payout can still
-      legitimately take a minute, and a slow GasFree still surfaces as a 500 after 120s.
-- [ ] **Alert on `TxPendingError`.** It means money probably moved but is recorded as
-      `PENDING-<timestamp>`. Today that is a console warning and a scary admin toast; it should
-      page someone, because the hash has to be reconciled by hand.
+- [x] **Payouts no longer block on the network** — shipped in v4.2.0 (2026-10-21). Confirmed by a
+      real payout: the request returned HTTP 200 after 61.3s, the browser gave up at ~60s, and the
+      admin saw "load failed" for a payment that had completed. A payout is now recorded on
+      broadcast (hash available after ~1s) and settled by `paymentConfirmer`.
+- [x] **Alert when a payout does not settle** — shipped in v4.2.0: `paymentConfirmer` notifies the
+      owner on a definitive rejection, and on any payout still unsettled after 30 minutes.
+- [ ] **Reverse the profit-share baseline automatically on a failed payout.** v4.2.0 advances the
+      baseline on broadcast (the safer direction — the alternative risks double-paying) and alerts
+      the admin if settlement then fails, but the correction is manual. Storing the pre-payout
+      baseline on the payment row would let the confirmer undo it.
+- [ ] **Reconcile a payout that never gets a hash.** It is recorded against `GASFREE-<transferId>`
+      and the confirmer fills in the real hash once published, but if GasFree never publishes one
+      the row keeps the placeholder and needs a human.
 
 **Agreed plan (2026-10-20).** MySQL becomes the system of record for realized P&L; MetaCopier stays
 the live feed. Phases: 0 stop the bleeding · 1 instrument MC call counts per request · 2 immutable
