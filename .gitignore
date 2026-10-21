@@ -123,6 +123,7 @@ traders.txt
 
 # One-off operational scripts (run locally, not part of the app)
 add-rfx-traders.mjs
+migrate-payments-settlement.sql
 backfill-live-copiers.ts
 fix-copier-magic-only.mjs
 fix-copier-settings.mjs
