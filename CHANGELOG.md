@@ -5,6 +5,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.6.1] — 2026-10-21
+
+### Changed
+
+- The tRPC error log no longer fills with probes for procedures that do not
+  exist. Something outside the app asks `/api/trpc/` for `settings.ai` and for
+  the empty path every 30 seconds — 37 lines in the first 7 hours of that log
+  existing, against one real failure — and at that rate they bury what the log
+  was added to surface. It cannot be our own client: a tRPC client is typed
+  against the router, so it cannot request a procedure that is not there.
+
+  Each unknown path is now reported once and then counted, with a running total
+  on every thousandth, so it is quietened rather than hidden.
+
+  The filter is narrow on purpose: it matches only `NOT_FOUND` whose message is
+  tRPC's own "No procedure found on path". A `NOT_FOUND` raised *by* a real
+  procedure — "Trader not found" — is logged every single time, which is pinned
+  by a test, because the whole value of this log is that a failing procedure can
+  never be invisible again.
+
 ## [4.6.0] — 2026-10-21
 
 ### Removed

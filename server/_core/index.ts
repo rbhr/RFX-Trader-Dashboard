@@ -16,6 +16,7 @@ import { startLimitCloseMonitor } from "../limitCloseMonitor";
 import { startPaymentConfirmer } from "../paymentConfirmer";
 import { startMetaCopierSocket } from "../metacopierSocket";
 import { verifyDemoAccount } from "../metacopier";
+import { formatTrpcError } from "./trpcErrorLog";
 import { registerLiveStreamRoutes } from "../liveStream";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -62,12 +63,12 @@ async function startServer() {
       // in Caddy's access log — the P&L panel had been erroring, not merely
       // loading slowly, and nothing said so. Input is deliberately not logged:
       // it carries passwords and 2FA codes.
+      //
+      // formatTrpcError keeps external probes for procedures we do not have
+      // from burying the failures that matter; see its comment.
       onError({ error, path, type }) {
-        const cause =
-          error.cause instanceof Error ? ` — cause: ${error.cause.message}` : "";
-        console.error(
-          `[trpc] ${type} ${path ?? "<unknown>"} failed: ${error.code} ${error.message}${cause}`
-        );
+        const line = formatTrpcError(error, path, type);
+        if (line) console.error(line);
       },
     })
   );

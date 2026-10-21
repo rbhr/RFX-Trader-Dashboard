@@ -153,6 +153,12 @@ Fixes, highest leverage first:
       history endpoint are where this kind of rot collects: the deleted default account survived in
       them unnoticed, and one had drifted to have no admin branch at all. Check for callers before
       fixing a procedure, not after.
+- [x] **Filtered the probe noise out of the `[trpc]` log** — v4.6.1 (2026-10-21). Something external
+      asks `/api/trpc/` for `settings.ai` and the empty path every 30s: 37 lines in that log's first
+      7 hours against one real failure. Each unknown path is now reported once then counted, with a
+      total every thousandth. The filter matches only tRPC's own "No procedure found on path", so a
+      `NOT_FOUND` raised by a real procedure is still always logged — pinned by a test, because the
+      point of this log is that a failing procedure can never be invisible again.
 - [ ] **`pnpm check` does not typecheck tests.** `tsconfig.json` excludes `**/*.test.ts`, so a test
       file can call APIs that no longer exist and tsc stays green — `metacopier.test.ts` referenced
       three deleted methods with a clean typecheck. Only vitest catches it, and only for suites that
