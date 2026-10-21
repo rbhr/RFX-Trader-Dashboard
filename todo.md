@@ -141,21 +141,13 @@ Fixes, highest leverage first:
       the wrong fix: a shared fallback account attributes its trades to whichever trader has none of
       their own. Every read now names its account and "no account" returns empty. Only the
       Administrator row reached it.
-- [ ] **Aggregate the admin position lists across the masters — agreed 2026-10-21, not yet built.**
-      `getTodayPositions`, `getWeekPositions`, `getMonthPositions` and `getOpenPositions` return
-      empty for the Administrator row now that the dead default account is gone, while
-      `getPnLSummary`'s admin branch already aggregates across the RFX master accounts — so the
-      admin sees totals with no rows behind them. These four should aggregate the same way.
-      Notes for whoever builds it:
-      - `getPnLSummary`'s admin branch has the pattern already (`aggregate(...)` over the accounts
-        carrying the `RFX Master` label); it is local to that procedure and wants extracting into a
-        shared helper rather than copying four times.
-      - Mind the history-call budget: one wide all-time fetch per master sliced locally by
-        `closeTime`, not one call per window per master. That is the v4.1.4/4.1.5 lesson and the
-        thing that made these procedures slow in the first place
-        (see [[metacopier-api-concurrency-cap]]).
-      - Admin-only: the trader branch of each procedure must keep naming the trader's own live
-        account, or a trader would see the masters' aggregate as their own P&L.
+- [x] **Aggregate the admin position lists across the masters** — shipped in v4.5.0 (2026-10-21).
+      Only `getMonthPositions` actually lacked it: the other four had been aggregating all along,
+      which makes the v4.4.0 note wrong and is corrected in the changelog. It also read
+      `trader.showAllData` raw instead of `|| isAdmin`, so an admin fell past every branch. The
+      aggregation is now two shared helpers rather than a copied block — the copying is how the gap
+      arose — and today/week/month fetch one wide window per master and slice locally, so they cost
+      N history calls between them instead of 3N (see [[metacopier-api-concurrency-cap]]).
 - [ ] **`pnpm check` does not typecheck tests.** `tsconfig.json` excludes `**/*.test.ts`, so a test
       file can call APIs that no longer exist and tsc stays green — `metacopier.test.ts` referenced
       three deleted methods with a clean typecheck. Only vitest catches it, and only for suites that

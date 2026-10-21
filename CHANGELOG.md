@@ -5,6 +5,37 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.5.0] — 2026-10-21
+
+### Fixed
+
+- **`getMonthPositions` showed an admin nothing.** It was the only one of the
+  position lists with no admin branch, and it read `trader.showAllData` raw
+  rather than `|| trader.isAdmin`, so an admin — who has no live account of
+  their own — fell straight past every branch. Before v4.4.0 that landed on the
+  deleted default account and returned a 500; after it, an empty list. It now
+  aggregates across the RFX master accounts like the others.
+
+  This also corrects the v4.4.0 note: `getOpenPositions`, `getTodayPositions`,
+  `getWeekPositions` and `getAllTimePositions` had been aggregating for admins
+  all along, so the fallback removed in v4.4.0 was only ever reachable through
+  `getMonthPositions`. The claim that all four returned empty was wrong.
+
+### Changed
+
+- The per-master aggregation is now one shared pair of helpers instead of the
+  same block copied into each procedure — which is how `getMonthPositions` came
+  to be missing it.
+- **Closed-trade windows now share one wide fetch per master.** Today, week and
+  month each asked the history endpoint for their own narrow window per master.
+  They now request the same wide window and slice it locally on close time:
+  `getHistoryRaw` caches on `accountId|start|stop` for 90s and coalesces
+  in-flight calls, so the three windows across N masters cost N history calls
+  between them rather than 3N — and they share those calls with
+  `getPnLSummary`'s admin branch, which already fetched the same window. One
+  narrow call per window per master is the fan-out that made these procedures
+  time out in the first place.
+
 ## [4.4.1] — 2026-10-21
 
 ### Changed

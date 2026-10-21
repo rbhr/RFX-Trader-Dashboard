@@ -353,6 +353,54 @@ async function getCopierNewsBlock(
  * Fetches all-time positions for a trader, aggregating across current and
  * historical magic numbers / master accounts. Deduplicates by position ID.
  */
+/** Every account carrying the "RFX Master" label. */
+async function rfxMasterAccountIds(): Promise<string[]> {
+  const masters = await metaCopierService.getAccountsByLabel("RFX Master");
+  return masters.map((m: any) => m.id as string);
+}
+
+/** Open positions across every master — for an admin with none selected. */
+async function aggregateMasterOpenPositions(): Promise<
+  import("./metacopier").Position[]
+> {
+  const ids = await rfxMasterAccountIds();
+  const perMaster = await Promise.all(
+    ids.map(id => metaCopierService.getOpenPositionsFromAccount(id))
+  );
+  return perMaster.flat();
+}
+
+/**
+ * Closed positions across every master, closed at or after `start`.
+ *
+ * Every window asks for the *same* wide window per master and slices it
+ * locally, rather than asking for its own narrow one. `getHistoryRaw` caches on
+ * `accountId|start|stop` for 90s and coalesces in-flight calls, so today, week
+ * and month across N masters cost N history calls between them instead of 3N.
+ * One narrow call per window per master is precisely the fan-out that had these
+ * procedures timing out and returning 500s (see v4.1.4 / v4.1.5), and the
+ * history endpoint's burst quota punishes it hard.
+ *
+ * Slicing on closeTime is what the endpoint itself filters on — verified on
+ * account 8220: the local filter reproduced the server's window exactly, same
+ * position ids and P&L to the cent.
+ */
+async function aggregateMasterClosedSince(
+  start: string
+): Promise<import("./metacopier").Position[]> {
+  const ids = await rfxMasterAccountIds();
+  const perMaster = await Promise.all(
+    ids.map(id =>
+      metaCopierService.getHistoricalPositionsFromAccount(
+        id,
+        getAllTimeStart(),
+        getEndOfToday()
+      )
+    )
+  );
+  return perMaster.flat().filter(p => p.closeTime && p.closeTime >= start);
+}
+
 /**
  * What a trader with no live MetaCopier account has: nothing.
  *
@@ -1716,11 +1764,7 @@ export const appRouter = router({
 
         // Admin with no master selected: aggregate across all master accounts
         if (showAllData && trader.isAdmin) {
-          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const perMaster = await Promise.all(
-            masters.map(m => metaCopierService.getOpenPositionsFromAccount(m.id))
-          );
-          return perMaster.flat();
+          return aggregateMasterOpenPositions();
         }
 
         // If trader has a live account assigned, fetch from that account
@@ -1750,13 +1794,7 @@ export const appRouter = router({
 
         // Admin: aggregate across all master accounts
         if (showAllData && trader.isAdmin) {
-          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const perMaster = await Promise.all(
-            masters.map(m => metaCopierService.getHistoricalPositionsFromAccount(
-              m.id, getStartOfToday(), getEndOfToday()
-            ))
-          );
-          return perMaster.flat();
+          return aggregateMasterClosedSince(getStartOfToday());
         }
 
         // If trader has a live account assigned, fetch from that account
@@ -1786,14 +1824,9 @@ export const appRouter = router({
         const { magicNumber, liveAccountNumber } = trader;
         const showAllData = trader.showAllData || trader.isAdmin;
 
+        // Admin: aggregate across all master accounts
         if (showAllData && trader.isAdmin) {
-          const masters = await metaCopierService.getAccountsByLabel("RFX Master");
-          const perMaster = await Promise.all(
-            masters.map(m => metaCopierService.getHistoricalPositionsFromAccount(
-              m.id, getStartOfWeek(), getEndOfToday()
-            ))
-          );
-          return perMaster.flat();
+          return aggregateMasterClosedSince(getStartOfWeek());
         }
 
         if (liveAccountNumber && !showAllData) {
@@ -1819,7 +1852,13 @@ export const appRouter = router({
       .input(viewAsInput)
       .query(async ({ ctx, input }) => {
         const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, showAllData, liveAccountNumber } = trader;
+        const { magicNumber, liveAccountNumber } = trader;
+        const showAllData = trader.showAllData || trader.isAdmin;
+
+        // Admin: aggregate across all master accounts
+        if (showAllData && trader.isAdmin) {
+          return aggregateMasterClosedSince(getStartOfMonth());
+        }
 
         // If trader has a live account assigned, fetch from that account
         if (liveAccountNumber && !showAllData) {
