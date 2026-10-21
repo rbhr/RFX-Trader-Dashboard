@@ -187,6 +187,36 @@ function socketPositions(accountId: string): Position[] | null {
  * FIFO, so a burst of dashboard reads delays the breach and trailing-risk
  * monitors rather than starving them: they share this one budget.
  */
+/**
+ * Puts MetaCopier's own explanation into the error message.
+ *
+ * Axios only says "Request failed with status code 400", while the response
+ * body carries the actual reason — e.g. `{"errors":["[ACCOUNT_WAS_DELETED]"]}`.
+ * Losing that is how a deleted demo account became an unexplained 400 in every
+ * trader create and edit for a day.
+ */
+function annotateApiError(error: any, method: string, endpoint: string): Error {
+  const status = error.response?.status;
+  if (!status) return error;
+
+  const body = error.response?.data;
+  const reason = Array.isArray(body?.errors)
+    ? body.errors.join(", ")
+    : typeof body === "string"
+      ? body.slice(0, 200)
+      : body
+        ? JSON.stringify(body).slice(0, 200)
+        : "";
+
+  const annotated = new Error(
+    `MetaCopier ${method} ${endpoint} failed with ${status}${reason ? `: ${reason}` : ""}`
+  );
+  // Keep the original for callers that inspect error.response.
+  (annotated as any).response = error.response;
+  (annotated as any).cause = error;
+  return annotated;
+}
+
 const MAX_CONCURRENT_REQUESTS = Math.max(
   1,
   Number(process.env.METACOPIER_MAX_CONCURRENCY) || 5
@@ -286,7 +316,7 @@ class MetaCopierService {
         if (error.response?.status === 429 && attempt < maxRetries) {
           retryInMs = Math.pow(2, attempt) * 1000;
         } else {
-          throw error;
+          throw annotateApiError(error, method, endpoint);
         }
       } finally {
         releaseRequestSlot();
@@ -1428,9 +1458,35 @@ class MetaCopierService {
 
 export const metaCopierService = new MetaCopierService();
 
-// The fixed demo/slave account used for magic-number routing. Its copiers must
-// never be toggled by trader-facing flows.
-const SLAVE_ACCOUNT_ID = 'b94cabc8-946d-4a99-9b81-286f8553cc63';
+// The demo account used for magic-number routing. Its copiers must never be
+// toggled by trader-facing flows. Configurable because the account is replaced
+// periodically — see ENV.metacopierDemoAccountId.
+const SLAVE_ACCOUNT_ID = ENV.metacopierDemoAccountId;
+
+/**
+ * Checks at boot that the configured demo account still exists.
+ *
+ * Every trader create and edit needs it to obtain a magic number, but nothing
+ * else touches it, so when the account was deleted the breakage only showed up
+ * as an unexplained 400 in an admin's toast. One call at startup turns that
+ * into a line in the log.
+ */
+export async function verifyDemoAccount(): Promise<boolean> {
+  try {
+    await metaCopierService.getCopiersByAccount(SLAVE_ACCOUNT_ID, true);
+    console.log(
+      `[MetaCopier] Demo account ${SLAVE_ACCOUNT_ID} reachable — magic-number routing OK`
+    );
+    return true;
+  } catch (e: any) {
+    console.error(
+      `[MetaCopier] Demo account ${SLAVE_ACCOUNT_ID} is NOT usable: ${e?.message ?? e}\n` +
+        `             Trader creates and edits cannot obtain a magic number. ` +
+        `Set METACOPIER_DEMO_ACCOUNT_ID to the current demo account.`
+    );
+    return false;
+  }
+}
 
 /**
  * Every LIVE copier fed by this incubator account — all copiers that copy from

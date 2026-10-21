@@ -552,8 +552,9 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 /** Shared helper: record a payment and send notifications. */
-// Reusable demo/slave account for magic-number routing.
-const DEMO_SLAVE_ACCOUNT_ID = "b94cabc8-946d-4a99-9b81-286f8553cc63";
+// Reusable demo account for magic-number routing — see
+// ENV.metacopierDemoAccountId for why this is configuration.
+const DEMO_SLAVE_ACCOUNT_ID = ENV.metacopierDemoAccountId;
 
 // What Add Trader pre-fills as the magic number until the real one — the short
 // id MetaCopier gives the trader's demo copier — is known.
@@ -816,7 +817,16 @@ async function linkTraderToMetaCopier(
       }
     }
   } catch (error: any) {
-    warnings.push(`demo copier step failed: ${error.message}`);
+    // A deleted demo account is the one failure here that is configuration
+    // rather than bad luck, and it breaks every create and edit until fixed —
+    // so say so instead of passing on a bare status code.
+    if (String(error?.message ?? "").includes("ACCOUNT_WAS_DELETED")) {
+      warnings.push(
+        `the configured MetaCopier demo account (${DEMO_SLAVE_ACCOUNT_ID}) no longer exists, so no magic number could be obtained — set METACOPIER_DEMO_ACCOUNT_ID to the current demo account`
+      );
+    } else {
+      warnings.push(`demo copier step failed: ${error.message}`);
+    }
   }
 
   // If we obtained the real magic, set it and reset the login password to the
@@ -4323,6 +4333,12 @@ export const appRouter = router({
             await recordPendingPayment({
               ...payoutDetails,
               confirmTransferId: sent.transferId,
+              // Recorded so paymentConfirmer can undo the baseline advance
+              // below if this payout turns out not to settle. Test runs do not
+              // move the baseline, so they carry nothing to undo.
+              ...(input.testingMode
+                ? {}
+                : { baselineBefore: baseline, baselineAfter: cumulative }),
             });
           }
 

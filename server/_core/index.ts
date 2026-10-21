@@ -15,6 +15,7 @@ import { startMissedTradeMonitor } from "../missedTradeMonitor";
 import { startLimitCloseMonitor } from "../limitCloseMonitor";
 import { startPaymentConfirmer } from "../paymentConfirmer";
 import { startMetaCopierSocket } from "../metacopierSocket";
+import { verifyDemoAccount } from "../metacopier";
 import { registerLiveStreamRoutes } from "../liveStream";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -112,6 +113,10 @@ async function startServer() {
   // trade for exceeding their lot or open-trade limit (socket-triggered, with
   // a 30s poll behind it)
   startLimitCloseMonitor();
+
+  // One check that the magic-number demo account still exists — nothing else
+  // reads it, so a deleted one is otherwise only found by a failing edit.
+  void verifyDemoAccount();
 
   // Start payout settlement monitor — confirms payouts that were recorded the
   // moment they were broadcast, so no request waits on the network.

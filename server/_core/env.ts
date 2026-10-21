@@ -32,4 +32,15 @@ export const ENV = {
   // missed trades. A numeric chat id (-100…) or @channelusername; the bot must
   // be an admin of the channel. Empty = no copies.
   telegramAlertChannelId: process.env.TELEGRAM_ALERT_CHANNEL_ID ?? "",
+  // The MetaCopier demo account that a new trader's copier is created into,
+  // purely to obtain their magic number — nothing else should read it.
+  //
+  // This gets replaced from time to time. It was a hardcoded literal until the
+  // account behind it was deleted, after which every trader create and edit
+  // failed its magic-number step with an unexplained "status code 400"
+  // ([ACCOUNT_WAS_DELETED]). It is configuration, not a constant: set
+  // METACOPIER_DEMO_ACCOUNT_ID when you replace the account.
+  metacopierDemoAccountId:
+    process.env.METACOPIER_DEMO_ACCOUNT_ID ??
+    "fda0e4b2-83c8-48f7-8b12-9664cdd0bd6e", // 474776952 "06 - exness Master Demo"
 };

@@ -38,6 +38,12 @@ export type PaymentDetails = {
   silent?: boolean;
   /** Skip incrementing the trader's lifetimeIncome — used for test payouts. */
   skipLifetime?: boolean;
+  /**
+   * The profit-share baseline before and after this payout advanced it, so a
+   * failed settlement can be undone. Only set for real profit-share payouts.
+   */
+  baselineBefore?: number;
+  baselineAfter?: number;
 };
 
 /** Rounds to cents, as the decimal(15,2) columns store them. */
@@ -177,5 +183,9 @@ export async function recordPendingPayment(
     notificationSent: false,
     status: "Pending",
     confirmTransferId: params.confirmTransferId ?? null,
+    baselineBefore:
+      params.baselineBefore != null ? params.baselineBefore.toFixed(2) : null,
+    baselineAfter:
+      params.baselineAfter != null ? params.baselineAfter.toFixed(2) : null,
   });
 }

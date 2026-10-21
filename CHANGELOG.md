@@ -5,6 +5,41 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.3.0] — 2026-10-21
+
+### Fixed
+
+- **Trader creates and edits could not obtain a magic number.** The demo account
+  they create a copier into was a hardcoded literal, and that account had been
+  deleted — MetaCopier answered `GET /accounts/{id}/copiers` with
+  `400 [ACCOUNT_WAS_DELETED]`, surfacing to the admin only as
+  "demo copier step failed: Request failed with status code 400". It is now
+  `METACOPIER_DEMO_ACCOUNT_ID`, defaulting to the current demo account
+  (474776952, "06 - exness Master Demo"), and read from one place instead of
+  being duplicated in `routers.ts` and `metacopier.ts`.
+- MetaCopier API errors now carry MetaCopier's own explanation. Axios reports
+  only "Request failed with status code 400" while the response body says
+  `{"errors":["[ACCOUNT_WAS_DELETED]"]}`; discarding that is what made the above
+  a day-long mystery. The demo-copier step additionally names the cause and the
+  environment variable to set.
+
+### Added
+
+- A boot-time check that the demo account is reachable, logged either as
+  "magic-number routing OK" or as an error naming the variable to set. Nothing
+  else reads that account, so a deleted one was otherwise only discovered by an
+  admin hitting a failing edit.
+- **A failed payout now has its profit-share baseline reverted automatically.**
+  v4.2.0 advanced the baseline on broadcast — the safer direction, since leaving
+  it low risks the next run double-paying — but correcting it after a failed
+  settlement was manual. The payment row now records the baseline either side of
+  the payout, and `paymentConfirmer` puts it back.
+
+  The revert is guarded: it only applies when the trader's baseline is still
+  exactly what that payout set it to. If something has moved it since — a later
+  payout, an admin — it is reported for a human instead of clobbering the newer
+  value. Manual payments and test runs carry no baseline and are untouched.
+
 ## [4.2.0] — 2026-10-21
 
 ### Changed

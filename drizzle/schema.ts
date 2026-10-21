@@ -235,6 +235,17 @@ export const payments = mysqlTable("payments", {
   confirmedAt: timestamp("confirmedAt"),
   /** Why settlement failed, for a Failed row. */
   failureReason: varchar("failureReason", { length: 500 }),
+  /**
+   * The profit-share baseline either side of this payout, recorded so a payout
+   * that fails to settle can have its baseline advance undone.
+   *
+   * `baselineAfter` is what makes that safe: it is only reverted when the
+   * trader's baseline is still exactly this value, so a later payout that has
+   * since advanced it is never clobbered. Null for manual payments and test
+   * runs, which do not move the baseline.
+   */
+  baselineBefore: decimal("baselineBefore", { precision: 15, scale: 2 }),
+  baselineAfter: decimal("baselineAfter", { precision: 15, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

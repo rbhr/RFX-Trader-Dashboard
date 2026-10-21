@@ -130,6 +130,16 @@ Fixes, highest leverage first:
 - [ ] **Persist closed history in MySQL.** Closed positions are immutable; re-downloading 58k unchanging
       rows every minute is the underlying waste, and it is what makes `admin.listTraders` take 65 s.
 - [ ] **Honour `Retry-After` with jitter** instead of a fixed chain that can reach 15 s.
+- [x] **The magic-number demo account is configuration now** — shipped in v4.3.0 (2026-10-21). The
+      hardcoded `b94cabc8-…` had been deleted, which broke every trader create and edit with an
+      unexplained 400. Now `METACOPIER_DEMO_ACCOUNT_ID`, checked at boot, defaulting to 474776952.
+      The 33 copiers on the old account were not migrated and do not need to be: existing traders
+      already have their magic numbers, and the short id a new copier returns belongs to the
+      trader's own account, not the demo one, so it is the same value wherever the copier points.
+- [ ] **`METACOPIER_ACCOUNT_ID` is still dead** (`253cb74c-…`, login 249833260, "Exness bomb"):
+      absent from `/accounts`, 0 copiers, 400s on history. It is the default fallback account, so
+      anything falling back to it fails. Repoint or remove it — same class of bug as the demo
+      account above, found at the same time and still unfixed.
 
 ### 💸 Payouts block the admin's request for the whole on-chain confirmation
 
@@ -150,10 +160,10 @@ all of it is GasFree's own confirmation time.
       broadcast (hash available after ~1s) and settled by `paymentConfirmer`.
 - [x] **Alert when a payout does not settle** — shipped in v4.2.0: `paymentConfirmer` notifies the
       owner on a definitive rejection, and on any payout still unsettled after 30 minutes.
-- [ ] **Reverse the profit-share baseline automatically on a failed payout.** v4.2.0 advances the
-      baseline on broadcast (the safer direction — the alternative risks double-paying) and alerts
-      the admin if settlement then fails, but the correction is manual. Storing the pre-payout
-      baseline on the payment row would let the confirmer undo it.
+- [x] **Reverse the profit-share baseline automatically on a failed payout** — shipped in v4.3.0
+      (2026-10-21). The payment row records the baseline either side of the payout and the
+      confirmer puts it back, but only while the trader's baseline is still exactly what that
+      payout set — otherwise a later payout would be clobbered, so it is reported instead.
 - [ ] **Reconcile a payout that never gets a hash.** It is recorded against `GASFREE-<transferId>`
       and the confirmer fills in the real hash once published, but if GasFree never publishes one
       the row keeps the placeholder and needs a human.

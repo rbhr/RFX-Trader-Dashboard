@@ -15,6 +15,8 @@ const g = vi.hoisted(() => ({
   failed: [] as Array<{ id: number; reason: string }>,
   announced: [] as any[],
   ownerNotices: [] as any[],
+  baselineWrites: [] as Array<{ id: number; amount: number }>,
+  traderBaseline: "0.00" as string | null,
 }));
 
 vi.mock("./db", () => ({
@@ -29,7 +31,11 @@ vi.mock("./db", () => ({
     id: 1,
     name: "Test Trader",
     magicNumber: "12345",
+    profitShareBaseline: g.traderBaseline,
   })),
+  setProfitShareBaseline: vi.fn(async (id: number, amount: number) => {
+    g.baselineWrites.push({ id, amount });
+  }),
 }));
 
 vi.mock("./paymentRecord", () => ({
@@ -69,6 +75,8 @@ function pendingPayment(overrides: Partial<any> = {}) {
     paymentDate: new Date("2026-10-20T12:00:00Z"),
     createdAt: new Date(),
     status: "Pending",
+    baselineBefore: null,
+    baselineAfter: null,
     ...overrides,
   };
 }
@@ -82,6 +90,8 @@ beforeEach(() => {
   g.failed = [];
   g.announced = [];
   g.ownerNotices = [];
+  g.baselineWrites = [];
+  g.traderBaseline = "0.00";
   vi.clearAllMocks();
 });
 
@@ -144,9 +154,66 @@ describe("payout settlement", () => {
     expect(g.confirmed).toEqual([]);
     // The trader must not hear about money that never moved.
     expect(g.announced).toEqual([]);
-    // The admin must, because a profit-share baseline was already advanced.
+    // The admin must still hear about it.
     expect(g.ownerNotices).toHaveLength(1);
     expect(g.ownerNotices[0].content).toMatch(/baseline/);
+  });
+
+  it("reverts the profit-share baseline when a payout fails to settle", async () => {
+    const { _runCheck } = await import("./paymentConfirmer");
+    // The payout advanced the baseline 1000 -> 1500 when it was broadcast.
+    g.pending = [
+      pendingPayment({ baselineBefore: "1000.00", baselineAfter: "1500.00" }),
+    ];
+    g.traderBaseline = "1500.00";
+    g.gasFreeStatus = { settled: "failed", txHash: null, detail: "REJECTED" };
+
+    await _runCheck();
+
+    expect(g.baselineWrites).toEqual([{ id: 1, amount: 1000 }]);
+    expect(g.ownerNotices[0].content).toMatch(/reverted from \$1500\.00 to \$1000\.00/);
+  });
+
+  it("refuses to revert a baseline that something else has since moved", async () => {
+    const { _runCheck } = await import("./paymentConfirmer");
+    g.pending = [
+      pendingPayment({ baselineBefore: "1000.00", baselineAfter: "1500.00" }),
+    ];
+    // A later payout has already advanced it past this one's value.
+    g.traderBaseline = "2200.00";
+    g.gasFreeStatus = { settled: "failed", txHash: null, detail: "REJECTED" };
+
+    await _runCheck();
+
+    // Reverting would clobber the later payout, so it is reported, not done.
+    expect(g.baselineWrites).toEqual([]);
+    expect(g.ownerNotices[0].content).toMatch(/NOT reverted/);
+    expect(g.ownerNotices[0].content).toMatch(/by hand/);
+  });
+
+  it("has no baseline to revert for a manual or test payment", async () => {
+    const { _runCheck } = await import("./paymentConfirmer");
+    g.pending = [pendingPayment({ baselineBefore: null, baselineAfter: null })];
+    g.gasFreeStatus = { settled: "failed", txHash: null, detail: "REJECTED" };
+
+    await _runCheck();
+
+    expect(g.baselineWrites).toEqual([]);
+    expect(g.ownerNotices[0].content).toMatch(/none was undone/);
+  });
+
+  it("leaves the baseline alone when a payout confirms", async () => {
+    const { _runCheck } = await import("./paymentConfirmer");
+    g.pending = [
+      pendingPayment({ baselineBefore: "1000.00", baselineAfter: "1500.00" }),
+    ];
+    g.traderBaseline = "1500.00";
+    g.gasFreeStatus = { settled: "confirmed", txHash: "0xok", detail: "SUCCEED" };
+
+    await _runCheck();
+
+    expect(g.baselineWrites).toEqual([]);
+    expect(g.confirmed).toEqual([{ id: 501, hash: "0xok" }]);
   });
 
   it("treats an unreachable status lookup as pending, not failed", async () => {

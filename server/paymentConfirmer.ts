@@ -23,6 +23,7 @@ import {
   markPaymentConfirmed,
   markPaymentFailed,
   getMagicNumberById,
+  setProfitShareBaseline,
 } from "./db";
 import { creditAndAnnouncePayment } from "./paymentRecord";
 import { getGasFreeTransferStatus, getTronTxStatus } from "./tron";
@@ -76,6 +77,42 @@ async function checkSettlement(payment: {
   return getTronTxStatus(payment.transactionHash);
 }
 
+/**
+ * Undoes the profit-share baseline advance of a payout that failed to settle.
+ *
+ * The payout advanced the baseline when it was broadcast, because leaving it
+ * low risks the next run recomputing the same payout and double-paying. If the
+ * transfer is then rejected, that advance has to come back off.
+ *
+ * Only reverted when the trader's baseline is *still* exactly what this payout
+ * set it to. If a later payout has since moved it, reverting would clobber that
+ * one — so it is left alone and reported instead.
+ */
+async function revertBaseline(payment: any): Promise<string> {
+  if (payment.baselineBefore == null || payment.baselineAfter == null) {
+    return "No baseline advance was recorded for this payout, so none was undone.";
+  }
+
+  const trader = await getMagicNumberById(payment.magicNumberId);
+  const current = parseFloat(trader?.profitShareBaseline ?? "0") || 0;
+  const expected = parseFloat(payment.baselineAfter);
+  const before = parseFloat(payment.baselineBefore);
+
+  if (Math.abs(current - expected) > 0.005) {
+    return (
+      `The profit-share baseline was NOT reverted: it is now $${current.toFixed(2)}, ` +
+      `not the $${expected.toFixed(2)} this payout set, so something changed it since. ` +
+      `It may need lowering to $${before.toFixed(2)} by hand.`
+    );
+  }
+
+  await setProfitShareBaseline(payment.magicNumberId, before);
+  console.log(
+    `[PaymentConfirmer] Reverted profit-share baseline for trader ${payment.magicNumberId}: $${expected.toFixed(2)} -> $${before.toFixed(2)}`
+  );
+  return `The profit-share baseline has been reverted from $${expected.toFixed(2)} to $${before.toFixed(2)}.`;
+}
+
 async function settlePayment(payment: any): Promise<void> {
   const result = await checkSettlement(payment);
   const amount = parseFloat(payment.amount);
@@ -115,11 +152,14 @@ async function settlePayment(payment: any): Promise<void> {
       `Payout #${payment.id} of $${amount.toFixed(2)} to ${who} failed to settle — ${result.detail}`
     );
     // The trader was never told about this payment and their lifetime income
-    // was never credited, so nothing has to be walked back. The profit-share
-    // baseline, however, was advanced on broadcast — that is what needs a human.
+    // was never credited, so neither has to be walked back. The profit-share
+    // baseline was advanced on broadcast, so that does.
+    const baselineNote = await revertBaseline(payment);
+    logEvent("payment", baselineNote);
+
     await notifyOwner({
       title: "❌ Payout failed to settle",
-      content: `Payment #${payment.id} of $${amount.toFixed(2)} to ${who} was rejected: ${result.detail}. No funds moved and the trader was not notified, but if this was a profit-share run its baseline was already advanced and must be corrected.`,
+      content: `Payment #${payment.id} of $${amount.toFixed(2)} to ${who} was rejected: ${result.detail}. No funds moved and the trader was not notified. ${baselineNote}`,
     }).catch(e =>
       console.warn("[PaymentConfirmer] Owner notify failed:", e?.message ?? e)
     );
