@@ -5,6 +5,28 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.7.0] — 2026-10-21
+
+### Changed
+
+- 429 retries are now jittered and honour `Retry-After`. The backoff was a
+  fixed 1s, 2s, 4s, 8s chain, so several callers that exhausted MetaCopier's
+  burst quota in the same instant retried in lockstep — colliding on every
+  attempt and burning the whole chain together, which is how a request ended up
+  pinned at ~15s and then threw.
+
+  Each wait is now spread across the upper half of its window, so a retry never
+  lands earlier than half its slot (the backoff keeps its shape) but two callers
+  no longer land on the same millisecond. `Retry-After` is honoured when
+  present, as delta-seconds or an HTTP date — MetaCopier sends neither that nor
+  any `X-RateLimit-*` header as of today, so this is defensive and the
+  exponential fallback is what actually runs. Any single wait is capped at 10s,
+  since blocking a user-facing request for minutes is worse than failing it and
+  letting the caller retry.
+
+  `retryDelayMs` is exported with injectable `now` and `random` so the
+  arithmetic is pinned by tests rather than sampled.
+
 ## [4.6.1] — 2026-10-21
 
 ### Changed

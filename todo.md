@@ -129,7 +129,10 @@ Fixes, highest leverage first:
       screens, since copiers are edited often.
 - [ ] **Persist closed history in MySQL.** Closed positions are immutable; re-downloading 58k unchanging
       rows every minute is the underlying waste, and it is what makes `admin.listTraders` take 65 s.
-- [ ] **Honour `Retry-After` with jitter** instead of a fixed chain that can reach 15 s.
+- [x] **Honour `Retry-After` with jitter** — shipped in v4.7.0 (2026-10-21). The jitter is the part
+      that changes behaviour: the fixed 1+2+4+8s chain made simultaneous callers retry in lockstep
+      and collide on every attempt. MetaCopier sends no `Retry-After`, so that half is defensive.
+      Single waits capped at 10s.
 - [x] **The magic-number demo account is configuration now** — shipped in v4.3.0 (2026-10-21). The
       hardcoded `b94cabc8-…` had been deleted, which broke every trader create and edit with an
       unexplained 400. Now `METACOPIER_DEMO_ACCOUNT_ID`, checked at boot, defaulting to 474776952.

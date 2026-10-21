@@ -1,6 +1,6 @@
 {
   "name": "rfx-trader-web",
-  "version": "4.6.1",
+  "version": "4.7.0",
   "type": "module",
   "license": "MIT",
   "scripts": {

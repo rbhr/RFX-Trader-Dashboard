@@ -187,6 +187,54 @@ function socketPositions(accountId: string): Position[] | null {
  * FIFO, so a burst of dashboard reads delays the breach and trailing-risk
  * monitors rather than starving them: they share this one budget.
  */
+/** Longest we will sleep for a single 429, however large the hint. */
+const RETRY_MAX_WAIT_MS = 10_000;
+
+/** Parses a `Retry-After` header: delta-seconds or an HTTP date. */
+function retryAfterHintMs(
+  headers: Record<string, unknown> | undefined,
+  now: number
+): number | null {
+  const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+  if (raw == null) return null;
+  const value = String(raw).trim();
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const at = Date.parse(value);
+  if (!Number.isNaN(at)) return Math.max(0, at - now);
+  return null;
+}
+
+/**
+ * How long to wait before retrying a 429.
+ *
+ * MetaCopier's limit is a burst quota on the history endpoint that recovers in
+ * roughly ten seconds, and it sends no `Retry-After` or `X-RateLimit-*`
+ * headers — so the header is honoured if it ever appears, and the exponential
+ * fallback is what actually runs today.
+ *
+ * The jitter is the part that changes behaviour now. Callers that exhausted the
+ * quota in the same instant used to retry in lockstep at exactly 1s, 2s, 4s and
+ * 8s, colliding on every attempt and burning the whole chain together. Spreading
+ * each wait across the upper half of its window decorrelates them while keeping
+ * the shape of the backoff — a retry never lands earlier than half its slot.
+ *
+ * Exported for tests; `now` and `random` are injected so they can be pinned.
+ */
+export function retryDelayMs(
+  attempt: number,
+  headers?: Record<string, unknown>,
+  now: number = Date.now(),
+  random: () => number = Math.random
+): number {
+  const hinted = retryAfterHintMs(headers, now);
+  const base = hinted ?? Math.pow(2, attempt) * 1000;
+  // Capped even when the server asks for longer: waiting minutes inside a
+  // user-facing request is worse than failing and letting the caller retry.
+  const capped = Math.min(base, RETRY_MAX_WAIT_MS);
+  const half = capped / 2;
+  return Math.round(half + random() * half);
+}
+
 /**
  * Puts MetaCopier's own explanation into the error message.
  *
@@ -312,7 +360,7 @@ class MetaCopierService {
           throw new Error(`MetaCopier API timeout for ${method} ${endpoint}`);
         }
         if (error.response?.status === 429 && attempt < maxRetries) {
-          retryInMs = Math.pow(2, attempt) * 1000;
+          retryInMs = retryDelayMs(attempt, error.response?.headers);
         } else {
           throw annotateApiError(error, method, endpoint);
         }
