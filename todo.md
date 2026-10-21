@@ -136,10 +136,20 @@ Fixes, highest leverage first:
       The 33 copiers on the old account were not migrated and do not need to be: existing traders
       already have their magic numbers, and the short id a new copier returns belongs to the
       trader's own account, not the demo one, so it is the same value wherever the copier points.
-- [ ] **`METACOPIER_ACCOUNT_ID` is still dead** (`253cb74c-…`, login 249833260, "Exness bomb"):
-      absent from `/accounts`, 0 copiers, 400s on history. It is the default fallback account, so
-      anything falling back to it fails. Repoint or remove it — same class of bug as the demo
-      account above, found at the same time and still unfixed.
+- [x] **`METACOPIER_ACCOUNT_ID` removed, not repointed** — shipped in v4.4.0 (2026-10-21). The id
+      (`253cb74c-…`, login 249833260, "Exness bomb") was deleted, but repointing it would have been
+      the wrong fix: a shared fallback account attributes its trades to whichever trader has none of
+      their own. Every read now names its account and "no account" returns empty. Only the
+      Administrator row reached it.
+- [ ] **Decide what admin position lists should show.** With the fallback gone, `getTodayPositions`,
+      `getWeekPositions`, `getMonthPositions` and `getOpenPositions` return empty for the
+      Administrator row, where they previously returned a 500 — so nothing is lost, but
+      `getPnLSummary`'s admin branch *does* aggregate across the RFX master accounts. Totals without
+      rows is inconsistent; these four could aggregate the same way if that is what you want to see.
+- [ ] **`pnpm check` does not typecheck tests.** `tsconfig.json` excludes `**/*.test.ts`, so a test
+      file can call APIs that no longer exist and tsc stays green — `metacopier.test.ts` referenced
+      three deleted methods with a clean typecheck. Only vitest catches it, and only for suites that
+      can run. Worth including tests in a `tsc --noEmit` pass.
 
 ### 💸 Payouts block the admin's request for the whole on-chain confirmation
 

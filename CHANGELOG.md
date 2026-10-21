@@ -5,6 +5,38 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.4.0] — 2026-10-21
+
+### Removed
+
+- **The project-wide "default account" is gone, along with
+  `METACOPIER_ACCOUNT_ID`.** Eleven read paths fell back to it whenever a
+  trader had no live account of their own, which was wrong in two ways. It
+  attributed one shared account's trades and P&L to that trader, and the id
+  configured in it — `253cb74c-…`, "Exness bomb", login 249833260 — had itself
+  been deleted, so every fallback returned `400 [ACCOUNT_WAS_DELETED]` and the
+  procedure threw a 500. The account answers `GET /accounts/{id}` with a
+  tombstone but 400s on every sub-resource and is absent from `/accounts`,
+  which is why it looked configured.
+
+  Every read now names its account, and a trader with no live account gets an
+  empty result — the truthful answer, and strictly better than the 500 it got
+  before. In practice only the Administrator row reaches this: all 33 other
+  traders have a live account, and no trader has `showAllData` set.
+
+  `trading.getAccountInfo` is removed with it. It queried that account
+  unconditionally, so it could only fail, and nothing in the client called it.
+  `metaCopierService.getOpenPositions`, `getHistoricalPositions`,
+  `getAccountInfo` and `defaultAccountId` are gone; the `…FromAccount` /
+  `…ById` variants were already the ones in real use.
+
+### Fixed
+
+- `server/metacopier.test.ts` has been passing nothing: both of its live-API
+  tests read that deleted account, so they could only fail. They now resolve a
+  real account from `/accounts` first and pass against the live API, with a
+  third test guarding that the default-account methods stay gone.
+
 ## [4.3.0] — 2026-10-21
 
 ### Fixed

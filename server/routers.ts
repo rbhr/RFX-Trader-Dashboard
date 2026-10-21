@@ -353,6 +353,21 @@ async function getCopierNewsBlock(
  * Fetches all-time positions for a trader, aggregating across current and
  * historical magic numbers / master accounts. Deduplicates by position ID.
  */
+/**
+ * What a trader with no live MetaCopier account has: nothing.
+ *
+ * These reads used to fall back to one project-wide account
+ * (`METACOPIER_ACCOUNT_ID`), which was wrong twice over. It attributed that
+ * shared account's trades to whichever trader had no account of their own, and
+ * the account itself had been deleted — so every such read returned
+ * `400 [ACCOUNT_WAS_DELETED]` and the procedure threw a 500. In practice only
+ * the Administrator row reaches this, and it has never had a trading account,
+ * so an empty result is the truthful answer rather than a degraded one.
+ */
+function noAccountPositions(): import("./metacopier").Position[] {
+  return [];
+}
+
 async function fetchAggregatedLifetimePositions(trader: {
   id: number;
   magicNumber: string;
@@ -361,14 +376,10 @@ async function fetchAggregatedLifetimePositions(trader: {
 }): Promise<import("./metacopier").Position[]> {
   const { id, magicNumber, liveAccountNumber, showAllData } = trader;
 
-  // If showAllData, just return everything from the default account
+  // showAllData used to mean "everything on the project account". There is no
+  // such account any more, and no trader has the flag set.
   if (showAllData) {
-    return metaCopierService.getHistoricalPositions(
-      getAllTimeStart(),
-      getEndOfToday(),
-      undefined,
-      true
-    );
+    return noAccountPositions();
   }
 
   // Fetch historical entries from DB
@@ -391,12 +402,7 @@ async function fetchAggregatedLifetimePositions(trader: {
         );
       }
     }
-    return metaCopierService.getHistoricalPositions(
-      getAllTimeStart(),
-      getEndOfToday(),
-      magicNumber,
-      false
-    );
+    return noAccountPositions();
   }
 
   // Build full set of magic numbers (normalized to string) and master accounts
@@ -430,18 +436,9 @@ async function fetchAggregatedLifetimePositions(trader: {
 
     const results = await Promise.all(accountFetches);
     for (const positions of results) allPositions.push(...positions);
-  } else {
-    // No master accounts at all — use default account with all magic numbers
-    const positions = await metaCopierService.getHistoricalPositions(
-      getAllTimeStart(),
-      getEndOfToday(),
-      undefined,
-      false
-    );
-    allPositions.push(
-      ...positions.filter(p => allMagicNumbers.has(String(p.magicNumber)))
-    );
   }
+  // No master accounts at all leaves nothing to read — there is no project-wide
+  // account to fall back to.
 
   // Deduplicate by position ID
   const seen = new Set<string>();
@@ -479,10 +476,7 @@ async function computeTraderProfitSummary(trader: {
           liveAccountId,
           trader.magicNumber
         )
-      : metaCopierService.getOpenPositions(
-          trader.showAllData ? undefined : trader.magicNumber,
-          trader.showAllData
-        ),
+      : noAccountPositions(),
   ]);
 
   const floating = calculatePnL(open);
@@ -1737,12 +1731,7 @@ export const appRouter = router({
           }
         }
 
-        // Fallback to default account
-        const positions = await metaCopierService.getOpenPositions(
-          showAllData ? undefined : magicNumber,
-          showAllData
-        );
-        return positions;
+        return noAccountPositions();
       }),
 
     // Get today's closed positions
@@ -1780,14 +1769,7 @@ export const appRouter = router({
           }
         }
 
-        // Fallback to default account
-        const positions = await metaCopierService.getHistoricalPositions(
-          getStartOfToday(),
-          getEndOfToday(),
-          showAllData ? undefined : magicNumber,
-          showAllData
-        );
-        return positions;
+        return noAccountPositions();
       }),
 
     // Get week's positions
@@ -1823,13 +1805,7 @@ export const appRouter = router({
           }
         }
 
-        const positions = await metaCopierService.getHistoricalPositions(
-          getStartOfWeek(),
-          getEndOfToday(),
-          showAllData ? undefined : magicNumber,
-          showAllData
-        );
-        return positions;
+        return noAccountPositions();
       }),
 
     // Get month's positions
@@ -1855,14 +1831,7 @@ export const appRouter = router({
           }
         }
 
-        // Fallback to default account
-        const positions = await metaCopierService.getHistoricalPositions(
-          getStartOfMonth(),
-          getEndOfToday(),
-          showAllData ? undefined : magicNumber,
-          showAllData
-        );
-        return positions;
+        return noAccountPositions();
       }),
 
     // Get all-time positions (aggregated across historical magic numbers & master accounts)
@@ -1906,11 +1875,6 @@ export const appRouter = router({
           showAllData: effectiveShowAll,
         });
       }),
-
-    // Get account info
-    getAccountInfo: tradingProcedure.query(async () => {
-      return metaCopierService.getAccountInfo();
-    }),
 
     // Calculate P&L summary
     getPnLSummary: tradingProcedure
@@ -1995,10 +1959,7 @@ export const appRouter = router({
                   liveAccountId,
                   magicNumber
                 )
-              : metaCopierService.getOpenPositions(
-                  showAllData ? undefined : magicNumber,
-                  showAllData
-                ),
+              : noAccountPositions(),
             liveAccountId
               ? metaCopierService.getHistoricalPositionsFromAccount(
                   liveAccountId,
@@ -2006,12 +1967,7 @@ export const appRouter = router({
                   getEndOfToday(),
                   magicNumber
                 )
-              : metaCopierService.getHistoricalPositions(
-                  getAllTimeStart(),
-                  getEndOfToday(),
-                  showAllData ? undefined : magicNumber,
-                  showAllData
-                ),
+              : noAccountPositions(),
             fetchAggregatedLifetimePositions(trader),
           ]);
         const closedSince = (start: string) =>

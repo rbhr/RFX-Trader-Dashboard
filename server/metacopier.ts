@@ -241,7 +241,6 @@ function releaseRequestSlot(): void {
 
 class MetaCopierService {
   private apiKey: string;
-  private accountId: string;
   private accountsCache: { data: any[] | null; fetchedAt: number } = {
     data: null,
     fetchedAt: 0,
@@ -260,9 +259,8 @@ class MetaCopierService {
 
   constructor() {
     this.apiKey = process.env.METACOPIER_API_KEY || '';
-    this.accountId = process.env.METACOPIER_ACCOUNT_ID || '';
 
-    if (!this.apiKey || !this.accountId) {
+    if (!this.apiKey) {
       console.warn('[MetaCopier] API credentials not configured');
     }
   }
@@ -330,22 +328,6 @@ class MetaCopierService {
     throw new Error(`MetaCopier API failed after ${maxRetries} retries for ${method} ${endpoint}`);
   }
 
-  async getOpenPositions(magicNumber?: string, showAll = false): Promise<Position[]> {
-    let positions = socketPositions(this.accountId);
-    if (positions == null) {
-      const rest = await this.fetchWithAuth<Position[]>(
-        `/accounts/${this.accountId}/positions`
-      );
-      positions = Array.isArray(rest) ? rest.map(mapRestPosition) : [];
-    }
-
-    if (showAll || !magicNumber) {
-      return positions;
-    }
-
-    return positions.filter(p => String(p.magicNumber) === String(magicNumber));
-  }
-
   async getOpenPositionsFromAccount(accountId: string, magicNumber?: string): Promise<Position[]> {
     let positions = socketPositions(accountId);
     if (positions == null) {
@@ -408,19 +390,6 @@ class MetaCopierService {
     return p;
   }
 
-  async getHistoricalPositions(
-    start: string,
-    stop: string,
-    magicNumber?: string,
-    showAll = false
-  ): Promise<Position[]> {
-    const positions = await this.getHistoryRaw(this.accountId, start, stop);
-    if (showAll || !magicNumber) {
-      return positions;
-    }
-    return positions.filter(p => String(p.magicNumber) === String(magicNumber));
-  }
-
   async getHistoricalPositionsFromAccount(
     accountId: string,
     start: string,
@@ -432,13 +401,6 @@ class MetaCopierService {
       return positions;
     }
     return positions.filter(p => String(p.magicNumber) === String(magicNumber));
-  }
-
-  async getAccountInfo(): Promise<AccountInfo> {
-    return (
-      socketAccountInfo(this.accountId) ??
-      this.fetchWithAuth<AccountInfo>(`/accounts/${this.accountId}/information`)
-    );
   }
 
   async getAccountInfoById(accountId: string): Promise<AccountInfo> {
@@ -454,11 +416,6 @@ class MetaCopierService {
    */
   async getAccountInfoByIdFresh(accountId: string): Promise<AccountInfo> {
     return this.fetchWithAuth<AccountInfo>(`/accounts/${accountId}/information`);
-  }
-
-  /** The default (project) MetaCopier account id. */
-  get defaultAccountId(): string {
-    return this.accountId;
   }
 
   /**
@@ -1586,12 +1543,10 @@ export async function resolveViewPositions(opts: {
     }
   }
 
-  // Fallback: the default account.
-  const positions = await metaCopierService.getOpenPositions(
-    showAllData ? undefined : magicNumber,
-    showAllData
-  );
-  return { accountIds: [metaCopierService.defaultAccountId], positions };
+  // No live account: nothing to read. This used to fall back to a single
+  // project-wide account, which attributed that account's trades to a trader
+  // who had none of their own — and that account had itself been deleted.
+  return { accountIds: [], positions: [] };
 }
 
 // P&L calculation helper

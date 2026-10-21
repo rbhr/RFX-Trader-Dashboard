@@ -32,7 +32,6 @@ vi.mock("axios", () => ({
 
 process.env.METACOPIER_MAX_CONCURRENCY = String(CONCURRENCY);
 process.env.METACOPIER_API_KEY = "test-key";
-process.env.METACOPIER_ACCOUNT_ID = "test-account";
 
 const { metaCopierService } = await import("./metacopier");
 const call = (n: number) =>
