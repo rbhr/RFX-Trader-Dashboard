@@ -148,6 +148,11 @@ Fixes, highest leverage first:
       aggregation is now two shared helpers rather than a copied block — the copying is how the gap
       arose — and today/week/month fetch one wide window per master and slice locally, so they cost
       N history calls between them instead of 3N (see [[metacopier-api-concurrency-cap]]).
+- [x] **Deleted three unused position procedures** — v4.6.0 (2026-10-21). `getTodayPositions`,
+      `getWeekPositions` and `getMonthPositions` had no callers anywhere. Unused procedures over the
+      history endpoint are where this kind of rot collects: the deleted default account survived in
+      them unnoticed, and one had drifted to have no admin branch at all. Check for callers before
+      fixing a procedure, not after.
 - [ ] **`pnpm check` does not typecheck tests.** `tsconfig.json` excludes `**/*.test.ts`, so a test
       file can call APIs that no longer exist and tsc stays green — `metacopier.test.ts` referenced
       three deleted methods with a clean typecheck. Only vitest catches it, and only for suites that

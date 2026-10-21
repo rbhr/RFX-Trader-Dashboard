@@ -5,6 +5,36 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.6.0] — 2026-10-21
+
+### Removed
+
+- **`trading.getTodayPositions`, `getWeekPositions` and `getMonthPositions`.**
+  Nothing called them — not the client, not the server. They were three unused
+  procedures sitting on the most rate-limited endpoint in the system, and that
+  is exactly why they rotted: the deleted default account survived inside them
+  because nothing ever exercised them, and `getMonthPositions` had drifted to
+  read `trader.showAllData` raw with no admin branch at all.
+
+  This supersedes the previous release's fix to `getMonthPositions`: correcting
+  a procedure with no consumers was the wrong call, and checking for callers
+  should have come first. `getOpenPositions`, `getAllTimePositions` and
+  `getPnLSummary` are the position reads the dashboard actually makes, and all
+  three aggregate across the RFX masters for an admin.
+
+- `aggregateMasterClosedSince`, which existed only for those three windows.
+  `getPnLSummary`'s admin branch does its own single wide fetch per master and
+  slices the windows locally, which is already the cheapest shape.
+  `aggregateMasterOpenPositions` stays, used by `getOpenPositions`.
+
+### Verified
+
+- The surviving admin paths were measured against a real dashboard load: six
+  batches carrying `getPnLSummary`, `getOpenPositions` and `getAllTimePositions`
+  all returned 200, at 2.11s cold and 0.12–0.48s warm, with no 429s. At the
+  start of this run of releases `getPnLSummary` was returning HTTP 500 on 31%
+  of requests with a p90 of 15.22s.
+
 ## [4.5.0] — 2026-10-21
 
 ### Fixed

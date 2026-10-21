@@ -371,37 +371,6 @@ async function aggregateMasterOpenPositions(): Promise<
 }
 
 /**
- * Closed positions across every master, closed at or after `start`.
- *
- * Every window asks for the *same* wide window per master and slices it
- * locally, rather than asking for its own narrow one. `getHistoryRaw` caches on
- * `accountId|start|stop` for 90s and coalesces in-flight calls, so today, week
- * and month across N masters cost N history calls between them instead of 3N.
- * One narrow call per window per master is precisely the fan-out that had these
- * procedures timing out and returning 500s (see v4.1.4 / v4.1.5), and the
- * history endpoint's burst quota punishes it hard.
- *
- * Slicing on closeTime is what the endpoint itself filters on — verified on
- * account 8220: the local filter reproduced the server's window exactly, same
- * position ids and P&L to the cent.
- */
-async function aggregateMasterClosedSince(
-  start: string
-): Promise<import("./metacopier").Position[]> {
-  const ids = await rfxMasterAccountIds();
-  const perMaster = await Promise.all(
-    ids.map(id =>
-      metaCopierService.getHistoricalPositionsFromAccount(
-        id,
-        getAllTimeStart(),
-        getEndOfToday()
-      )
-    )
-  );
-  return perMaster.flat().filter(p => p.closeTime && p.closeTime >= start);
-}
-
-/**
  * What a trader with no live MetaCopier account has: nothing.
  *
  * These reads used to fall back to one project-wide account
@@ -1776,101 +1745,6 @@ export const appRouter = router({
           if (liveAccountId) {
             return await metaCopierService.getOpenPositionsFromAccount(
               liveAccountId,
-              magicNumber
-            );
-          }
-        }
-
-        return noAccountPositions();
-      }),
-
-    // Get today's closed positions
-    getTodayPositions: tradingProcedure
-      .input(viewAsInput)
-      .query(async ({ ctx, input }) => {
-        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, liveAccountNumber } = trader;
-        const showAllData = trader.showAllData || trader.isAdmin;
-
-        // Admin: aggregate across all master accounts
-        if (showAllData && trader.isAdmin) {
-          return aggregateMasterClosedSince(getStartOfToday());
-        }
-
-        // If trader has a live account assigned, fetch from that account
-        if (liveAccountNumber && !showAllData) {
-          const liveAccountId =
-            await metaCopierService.getAccountIdByLoginNumber(
-              liveAccountNumber
-            );
-          if (liveAccountId) {
-            return await metaCopierService.getHistoricalPositionsFromAccount(
-              liveAccountId,
-              getStartOfToday(),
-              getEndOfToday(),
-              magicNumber
-            );
-          }
-        }
-
-        return noAccountPositions();
-      }),
-
-    // Get week's positions
-    getWeekPositions: tradingProcedure
-      .input(viewAsInput)
-      .query(async ({ ctx, input }) => {
-        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, liveAccountNumber } = trader;
-        const showAllData = trader.showAllData || trader.isAdmin;
-
-        // Admin: aggregate across all master accounts
-        if (showAllData && trader.isAdmin) {
-          return aggregateMasterClosedSince(getStartOfWeek());
-        }
-
-        if (liveAccountNumber && !showAllData) {
-          const liveAccountId =
-            await metaCopierService.getAccountIdByLoginNumber(
-              liveAccountNumber
-            );
-          if (liveAccountId) {
-            return await metaCopierService.getHistoricalPositionsFromAccount(
-              liveAccountId,
-              getStartOfWeek(),
-              getEndOfToday(),
-              magicNumber
-            );
-          }
-        }
-
-        return noAccountPositions();
-      }),
-
-    // Get month's positions
-    getMonthPositions: tradingProcedure
-      .input(viewAsInput)
-      .query(async ({ ctx, input }) => {
-        const trader = await resolveTrader(ctx, input?.viewAsTraderId);
-        const { magicNumber, liveAccountNumber } = trader;
-        const showAllData = trader.showAllData || trader.isAdmin;
-
-        // Admin: aggregate across all master accounts
-        if (showAllData && trader.isAdmin) {
-          return aggregateMasterClosedSince(getStartOfMonth());
-        }
-
-        // If trader has a live account assigned, fetch from that account
-        if (liveAccountNumber && !showAllData) {
-          const liveAccountId =
-            await metaCopierService.getAccountIdByLoginNumber(
-              liveAccountNumber
-            );
-          if (liveAccountId) {
-            return await metaCopierService.getHistoricalPositionsFromAccount(
-              liveAccountId,
-              getStartOfMonth(),
-              getEndOfToday(),
               magicNumber
             );
           }
