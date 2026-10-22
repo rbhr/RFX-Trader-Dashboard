@@ -76,7 +76,16 @@ import {
   signInviteNonce,
   hasEmailTokenKey,
 } from "./emailTokenCrypto";
-import { isGoogleMailConfigured, googleMailRedirectUri, grantCanSend } from "./googleMail";
+import {
+  isGoogleMailConfigured,
+  googleMailRedirectUri,
+  grantCanSend as googleGrantCanSend,
+} from "./googleMail";
+import {
+  isMicrosoftMailConfigured,
+  microsoftMailRedirectUri,
+  grantCanSend as microsoftGrantCanSend,
+} from "./microsoftMail";
 import { inviteTtlMs } from "./emailOauthRoutes";
 import { sendAs, requireActiveSender } from "./invoiceSenders";
 import {
@@ -2761,8 +2770,10 @@ export const appRouter = router({
       const senders = await listEmailSenders();
       return {
         configured: isGoogleMailConfigured(),
+        microsoftConfigured: isMicrosoftMailConfigured(),
         hasEncryptionKey: hasEmailTokenKey(),
         redirectUri: googleMailRedirectUri(),
+        microsoftRedirectUri: microsoftMailRedirectUri(),
         senders: senders.map(s => ({
           id: s.id,
           emailAddress: s.emailAddress,
@@ -2772,7 +2783,10 @@ export const appRouter = router({
           scope: s.scope,
           // Whether the grant actually carries permission to send, rather than
           // only the identity scopes Google hands over regardless.
-          canSend: grantCanSend(s.scope),
+          canSend:
+            s.provider === "google"
+              ? googleGrantCanSend(s.scope)
+              : microsoftGrantCanSend(s.scope),
           lastError: s.lastError,
           authorizedAt: s.authorizedAt,
           lastUsedAt: s.lastUsedAt,
@@ -2811,6 +2825,14 @@ export const appRouter = router({
             message:
               "Google mail sending is not configured. Set GOOGLE_MAIL_CLIENT_ID, " +
               "GOOGLE_MAIL_CLIENT_SECRET and PUBLIC_BASE_URL.",
+          });
+        }
+        if (input.provider === "microsoft" && !isMicrosoftMailConfigured()) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Microsoft mail sending is not configured. Set MS_MAIL_CLIENT_ID, " +
+              "MS_MAIL_CLIENT_SECRET and PUBLIC_BASE_URL.",
           });
         }
 

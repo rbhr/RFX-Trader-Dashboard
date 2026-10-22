@@ -55,4 +55,12 @@ export const ENV = {
   // stray database dump is not a licence to send mail as somebody.
   // Generate with: openssl rand -hex 32
   emailTokenKey: process.env.EMAIL_TOKEN_KEY ?? "",
+  // Microsoft Entra app registration used to send invoice mail as an M365
+  // mailbox. Delegated Mail.Send only — it can send as the one mailbox that
+  // consented, never as every mailbox in the tenant.
+  msMailClientId: process.env.MS_MAIL_CLIENT_ID ?? "",
+  msMailClientSecret: process.env.MS_MAIL_CLIENT_SECRET ?? "",
+  // "common" lets any work tenant consent, keeping secureg.net, rfx.capital
+  // and rftrust.co on one registration. Set a tenant id to restrict it.
+  msMailTenant: process.env.MS_MAIL_TENANT ?? "common",
 };

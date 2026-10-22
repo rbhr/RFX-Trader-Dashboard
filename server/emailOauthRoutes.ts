@@ -4,12 +4,20 @@ import { encryptToken, verifyInviteSignature } from "./emailTokenCrypto";
 import {
   buildGoogleAuthUrl,
   exchangeGoogleCode,
-  grantCanSend,
+  grantCanSend as googleGrantCanSend,
   revokeGoogleToken,
   GoogleMailAuthError,
   GoogleMailNotConfiguredError,
   isGoogleMailConfigured,
 } from "./googleMail";
+import {
+  buildMicrosoftAuthUrl,
+  exchangeMicrosoftCode,
+  grantCanSend as microsoftGrantCanSend,
+  MicrosoftMailAuthError,
+  MicrosoftMailNotConfiguredError,
+  isMicrosoftMailConfigured,
+} from "./microsoftMail";
 import { logEvent } from "./logStore";
 
 /**
@@ -67,211 +75,276 @@ function getParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * What differs between the two providers. Everything else about the flow — the
+ * invite checks, the wrong-account refusal, the missing-scope refusal — is
+ * identical, so it lives once below.
+ */
+interface ProviderFlow {
+  key: "google" | "microsoft";
+  /** What the consenting person will recognise it as. */
+  label: string;
+  configured: () => boolean;
+  authUrl: (params: { state: string; loginHint: string }) => string;
+  exchange: (code: string) => Promise<{
+    refreshToken: string;
+    accessToken: string;
+    expiresAt: Date;
+    scope: string | null;
+    email: string | null;
+  }>;
+  canSend: (scope: string | null) => boolean;
+  /** Hands back a grant we have refused, where the provider supports it. */
+  revoke?: (token: string) => Promise<void>;
+  /** What the person must tick or allow, in their words. */
+  sendPermissionHint: string;
+  isExpectedError: (error: unknown) => boolean;
+}
+
+const FLOWS: ProviderFlow[] = [
+  {
+    key: "google",
+    label: "Google",
+    configured: isGoogleMailConfigured,
+    authUrl: buildGoogleAuthUrl,
+    exchange: exchangeGoogleCode,
+    canSend: googleGrantCanSend,
+    revoke: revokeGoogleToken,
+    sendPermissionHint:
+      'make sure the box for <em>"Send email on your behalf"</em> is ' +
+      "<strong>ticked</strong> before continuing — Google leaves it unticked by " +
+      "default and lets you carry on without it",
+    isExpectedError: e =>
+      e instanceof GoogleMailAuthError || e instanceof GoogleMailNotConfiguredError,
+  },
+  {
+    key: "microsoft",
+    label: "Microsoft",
+    configured: isMicrosoftMailConfigured,
+    authUrl: buildMicrosoftAuthUrl,
+    exchange: exchangeMicrosoftCode,
+    canSend: microsoftGrantCanSend,
+    sendPermissionHint:
+      "choose <strong>Accept</strong> on the permissions screen, which includes " +
+      "<em>Send mail as you</em>",
+    isExpectedError: e =>
+      e instanceof MicrosoftMailAuthError || e instanceof MicrosoftMailNotConfiguredError,
+  },
+];
+
 export function registerEmailOauthRoutes(app: Express) {
-  /**
-   * Opened by the mailbox owner. Validates the invite, then bounces to Google.
-   * The nonce is not spent here — only on a completed callback — so a link
-   * closed at Google's consent screen can still be used.
-   */
-  app.get("/api/email-oauth/google/start", async (req: Request, res: Response) => {
-    const nonce = getParam(req, "n");
-    const signature = getParam(req, "s");
+  for (const flow of FLOWS) {
+    /**
+     * Opened by the mailbox owner. Validates the invite, then bounces to the
+     * provider. The nonce is not spent here — only on a completed callback —
+     * so a link closed at the consent screen can still be used.
+     */
+    app.get(`/api/email-oauth/${flow.key}/start`, async (req: Request, res: Response) => {
+      const nonce = getParam(req, "n");
+      const signature = getParam(req, "s");
 
-    if (!nonce || !signature || !verifyInviteSignature(nonce, signature)) {
-      sendPage(
-        res,
-        400,
-        "Link not valid",
-        `<h1 class="bad">This link isn't valid</h1>
-         <p>Ask for a fresh authorisation link.</p>`
-      );
-      return;
-    }
-
-    try {
-      const sender = await db.getEmailSenderByNonce(nonce);
-      if (!sender || !sender.inviteExpiresAt) {
+      if (!nonce || !signature || !verifyInviteSignature(nonce, signature)) {
         sendPage(
           res,
-          410,
-          "Link already used",
-          `<h1 class="bad">This link has already been used</h1>
-           <p>Each authorisation link works once. Ask for a new one.</p>`
-        );
-        return;
-      }
-      if (sender.inviteExpiresAt.getTime() < Date.now()) {
-        sendPage(
-          res,
-          410,
-          "Link expired",
-          `<h1 class="bad">This link has expired</h1>
+          400,
+          "Link not valid",
+          `<h1 class="bad">This link isn't valid</h1>
            <p>Ask for a fresh authorisation link.</p>`
         );
         return;
       }
 
-      if (!isGoogleMailConfigured()) {
+      try {
+        const sender = await db.getEmailSenderByNonce(nonce);
+        if (!sender || !sender.inviteExpiresAt) {
+          sendPage(
+            res,
+            410,
+            "Link already used",
+            `<h1 class="bad">This link has already been used</h1>
+             <p>Each authorisation link works once. Ask for a new one.</p>`
+          );
+          return;
+        }
+        if (sender.inviteExpiresAt.getTime() < Date.now()) {
+          sendPage(
+            res,
+            410,
+            "Link expired",
+            `<h1 class="bad">This link has expired</h1>
+             <p>Ask for a fresh authorisation link.</p>`
+          );
+          return;
+        }
+        if (!flow.configured()) {
+          sendPage(
+            res,
+            503,
+            "Not configured",
+            `<h1 class="bad">Not set up yet</h1>
+             <p>Mail sending isn't configured on the server. Nothing you did caused this.</p>`
+          );
+          return;
+        }
+
+        // State carries the same signed nonce, which is what ties the
+        // provider's redirect back to this specific invite.
+        res.redirect(
+          flow.authUrl({
+            state: `${nonce}.${signature}`,
+            loginHint: sender.emailAddress,
+          })
+        );
+      } catch (error: any) {
+        console.error(`[EmailOAuth] ${flow.key} start failed:`, error?.message ?? error);
         sendPage(
           res,
-          503,
-          "Not configured",
-          `<h1 class="bad">Not set up yet</h1>
-           <p>Mail sending isn't configured on the server. Nothing you did caused this.</p>`
+          500,
+          "Something went wrong",
+          `<h1 class="bad">Something went wrong</h1><p>Please ask for a new link.</p>`
+        );
+      }
+    });
+
+    /** The provider's redirect. Exchanges the code and stores the grant. */
+    app.get(`/api/email-oauth/${flow.key}/callback`, async (req: Request, res: Response) => {
+      const code = getParam(req, "code");
+      const state = getParam(req, "state");
+      const oauthError = getParam(req, "error");
+
+      if (oauthError) {
+        sendPage(
+          res,
+          400,
+          "Authorisation cancelled",
+          `<h1>Authorisation cancelled</h1>
+           <p>Nothing was changed. You can use the link again if you'd like to allow it.</p>`
         );
         return;
       }
 
-      // State carries the same signed nonce, which is what ties Google's
-      // redirect back to this specific invite.
-      const state = `${nonce}.${signature}`;
-      res.redirect(
-        buildGoogleAuthUrl({ state, loginHint: sender.emailAddress })
-      );
-    } catch (error: any) {
-      console.error("[EmailOAuth] start failed:", error?.message ?? error);
-      sendPage(
-        res,
-        500,
-        "Something went wrong",
-        `<h1 class="bad">Something went wrong</h1><p>Please ask for a new link.</p>`
-      );
-    }
-  });
-
-  /** Google's redirect. Exchanges the code and stores the grant. */
-  app.get("/api/email-oauth/google/callback", async (req: Request, res: Response) => {
-    const code = getParam(req, "code");
-    const state = getParam(req, "state");
-    const oauthError = getParam(req, "error");
-
-    if (oauthError) {
-      sendPage(
-        res,
-        400,
-        "Authorisation cancelled",
-        `<h1>Authorisation cancelled</h1>
-         <p>Nothing was changed. You can use the link again if you'd like to allow it.</p>`
-      );
-      return;
-    }
-
-    const [nonce, signature] = (state ?? "").split(".");
-    if (!code || !nonce || !signature || !verifyInviteSignature(nonce, signature)) {
-      sendPage(
-        res,
-        400,
-        "Link not valid",
-        `<h1 class="bad">This link isn't valid</h1><p>Ask for a fresh authorisation link.</p>`
-      );
-      return;
-    }
-
-    try {
-      const sender = await db.getEmailSenderByNonce(nonce);
-      if (!sender || !sender.inviteExpiresAt || sender.inviteExpiresAt.getTime() < Date.now()) {
+      const [nonce, signature] = (state ?? "").split(".");
+      if (!code || !nonce || !signature || !verifyInviteSignature(nonce, signature)) {
         sendPage(
           res,
-          410,
-          "Link expired",
-          `<h1 class="bad">This link has expired or was already used</h1>
-           <p>Ask for a fresh authorisation link.</p>`
+          400,
+          "Link not valid",
+          `<h1 class="bad">This link isn't valid</h1><p>Ask for a fresh authorisation link.</p>`
         );
         return;
       }
 
-      const grant = await exchangeGoogleCode(code);
+      try {
+        const sender = await db.getEmailSenderByNonce(nonce);
+        if (
+          !sender ||
+          !sender.inviteExpiresAt ||
+          sender.inviteExpiresAt.getTime() < Date.now()
+        ) {
+          sendPage(
+            res,
+            410,
+            "Link expired",
+            `<h1 class="bad">This link has expired or was already used</h1>
+             <p>Ask for a fresh authorisation link.</p>`
+          );
+          return;
+        }
 
-      // The invite named one mailbox. login_hint only suggests, so somebody
-      // signed into several Google accounts can easily consent as the wrong
-      // one — and silently storing that would mean invoices going out over a
-      // different person's name. Refuse rather than guess.
-      if (grant.email && grant.email !== sender.emailAddress.toLowerCase()) {
+        const grant = await flow.exchange(code);
+
+        // The invite named one mailbox. login_hint only suggests, so somebody
+        // signed into several accounts can easily consent as the wrong one —
+        // and silently storing that would mean invoices going out over a
+        // different person's name. Refuse rather than guess.
+        if (grant.email && grant.email !== sender.emailAddress.toLowerCase()) {
+          logEvent(
+            "email",
+            `Mail authorisation refused: link for ${sender.emailAddress} was consented ` +
+              `by ${grant.email}`,
+            "warn"
+          );
+          sendPage(
+            res,
+            400,
+            `Wrong ${flow.label} account`,
+            `<h1 class="bad">That's a different ${flow.label} account</h1>
+             <p>This link authorises <code>${sender.emailAddress}</code>, but you signed in as
+                <code>${grant.email}</code>.</p>
+             <p>Switch accounts and open the link again. Nothing was saved.</p>`
+          );
+          return;
+        }
+
+        // Neither provider refuses a scope it will not grant — both return a
+        // valid token with that scope quietly missing. Storing such a grant as
+        // working means the first real send fails long after anyone remembers
+        // which box went unticked.
+        if (!flow.canSend(grant.scope)) {
+          await flow.revoke?.(grant.refreshToken);
+          const reason =
+            "Authorisation completed without permission to send mail " +
+            `(granted: ${grant.scope ?? "nothing"}).`;
+          await db.noteEmailSenderInviteProblem(sender.id, reason);
+          logEvent(
+            "email",
+            `Mail authorisation refused for ${sender.emailAddress}: ${reason}`,
+            "warn"
+          );
+          sendPage(
+            res,
+            400,
+            "One permission still needed",
+            `<h1 class="bad">Almost — one permission is missing</h1>
+             <p>${flow.label} didn't include permission to <strong>send email</strong>, so RFX
+                still can't send on your behalf.</p>
+             <p>Please open the same link again and ${flow.sendPermissionHint}.</p>
+             <p>Nothing was saved${flow.revoke ? ", and the partial permission has been handed back" : ""}.</p>`
+          );
+          return;
+        }
+
+        await db.activateEmailSender({
+          id: sender.id,
+          refreshTokenEnc: encryptToken(grant.refreshToken),
+          accessTokenEnc: encryptToken(grant.accessToken),
+          accessTokenExpiresAt: grant.expiresAt,
+          scope: grant.scope,
+        });
+
         logEvent(
           "email",
-          `Mail authorisation refused: link for ${sender.emailAddress} was consented ` +
-            `by ${grant.email}`,
-          "warn"
+          `Mail sending authorised for ${sender.emailAddress} via ${flow.label} ` +
+            `(scope: ${grant.scope ?? "unknown"})`
         );
+
         sendPage(
           res,
-          400,
-          "Wrong Google account",
-          `<h1 class="bad">That's a different Google account</h1>
-           <p>This link authorises <code>${sender.emailAddress}</code>, but you signed in as
-              <code>${grant.email}</code>.</p>
-           <p>Switch accounts and open the link again. Nothing was saved.</p>`
+          200,
+          "Authorised",
+          `<h1 class="ok">Thank you — that's done</h1>
+           <p>RFX can now send invoice emails from <code>${sender.emailAddress}</code>.</p>
+           <p>Those emails will appear in your Sent folder, and any replies come
+              straight back to you.</p>
+           <p>This permission lets RFX send mail only. It cannot read, search or
+              delete anything in your mailbox. You can withdraw it at any time in
+              your ${flow.label} account's security settings.</p>`
         );
-        return;
-      }
+      } catch (error: any) {
+        const detail = error?.message ?? String(error);
+        console.error(`[EmailOAuth] ${flow.key} callback failed:`, detail);
+        logEvent("email", `Mail authorisation failed: ${detail}`, "error");
 
-      // Google does not refuse a scope it will not grant — it returns a token
-      // with that scope quietly missing. Storing such a grant as working means
-      // the first real send fails with "insufficient authentication scopes"
-      // long after anyone remembers which box went unticked.
-      if (!grantCanSend(grant.scope)) {
-        await revokeGoogleToken(grant.refreshToken);
-        const reason =
-          "Authorisation completed without permission to send mail " +
-          `(granted: ${grant.scope ?? "nothing"}). The Gmail permission was not allowed.`;
-        await db.noteEmailSenderInviteProblem(sender.id, reason);
-        logEvent("email", `Mail authorisation refused for ${sender.emailAddress}: ${reason}`, "warn");
+        const expected = flow.isExpectedError(error);
         sendPage(
           res,
-          400,
-          "One permission still needed",
-          `<h1 class="bad">Almost — one permission is missing</h1>
-           <p>Google didn't include permission to <strong>send email</strong>, so RFX still
-              can't send on your behalf.</p>
-           <p>Please open the same link again. On the permissions step, make sure the box for
-              <em>"Send email on your behalf"</em> is <strong>ticked</strong> before continuing —
-              Google leaves it unticked by default and lets you carry on without it.</p>
-           <p>Nothing was saved, and the partial permission has been handed back.</p>`
+          expected ? 400 : 500,
+          "Authorisation failed",
+          `<h1 class="bad">That didn't work</h1>
+           <p>${expected ? detail : "Something went wrong on our side."}</p>
+           <p>Nothing was saved. Please ask for a new link.</p>`
         );
-        return;
       }
-
-      await db.activateEmailSender({
-        id: sender.id,
-        refreshTokenEnc: encryptToken(grant.refreshToken),
-        accessTokenEnc: encryptToken(grant.accessToken),
-        accessTokenExpiresAt: grant.expiresAt,
-        scope: grant.scope,
-      });
-
-      logEvent(
-        "email",
-        `Mail sending authorised for ${sender.emailAddress} (scope: ${grant.scope ?? "unknown"})`
-      );
-
-      sendPage(
-        res,
-        200,
-        "Authorised",
-        `<h1 class="ok">Thank you — that's done</h1>
-         <p>RFX can now send invoice emails from <code>${sender.emailAddress}</code>.</p>
-         <p>Those emails will appear in your Sent folder, and any replies come
-            straight back to you.</p>
-         <p>This permission lets RFX send mail only. It cannot read, search or
-            delete anything in your mailbox. You can withdraw it at any time in
-            your Google account's security settings.</p>`
-      );
-    } catch (error: any) {
-      const detail = error?.message ?? String(error);
-      console.error("[EmailOAuth] callback failed:", detail);
-      logEvent("email", `Mail authorisation failed: ${detail}`, "error");
-
-      const expected =
-        error instanceof GoogleMailAuthError ||
-        error instanceof GoogleMailNotConfiguredError;
-      sendPage(
-        res,
-        expected ? 400 : 500,
-        "Authorisation failed",
-        `<h1 class="bad">That didn't work</h1>
-         <p>${expected ? detail : "Something went wrong on our side."}</p>
-         <p>Nothing was saved. Please ask for a new link.</p>`
-      );
-    }
-  });
+    });
+  }
 }

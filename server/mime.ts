@@ -24,6 +24,13 @@ export interface MailAddress {
   name?: string | null;
 }
 
+/**
+ * A message to send, without the sender. Provider-neutral: the Google path
+ * renders it to MIME, the Microsoft path maps it onto Graph's own JSON, and
+ * callers do not have to know which.
+ */
+export type OutgoingMessage = Omit<BuildMessageInput, "from">;
+
 export interface BuildMessageInput {
   from: MailAddress;
   to: MailAddress[];

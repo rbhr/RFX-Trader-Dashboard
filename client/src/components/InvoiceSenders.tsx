@@ -70,6 +70,7 @@ export default function InvoiceSenders() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [provider, setProvider] = useState<"google" | "microsoft">("google");
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [testFor, setTestFor] = useState<Sender | null>(null);
   const [testTo, setTestTo] = useState("");
@@ -135,6 +136,18 @@ export default function InvoiceSenders() {
             an authorised redirect URI on the Google client:
             <br />
             <code className="break-all">{data.redirectUri || "(PUBLIC_BASE_URL not set)"}</code>
+          </p>
+        )}
+        {data && !data.microsoftConfigured && (
+          <p className="text-sm text-muted-foreground">
+            <strong>Microsoft 365 sending isn't configured.</strong> Set{" "}
+            <code>MS_MAIL_CLIENT_ID</code>, <code>MS_MAIL_CLIENT_SECRET</code> and{" "}
+            <code>PUBLIC_BASE_URL</code>, and add this as a redirect URI on the Entra app
+            registration:
+            <br />
+            <code className="break-all">
+              {data.microsoftRedirectUri || "(PUBLIC_BASE_URL not set)"}
+            </code>
           </p>
         )}
 
@@ -210,6 +223,7 @@ export default function InvoiceSenders() {
                         onClick={() => {
                           setEmail(s.emailAddress);
                           setDisplayName(s.displayName ?? "");
+                          setProvider(s.provider);
                           setInviteUrl(null);
                           setInviteOpen(true);
                         }}
@@ -241,6 +255,7 @@ export default function InvoiceSenders() {
           onClick={() => {
             setEmail("");
             setDisplayName("");
+            setProvider("google");
             setInviteUrl(null);
             setInviteOpen(true);
           }}
@@ -299,10 +314,32 @@ export default function InvoiceSenders() {
                   onChange={e => setDisplayName(e.target.value)}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Google mailboxes only for now — personal Gmail and Workspace both work. Microsoft
-                365 addresses need the Graph integration.
-              </p>
+              <div>
+                <Label>Where is the mailbox hosted?</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    type="button"
+                    variant={provider === "google" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setProvider("google")}
+                  >
+                    Google
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={provider === "microsoft" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setProvider("microsoft")}
+                  >
+                    Microsoft 365
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {provider === "google"
+                    ? "Personal Gmail and Google Workspace both work."
+                    : "Work or school accounts on Microsoft 365, e.g. secureg.net."}
+                </p>
+              </div>
             </div>
           )}
 
@@ -319,7 +356,7 @@ export default function InvoiceSenders() {
                     invite.mutate({
                       emailAddress: email.trim(),
                       displayName: displayName.trim() || undefined,
-                      provider: "google",
+                      provider,
                     })
                   }
                   disabled={!email.trim() || invite.isPending}

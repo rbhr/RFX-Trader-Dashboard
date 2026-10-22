@@ -1077,6 +1077,31 @@ export async function activateEmailSender(params: {
     .where(eq(emailSenders.id, params.id));
 }
 
+/**
+ * Stores refreshed tokens. Takes the refresh token optionally because
+ * Microsoft rotates it on every use while Google keeps the original — passing
+ * `undefined` must leave the stored one alone rather than clearing it.
+ */
+export async function updateEmailSenderTokens(
+  id: number,
+  params: {
+    accessTokenEnc: string;
+    accessTokenExpiresAt: Date;
+    refreshTokenEnc?: string;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({
+      accessTokenEnc: params.accessTokenEnc,
+      accessTokenExpiresAt: params.accessTokenExpiresAt,
+      ...(params.refreshTokenEnc ? { refreshTokenEnc: params.refreshTokenEnc } : {}),
+    })
+    .where(eq(emailSenders.id, id));
+}
+
 export async function updateEmailSenderAccessToken(
   id: number,
   accessTokenEnc: string,

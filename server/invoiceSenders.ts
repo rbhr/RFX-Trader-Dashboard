@@ -1,6 +1,7 @@
 import * as db from "./db";
 import { GOOGLE_MAIL_SCOPES, sendAsGoogleSender } from "./googleMail";
-import type { BuildMessageInput } from "./mime";
+import { MS_MAIL_SCOPES, sendAsMicrosoftSender } from "./microsoftMail";
+import type { OutgoingMessage } from "./mime";
 import type { PropFirmKey } from "./propAccounts";
 import type { EmailSender } from "../drizzle/schema";
 
@@ -66,21 +67,15 @@ export async function requireActiveSender(emailAddress: string): Promise<EmailSe
  */
 export async function sendAs(
   emailAddress: string,
-  message: Omit<BuildMessageInput, "from">
+  message: OutgoingMessage
 ): Promise<{ messageId: string; threadId: string | null }> {
   const sender = await requireActiveSender(emailAddress);
-
-  if (sender.provider === "google") {
-    return sendAsGoogleSender(sender, message);
-  }
-
-  throw new SenderNotReadyError(
-    `Sending as a ${sender.provider} mailbox is not wired up yet — ` +
-      `${emailAddress} is hosted on Microsoft 365, which needs the Graph integration.`
-  );
+  return sender.provider === "google"
+    ? sendAsGoogleSender(sender, message)
+    : sendAsMicrosoftSender(sender, message);
 }
 
 /** Scopes a sender is expected to hold, for showing setup state in the UI. */
 export function expectedScopes(provider: "google" | "microsoft"): string[] {
-  return provider === "google" ? GOOGLE_MAIL_SCOPES : ["Mail.Send"];
+  return provider === "google" ? GOOGLE_MAIL_SCOPES : MS_MAIL_SCOPES;
 }

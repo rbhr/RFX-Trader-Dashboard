@@ -5,6 +5,50 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.10.0] — 2026-10-22
+
+### Added
+
+- **Microsoft 365 invoice senders**, completing the three addresses. An M365
+  mailbox such as `sr@secureg.net` can now be invited exactly like a Google
+  one, and the sender picker in the invite dialog chooses which.
+
+  Delegated **`Mail.Send`** only — the grant sends as the one mailbox that
+  consented and cannot read, search or delete anything in it. Deliberately not
+  the application-permission flow, which would let this server send as *every*
+  mailbox in the tenant and is the usual way a small integration acquires far
+  more authority than the job needs.
+
+  Unlike the Google path this does not post raw MIME. Graph accepts MIME, but
+  only the JSON form takes `saveToSentItems`, and a copy in the sender's Sent
+  folder is a requirement here rather than a nicety — an invoice the sender has
+  no record of sending is worse than no invoice. So `saveToSentItems: true` is
+  set explicitly rather than relied upon.
+
+  Two provider differences worth recording, both of which would have been
+  silent bugs:
+
+  - **Graph returns granted scopes as short names** (`Mail.Send`), not the full
+    URI that was requested, so comparing against the request would have
+    rejected every valid grant. Both spellings are accepted, case-insensitively.
+  - **Microsoft rotates the refresh token on every use**, where Google keeps
+    the original. The rotated token is now stored, since refreshing forever
+    with the first one eventually stops being accepted.
+
+  `MS_MAIL_TENANT` defaults to `common`, so secureg.net, rfx.capital and
+  rftrust.co all sit behind one app registration; set a tenant id to restrict
+  it.
+
+  New env: `MS_MAIL_CLIENT_ID`, `MS_MAIL_CLIENT_SECRET`, `MS_MAIL_TENANT`
+  (optional).
+
+### Changed
+
+- The two consent flows are one generic handler over a small per-provider
+  config, rather than a second copy of the route. The invite checks, the
+  wrong-account refusal and the missing-scope refusal are identical for both
+  providers and now exist once — a fix to either applies to both.
+
 ## [4.9.1] — 2026-10-22
 
 ### Fixed
