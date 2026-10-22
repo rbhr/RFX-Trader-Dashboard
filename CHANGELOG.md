@@ -49,12 +49,24 @@ hash.
   the nominal size for those, keyed by account id — not alias, which is
   editable in MetaCopier and would silently drop the override on a rename.
 
-  First entry: **TCT 7533 L0 USD100K RR**, a $100K programme wired in on
-  2026-06-17 already down to $94,160.80. On the recorded deposit its breach
-  level read $84,744.72 and its available equity $9,480.42 — $5,255 more room
-  than it actually has. The override replaces only the amount; the funding date
-  is still the real one. The figure is dotted-underlined on screen with a
-  tooltip saying it was set by hand.
+  This happens when an account stops working and TCT can only reissue it
+  carrying the balance it had at the time, so it is the normal case for a
+  reissued account rather than an oddity. The override replaces only the
+  amount; the funding date is still the real one. The figure is
+  dotted-underlined on screen with a tooltip saying it was set by hand, and it
+  raises no warning — a deliberate override is not a data problem.
+
+  Two entries so far, both $100K/AUD100K programmes reissued at their
+  then-balance:
+
+  - **TCT 7533 L0 USD100K RR** — wired in on 2026-06-17 already down to
+    $94,160.80. On the recorded deposit its breach level read $84,744.72 and
+    its available equity $9,480.42, about $5,255 more room than it has.
+  - **TCT 2138 L0 AUD100K** — no transactions on record at all, so it fell
+    through to its earliest recorded balance of AUD 90,138.24 instead. That put
+    its breach level at 81,124.42 with 9,004.31 of room; against the real
+    AUD 100K nominal the breach level is 90,000 and the account has
+    **AUD 128.73** of room.
 
 ### Fixed
 

@@ -253,6 +253,56 @@ describe("opening balance overrides", () => {
     expect(row.warning).toBeNull();
   });
 
+  // TCT 2138 L0 AUD100K: reissued the same way as 7533, but with no
+  // transactions on record at all, so it was falling through to the
+  // earliest-balance fallback rather than to a wrong deposit.
+  const ID_2138 = "6a9940fd-bb23-4d60-8133-0c771dd92b47";
+  const noTransactions: AccountFunding = {
+    transactions: [],
+    earliestBalance: { date: "2025-11-08", balance: 90_138.24 },
+    totalNetProfit: -8.09,
+    broker: "theconcept-trade",
+    currency: "AUD",
+  };
+
+  it("maps 2138 to its nominal AUD 100K", () => {
+    expect(OPENING_BALANCE_OVERRIDES[ID_2138]).toBe(100_000);
+  });
+
+  it("overrides an account that has no transactions at all, not just a wrong deposit", () => {
+    const row = derivePropAccount(
+      account({
+        id: ID_2138,
+        alias: "TCT 2138 L0 AUD100K",
+        loginAccountNumber: "2138",
+        created: "2025-11-08T09:51:47.208Z",
+        accountInformation: { equity: 90_128.73, currency: "AUD", connected: true },
+      }),
+      noTransactions,
+      TCT
+    );
+    expect(row.openingBalance).toBe(100_000);
+    expect(row.openingBalanceSource).toBe("override");
+    expect(row.currency).toBe("AUD");
+    expect(row.breachLevel).toBe(90_000);
+    // Against the inferred AUD 90,138.24 this read 9,004.31 — AUD 8,875 of
+    // room that was never there.
+    expect(row.availableEquity).toBe(128.73);
+    // The override also settles what the fallback could only guess at, so the
+    // "inferred from the earliest recorded balance" warning is gone.
+    expect(row.warning).toBeNull();
+  });
+
+  it("falls back to the created date when an override has no deposit to date from", () => {
+    const row = derivePropAccount(
+      account({ id: ID_2138, created: "2025-11-08T09:51:47.208Z" }),
+      noTransactions,
+      TCT
+    );
+    expect(row.startDate).toBe("2025-11-08T09:51:47.208Z");
+    expect(row.startDateIsFunding).toBe(false);
+  });
+
   it("leaves accounts without an override on their recorded deposit", () => {
     const row = derivePropAccount(account(), funding(), TCT);
     expect(row.openingBalanceSource).toBe("deposit");

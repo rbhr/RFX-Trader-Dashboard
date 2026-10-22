@@ -85,10 +85,16 @@ export const PROP_FIRMS: PropFirmConfig[] = [
  * MetaCopier and a rename would silently drop the override.
  */
 export const OPENING_BALANCE_OVERRIDES: Record<string, number> = {
-  // TCT 7533 L0 USD100K RR (login 147533). A $100K programme that was wired
-  // into MetaCopier on 2026-06-17 already down to $94,160.80, which is the only
-  // deposit on record.
+  // TCT 7533 L0 USD100K RR (login 147533). A $100K programme whose original
+  // account stopped working; TCT could only reissue it carrying the balance it
+  // had at the time, so MetaCopier's one deposit is $94,160.80 on 2026-06-17.
   "7130985f-64df-4ff7-9635-15eb88b57d12": 100_000,
+  // TCT 2138 L0 AUD100K (login 2138), reissued the same way. This one has no
+  // transactions on record at all, so without the override it falls back to its
+  // earliest recorded balance of AUD 90,138.24 — which is nearly AUD 10K of
+  // room that does not exist. Denominated in AUD; the override is AUD too,
+  // since every figure on a row is in the account's own currency.
+  "6a9940fd-bb23-4d60-8133-0c771dd92b47": 100_000,
 };
 
 /** How an opening balance was arrived at, so the screen can qualify it. */
