@@ -4,6 +4,8 @@ import { encryptToken, verifyInviteSignature } from "./emailTokenCrypto";
 import {
   buildGoogleAuthUrl,
   exchangeGoogleCode,
+  grantCanSend,
+  revokeGoogleToken,
   GoogleMailAuthError,
   GoogleMailNotConfiguredError,
   isGoogleMailConfigured,
@@ -199,6 +201,32 @@ export function registerEmailOauthRoutes(app: Express) {
            <p>This link authorises <code>${sender.emailAddress}</code>, but you signed in as
               <code>${grant.email}</code>.</p>
            <p>Switch accounts and open the link again. Nothing was saved.</p>`
+        );
+        return;
+      }
+
+      // Google does not refuse a scope it will not grant — it returns a token
+      // with that scope quietly missing. Storing such a grant as working means
+      // the first real send fails with "insufficient authentication scopes"
+      // long after anyone remembers which box went unticked.
+      if (!grantCanSend(grant.scope)) {
+        await revokeGoogleToken(grant.refreshToken);
+        const reason =
+          "Authorisation completed without permission to send mail " +
+          `(granted: ${grant.scope ?? "nothing"}). The Gmail permission was not allowed.`;
+        await db.noteEmailSenderInviteProblem(sender.id, reason);
+        logEvent("email", `Mail authorisation refused for ${sender.emailAddress}: ${reason}`, "warn");
+        sendPage(
+          res,
+          400,
+          "One permission still needed",
+          `<h1 class="bad">Almost — one permission is missing</h1>
+           <p>Google didn't include permission to <strong>send email</strong>, so RFX still
+              can't send on your behalf.</p>
+           <p>Please open the same link again. On the permissions step, make sure the box for
+              <em>"Send email on your behalf"</em> is <strong>ticked</strong> before continuing —
+              Google leaves it unticked by default and lets you carry on without it.</p>
+           <p>Nothing was saved, and the partial permission has been handed back.</p>`
         );
         return;
       }

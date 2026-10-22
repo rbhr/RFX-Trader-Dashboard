@@ -76,7 +76,7 @@ import {
   signInviteNonce,
   hasEmailTokenKey,
 } from "./emailTokenCrypto";
-import { isGoogleMailConfigured, googleMailRedirectUri } from "./googleMail";
+import { isGoogleMailConfigured, googleMailRedirectUri, grantCanSend } from "./googleMail";
 import { inviteTtlMs } from "./emailOauthRoutes";
 import { sendAs, requireActiveSender } from "./invoiceSenders";
 import {
@@ -2770,6 +2770,9 @@ export const appRouter = router({
           displayName: s.displayName,
           status: s.status,
           scope: s.scope,
+          // Whether the grant actually carries permission to send, rather than
+          // only the identity scopes Google hands over regardless.
+          canSend: grantCanSend(s.scope),
           lastError: s.lastError,
           authorizedAt: s.authorizedAt,
           lastUsedAt: s.lastUsedAt,

@@ -5,6 +5,29 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.9.1] — 2026-10-22
+
+### Fixed
+
+- A mailbox could be stored as authorised without permission to send.
+
+  Google does not refuse a scope it will not grant — it returns a perfectly
+  valid token with that scope quietly missing. `richard@rundledust.com` came
+  back with `userinfo.email openid` and nothing else, was recorded Active, and
+  then failed on first use with Google's "Request had insufficient
+  authentication scopes" — by which point nothing on screen connected the
+  failure to the unticked box that caused it.
+
+  The callback now checks the granted scope before storing anything. A grant
+  without `gmail.send` is refused, handed back to Google rather than left
+  dangling on the person's account, and the page tells them to open the same
+  link again and tick "Send email on your behalf" — Google leaves that box
+  unticked by default and lets you continue without it. The invite stays
+  usable, so correcting it is one click rather than a fresh link.
+
+  The senders table also shows when an active grant cannot actually send,
+  so this is visible rather than inferred from a failed send.
+
 ## [4.9.0] — 2026-10-22
 
 ### Added

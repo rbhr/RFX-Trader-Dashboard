@@ -24,12 +24,44 @@ const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
+/** The scope that actually lets us send. Everything else here is identity. */
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
 /** `openid email` identifies which mailbox consented; gmail.send does the work. */
-export const GOOGLE_MAIL_SCOPES = [
-  "openid",
-  "email",
-  "https://www.googleapis.com/auth/gmail.send",
-];
+export const GOOGLE_MAIL_SCOPES = ["openid", "email", GMAIL_SEND_SCOPE];
+
+/**
+ * Whether a grant can actually send.
+ *
+ * Google does not refuse a scope it will not grant — it returns a token with
+ * that scope quietly missing. So a consent screen where the Gmail permission
+ * was left unticked, or a project where the scope was never configured,
+ * produces a perfectly valid token that fails on first use with
+ * "Request had insufficient authentication scopes". Checking at authorisation
+ * time is the difference between telling somebody to tick a box and handing
+ * them an opaque failure days later.
+ */
+export function grantCanSend(scope: string | null | undefined): boolean {
+  if (!scope) return false;
+  return scope.split(/\s+/).includes(GMAIL_SEND_SCOPE);
+}
+
+/**
+ * Hands a grant back to Google. Used when we refuse one for missing scopes:
+ * leaving an authorisation on somebody's account that we have declined to use
+ * is untidy at best and confusing at worst when they review their permissions.
+ */
+export async function revokeGoogleToken(token: string): Promise<void> {
+  try {
+    await axios.post(
+      "https://oauth2.googleapis.com/revoke",
+      new URLSearchParams({ token }),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 10_000 }
+    );
+  } catch {
+    // Best effort — the grant is unusable to us either way.
+  }
+}
 
 /** Refresh this far before expiry, so a send never races the clock. */
 const REFRESH_SKEW_MS = 2 * 60_000;

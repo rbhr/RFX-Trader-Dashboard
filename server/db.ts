@@ -1125,6 +1125,24 @@ export async function recordEmailSenderError(
     .where(eq(emailSenders.id, id));
 }
 
+/**
+ * Records why an authorisation attempt was refused while leaving the invite
+ * intact, so the same link can be opened again. Used when a grant comes back
+ * without the send scope: the person only has to tick the box they missed, and
+ * issuing a fresh link for that would be busywork.
+ */
+export async function noteEmailSenderInviteProblem(
+  id: number,
+  reason: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({ status: "Invited", lastError: reason })
+    .where(eq(emailSenders.id, id));
+}
+
 export async function touchEmailSenderUsed(id: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

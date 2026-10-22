@@ -33,6 +33,7 @@ type Sender = {
   displayName: string | null;
   status: "Invited" | "Active" | "Revoked" | "Error";
   scope: string | null;
+  canSend: boolean;
   lastError: string | null;
   authorizedAt: string | Date | null;
   lastUsedAt: string | Date | null;
@@ -165,6 +166,12 @@ export default function InvoiceSenders() {
                     )}
                     {s.lastError && (
                       <div className="text-xs text-destructive max-w-md">{s.lastError}</div>
+                    )}
+                    {s.status === "Active" && !s.canSend && (
+                      <div className="text-xs text-destructive max-w-md">
+                        Authorised, but without permission to send — re-authorise and tick
+                        "Send email on your behalf".
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="text-sm">
