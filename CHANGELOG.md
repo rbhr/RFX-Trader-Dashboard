@@ -5,6 +5,43 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.8.0] — 2026-10-22
+
+### Added
+
+- **Props** — a new admin screen for RFX's own funded prop accounts, with a
+  section per funder: The Concept Trading, Darwinex Zero, Uzo and Other. Only
+  TCT is wired up; the other three say so rather than showing an empty table.
+
+  Each account lists its opening balance, start date and current equity, then
+  Target (opening x 1.1), Breach Level (opening x 0.9) and Available Equity
+  (equity less the breach level). An account carrying the `TCT Locked` label
+  has finished its programme, so its Target reads "$0 Locked" and it gains
+  Eligible For Payout (equity less opening balance), Net Payout (eligible x
+  0.9) and a Create Invoice button — a placeholder that only toasts for now.
+
+  MetaCopier has no opening-balance field, so it is derived from the account's
+  **first deposit**, read from `performanceMetrics.dailyBalanceTransactions`.
+  The first deposit is used rather than the net of all transactions because a
+  locked account gets its profit withdrawn once invoiced, and netting would
+  then quietly walk the opening balance — and with it the target and breach
+  level — down by the amount already paid out. Where no deposit falls in the
+  window the earliest recorded end-of-day balance is used instead and the row
+  says so. The start date is likewise the funding date, which is routinely a
+  day or two before MetaCopier's `created` — an account is wired at the broker
+  before anyone adds it here — falling back to `created` with a tooltip
+  explaining the difference.
+
+  A firm is a config entry in `server/propAccounts.ts` plus a label on the
+  accounts in MetaCopier, not new code. The arithmetic is a pure function and
+  every figure is nullable, so a missing opening balance or equity shows an
+  em dash and a warning rather than `NaN`.
+
+  `performanceMetrics` is the heaviest read on the MetaCopier API — it walks
+  the whole position history — so it is cached for 10 minutes per account. The
+  equity beside it comes from the existing 30s `/accounts` cache and stays
+  fresh independently, which keeps an open screen off the history quota.
+
 ## [4.7.0] — 2026-10-21
 
 ### Changed

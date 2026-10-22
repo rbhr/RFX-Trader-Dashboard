@@ -45,6 +45,12 @@ const HISTORY_TTL_MS = 90_000;
 // Blackout windows are published days ahead and only shift when a release is
 // rescheduled, so the news-filter preview is safe to reuse for a few minutes.
 const NEWS_PREVIEW_TTL_MS = 5 * 60_000;
+// A prop account is funded once and then traded, so its deposit history is the
+// most static thing MetaCopier knows about it. performanceMetrics is also the
+// heaviest read on the API (it walks the whole position history), so it is
+// cached far longer than anything else here — the equity shown beside it comes
+// from the 30s /accounts cache and stays fresh on its own.
+const FUNDING_TTL_MS = 10 * 60_000;
 
 export interface Position {
   id: string;
@@ -86,6 +92,22 @@ function scalingFields(scaling: CopyScaling): Record<string, unknown> {
   return scaling.mode === 'fixed'
     ? { scaleType: { id: SCALE_TYPE_FIXED_LOT }, fixedLotSize: value }
     : { scaleType: { id: SCALE_TYPE_NO_SCALING }, multiplier: value };
+}
+
+/**
+ * The money paid into and out of an account, as MetaCopier's daily snapshots
+ * record it. MetaCopier has no "opening balance" field, so this is the only
+ * evidence of what an account was funded with — see deriveOpeningBalance.
+ */
+export interface AccountFunding {
+  /** Non-zero deposit (positive) / withdrawal (negative) days, earliest first. */
+  transactions: Array<{ date: string; amount: number }>;
+  /** Earliest end-of-day balance on record, for accounts with no transactions. */
+  earliestBalance: { date: string; balance: number } | null;
+  /** Net profit over the whole window, for display beside the derived figures. */
+  totalNetProfit: number | null;
+  broker: string | null;
+  currency: string | null;
 }
 
 export interface AccountInfo {
@@ -304,6 +326,7 @@ class MetaCopierService {
   >();
   private eventCategoryCache = new Map<string, string | null>();
   private newsFilterSettingCache = new Map<string, { fetchedAt: number; setting: any | null }>();
+  private fundingCache = new Map<string, { fetchedAt: number; data: AccountFunding }>();
 
   constructor() {
     this.apiKey = process.env.METACOPIER_API_KEY || '';
@@ -1375,6 +1398,63 @@ class MetaCopierService {
       console.error('[MetaCopier] Error fetching accounts by label:', error);
       throw new Error('Failed to fetch accounts');
     }
+  }
+
+  /**
+   * What an account was funded with and how it has traded since, read from
+   * MetaCopier's daily balance snapshots.
+   *
+   * The window has to start before the account was created: the funding deposit
+   * lands when the broker account is opened, which is routinely a day or two
+   * before anyone wires it into MetaCopier. A window starting at `created`
+   * misses the only deposit on the account and the opening balance comes back
+   * unknown.
+   */
+  async getAccountFunding(accountId: string, createdAt?: string): Promise<AccountFunding> {
+    const cached = this.fundingCache.get(accountId);
+    if (cached && Date.now() - cached.fetchedAt < FUNDING_TTL_MS) {
+      return cached.data;
+    }
+
+    const created = createdAt ? new Date(createdAt) : null;
+    const start =
+      created && !Number.isNaN(created.getTime())
+        ? new Date(created.getTime() - 60 * 24 * 60 * 60 * 1000)
+        : new Date(Date.UTC(2020, 0, 1));
+    const params = new URLSearchParams({
+      startDate: start.toISOString(),
+      endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const metrics = await this.fetchWithAuth<any>(
+      `/accounts/${accountId}/performanceMetrics?${params.toString()}`,
+      'GET'
+    );
+
+    const transactions = Object.entries(
+      (metrics?.dailyBalanceTransactions ?? {}) as Record<string, number>
+    )
+      .filter(([, amount]) => Number(amount) !== 0)
+      .map(([date, amount]) => ({ date, amount: Number(amount) }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const balances = Object.entries((metrics?.dailyBalance ?? {}) as Record<string, number>).sort(
+      (a, b) => a[0].localeCompare(b[0])
+    );
+
+    const data: AccountFunding = {
+      transactions,
+      earliestBalance: balances.length
+        ? { date: balances[0][0], balance: Number(balances[0][1]) }
+        : null,
+      totalNetProfit:
+        typeof metrics?.totalNetProfit === 'number' ? metrics.totalNetProfit : null,
+      broker: typeof metrics?.broker === 'string' ? metrics.broker : null,
+      currency: typeof metrics?.currency === 'string' ? metrics.currency : null,
+    };
+
+    this.fundingCache.set(accountId, { fetchedAt: Date.now(), data });
+    return data;
   }
 
   /**

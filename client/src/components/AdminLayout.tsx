@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   ScrollText,
   Waypoints,
+  Briefcase,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -95,6 +96,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { title: "Manage MetaCopier", href: "/admin/metacopier", icon: Settings, badge: 0 },
     { title: "Copy Flow Map", href: "/admin/copy-map", icon: Waypoints, badge: 0 },
     { title: "Manage Payments", href: "/admin/payments", icon: CreditCard, badge: 0 },
+    { title: "Props", href: "/admin/props", icon: Briefcase, badge: 0 },
     { title: "Risk Limit Breaches", href: "/admin/risk-breaches", icon: ShieldAlert, badge: activeBreachCount },
     { title: "System Logs", href: "/admin/logs", icon: ScrollText, badge: 0 },
   ];

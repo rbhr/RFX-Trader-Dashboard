@@ -67,6 +67,7 @@ import {
   getTraderLiveCopiers,
   type CopyScaling,
 } from "./metacopier";
+import { getPropFirmSections } from "./propAccounts";
 import {
   DAILY_PROFIT_TARGET_DEFAULTS,
   FEATURE_DAILY_PROFIT_TARGET,
@@ -2733,6 +2734,13 @@ export const appRouter = router({
     // The pause snapshot: what every live copier was doing before the
     // all-copiers D/M button changed it, so the A button can put back only
     // those — a copier that was already off stays off.
+    // RFX's own prop-firm accounts, grouped by funder. Read-only: every figure
+    // is derived from MetaCopier, so there is nothing here to keep in step with
+    // a table of our own.
+    getPropAccounts: adminProcedure.query(async () => {
+      return { firms: await getPropFirmSections() };
+    }),
+
     getCopierPause: adminProcedure.query(async () => readCopierPause()),
 
     // All-copiers D / M / A. D and M PAUSE: every live copier that is currently
