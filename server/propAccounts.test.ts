@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveOpeningBalance,
   derivePropAccount,
+  OPENING_BALANCE_OVERRIDES,
   PROP_FIRMS,
   type PropAccountInput,
 } from "./propAccounts";
@@ -86,7 +87,7 @@ describe("derivePropAccount — unlocked", () => {
   });
 
   it("reports available equity as equity less the breach level", () => {
-    expect(row.availableEquity).toBeCloseTo(17_743.56, 2);
+    expect(row.availableEquity).toBe(17_743.56);
   });
 
   it("leaves the payout figures off an unlocked account", () => {
@@ -123,12 +124,12 @@ describe("derivePropAccount — locked", () => {
 
   it("keeps the breach level and available equity", () => {
     expect(row.breachLevel).toBe(135_000);
-    expect(row.availableEquity).toBeCloseTo(17_743.56, 2);
+    expect(row.availableEquity).toBe(17_743.56);
   });
 
   it("makes eligible profit the gain over the opening balance, and nets RFX's share", () => {
-    expect(row.eligibleForPayout).toBeCloseTo(2_743.56, 2);
-    expect(row.netPayout).toBeCloseTo(2_469.204, 3);
+    expect(row.eligibleForPayout).toBe(2_743.56);
+    expect(row.netPayout).toBe(2_469.2);
   });
 
   it("reports a loss-making locked account as negative rather than clamping to zero", () => {
@@ -200,5 +201,87 @@ describe("PROP_FIRMS", () => {
 
   it("only maps a label for the firm that is actually set up", () => {
     expect(PROP_FIRMS.filter(f => f.label != null).map(f => f.label)).toEqual(["TCT"]);
+  });
+});
+
+describe("opening balance overrides", () => {
+  // TCT 7533 L0 USD100K RR: a $100K programme wired into MetaCopier already
+  // down to $94,160.80, which is the only deposit MetaCopier has.
+  const ID_7533 = "7130985f-64df-4ff7-9635-15eb88b57d12";
+  const transferredIn: AccountFunding = {
+    transactions: [{ date: "2026-06-17", amount: 94_160.8 }],
+    earliestBalance: { date: "2026-06-18", balance: 94_160.8 },
+    totalNetProfit: 64.34,
+    broker: "theconcept-trade",
+    currency: "USD",
+  };
+
+  it("maps 7533 to its nominal $100K", () => {
+    expect(OPENING_BALANCE_OVERRIDES[ID_7533]).toBe(100_000);
+  });
+
+  it("replaces the deposit amount and says the figure was set by hand", () => {
+    const result = deriveOpeningBalance(transferredIn, 100_000);
+    expect(result.openingBalance).toBe(100_000);
+    expect(result.source).toBe("override");
+  });
+
+  it("keeps the real funding date, which is still when the account started", () => {
+    expect(deriveOpeningBalance(transferredIn, 100_000).fundedOn).toBe("2026-06-17");
+  });
+
+  it("drives the target, breach level and available equity off the override", () => {
+    const row = derivePropAccount(
+      account({
+        id: ID_7533,
+        alias: "TCT 7533 L0 USD100K RR",
+        loginAccountNumber: "147533",
+        created: "2026-06-18T14:56:42.316Z",
+        accountInformation: { equity: 94_225.14, currency: "USD", connected: true },
+      }),
+      transferredIn,
+      TCT
+    );
+    expect(row.openingBalance).toBe(100_000);
+    expect(row.openingBalanceSource).toBe("override");
+    expect(row.target).toBe(110_000);
+    expect(row.breachLevel).toBe(90_000);
+    // Against the real deposit this read $9,480.42 — nearly $5.7k too generous.
+    expect(row.availableEquity).toBe(4_225.14);
+    expect(row.startDate).toBe("2026-06-17");
+    // A deliberate override is not a data problem, so it raises no warning.
+    expect(row.warning).toBeNull();
+  });
+
+  it("leaves accounts without an override on their recorded deposit", () => {
+    const row = derivePropAccount(account(), funding(), TCT);
+    expect(row.openingBalanceSource).toBe("deposit");
+    expect(row.openingBalance).toBe(150_000);
+  });
+
+  it("every override is a positive amount keyed by a uuid", () => {
+    for (const [id, amount] of Object.entries(OPENING_BALANCE_OVERRIDES)) {
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(amount).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("non-USD accounts", () => {
+  it("carries the account's own currency through, so AUD is not shown as USD", () => {
+    // TCT 7584 L2 AUD150K HC is funded in Australian dollars.
+    const row = derivePropAccount(
+      account({
+        id: "1d08b338-9bf5-4484-b50c-7cb38d8aa5b1",
+        alias: "TCT 7584 L2 AUD150K HC",
+        accountInformation: { equity: 151_461.34, currency: "AUD", connected: true },
+      }),
+      funding({ currency: "AUD" }),
+      TCT
+    );
+    expect(row.currency).toBe("AUD");
+    // The multiples are currency-agnostic — one account is in one currency.
+    expect(row.target).toBe(165_000);
+    expect(row.breachLevel).toBe(135_000);
   });
 });

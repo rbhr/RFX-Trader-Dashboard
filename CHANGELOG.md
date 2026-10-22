@@ -42,6 +42,32 @@ hash.
   equity beside it comes from the existing 30s `/accounts` cache and stays
   fresh independently, which keeps an open screen off the history quota.
 
+- Opening-balance overrides, for accounts MetaCopier cannot be asked about. An
+  account moved into MetaCopier part-way through its programme arrives as a
+  single deposit of whatever it was worth that day, not of what the programme
+  was sold as. `OPENING_BALANCE_OVERRIDES` in `server/propAccounts.ts` states
+  the nominal size for those, keyed by account id — not alias, which is
+  editable in MetaCopier and would silently drop the override on a rename.
+
+  First entry: **TCT 7533 L0 USD100K RR**, a $100K programme wired in on
+  2026-06-17 already down to $94,160.80. On the recorded deposit its breach
+  level read $84,744.72 and its available equity $9,480.42 — $5,255 more room
+  than it actually has. The override replaces only the amount; the funding date
+  is still the real one. The figure is dotted-underlined on screen with a
+  tooltip saying it was set by hand.
+
+### Fixed
+
+- Props showed every figure as USD. TCT funds some accounts in Australian
+  dollars (TCT 7584 L2 AUD150K HC), and labelling an AUD balance as USD on a
+  screen used to decide invoice amounts is the kind of error nobody catches by
+  eye. Each row now formats in its own currency, with the code shown rather
+  than a bare `$` for anything that is not USD.
+
+- Derived money is rounded to the cent. `opening x 1.1` on a $100,000 account
+  is `110000.00000000001` in floating point, and that noise was reaching the
+  payload and would have reached any invoice built from it.
+
 ## [4.7.0] — 2026-10-21
 
 ### Changed

@@ -17,7 +17,7 @@ type PropAccount = {
   connected: boolean;
   locked: boolean;
   openingBalance: number | null;
-  openingBalanceSource: "deposit" | "earliest-balance" | "unknown";
+  openingBalanceSource: "deposit" | "override" | "earliest-balance" | "unknown";
   startDate: string | null;
   startDateIsFunding: boolean;
   currentEquity: number | null;
@@ -40,12 +40,16 @@ type PropFirm = {
   note: string | null;
 };
 
-const fmtUsd = (v: number | null) =>
+// Not every prop account is in dollars — TCT funds some in AUD — so the row's
+// own currency decides the symbol. Labelling an AUD balance as USD on a screen
+// used to decide invoice amounts is the kind of error nobody catches by eye.
+const fmtMoney = (v: number | null, currency = "USD") =>
   v == null
     ? "—"
     : v.toLocaleString("en-US", {
         style: "currency",
-        currency: "USD",
+        currency,
+        currencyDisplay: currency === "USD" ? "symbol" : "code",
         minimumFractionDigits: 2,
       });
 
@@ -180,8 +184,9 @@ function AccountRow({
 }) {
   const createInvoice = () =>
     toast.info(
-      `Invoicing isn't wired up yet — ${a.alias} is ready to invoice ${payee} for ${fmtUsd(
-        a.netPayout
+      `Invoicing isn't wired up yet — ${a.alias} is ready to invoice ${payee} for ${fmtMoney(
+        a.netPayout,
+        a.currency
       )}.`
     );
 
@@ -208,7 +213,6 @@ function AccountRow({
         <div className="text-xs text-muted-foreground">
           {a.loginAccountNumber ?? "—"}
           {a.broker ? ` · ${a.broker}` : ""}
-          {a.currency !== "USD" ? ` · ${a.currency}` : ""}
         </div>
       </TableCell>
 
@@ -227,9 +231,26 @@ function AccountRow({
         )}
       </TableCell>
 
-      <TableCell className="text-right tabular-nums">{fmtUsd(a.openingBalance)}</TableCell>
+      <TableCell className="text-right tabular-nums">
+        {a.openingBalanceSource === "override" ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="underline decoration-dotted">
+                {fmtMoney(a.openingBalance, a.currency)}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              The programme's nominal size, set by hand. This account was moved into MetaCopier
+              part-way through, so its only recorded deposit is what it was worth on the day — not
+              what it started with.
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          fmtMoney(a.openingBalance, a.currency)
+        )}
+      </TableCell>
       <TableCell className="text-right tabular-nums font-medium">
-        {fmtUsd(a.currentEquity)}
+        {fmtMoney(a.currentEquity, a.currency)}
       </TableCell>
 
       <TableCell className="text-right tabular-nums">
@@ -238,26 +259,26 @@ function AccountRow({
             $0 Locked
           </Badge>
         ) : (
-          fmtUsd(a.target)
+          fmtMoney(a.target, a.currency)
         )}
       </TableCell>
 
-      <TableCell className="text-right tabular-nums">{fmtUsd(a.breachLevel)}</TableCell>
+      <TableCell className="text-right tabular-nums">{fmtMoney(a.breachLevel, a.currency)}</TableCell>
       <TableCell
         className={`text-right tabular-nums font-medium ${
           a.availableEquity != null && a.availableEquity < 0 ? "text-destructive" : ""
         }`}
       >
-        {fmtUsd(a.availableEquity)}
+        {fmtMoney(a.availableEquity, a.currency)}
       </TableCell>
 
       {anyLocked && (
         <>
           <TableCell className="text-right tabular-nums">
-            {a.locked ? fmtUsd(a.eligibleForPayout) : "—"}
+            {a.locked ? fmtMoney(a.eligibleForPayout, a.currency) : "—"}
           </TableCell>
           <TableCell className="text-right tabular-nums font-medium">
-            {a.locked ? fmtUsd(a.netPayout) : "—"}
+            {a.locked ? fmtMoney(a.netPayout, a.currency) : "—"}
           </TableCell>
           <TableCell className="text-right">
             {a.locked && (

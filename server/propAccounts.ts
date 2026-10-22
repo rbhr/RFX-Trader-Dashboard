@@ -72,8 +72,27 @@ export const PROP_FIRMS: PropFirmConfig[] = [
   },
 ];
 
+/**
+ * Opening balances MetaCopier cannot be asked for, keyed by account id.
+ *
+ * An account moved into MetaCopier part-way through its programme arrives as a
+ * single deposit of whatever it was worth on the day, not of what the programme
+ * was sold as. MetaCopier holds no record of the original figure, so for those
+ * accounts the nominal size has to be stated here or every figure derived from
+ * it — target, breach level, available equity, payout — is wrong.
+ *
+ * Keyed by account id rather than alias because an alias is editable in
+ * MetaCopier and a rename would silently drop the override.
+ */
+export const OPENING_BALANCE_OVERRIDES: Record<string, number> = {
+  // TCT 7533 L0 USD100K RR (login 147533). A $100K programme that was wired
+  // into MetaCopier on 2026-06-17 already down to $94,160.80, which is the only
+  // deposit on record.
+  "7130985f-64df-4ff7-9635-15eb88b57d12": 100_000,
+};
+
 /** How an opening balance was arrived at, so the screen can qualify it. */
-export type OpeningBalanceSource = "deposit" | "earliest-balance" | "unknown";
+export type OpeningBalanceSource = "deposit" | "override" | "earliest-balance" | "unknown";
 
 export interface PropAccountRow {
   accountId: string;
@@ -115,12 +134,24 @@ export interface PropAccountRow {
  * quietly walk the opening balance (and with it the target and breach level)
  * down by the amount already paid out.
  */
-export function deriveOpeningBalance(funding: AccountFunding): {
+export function deriveOpeningBalance(
+  funding: AccountFunding,
+  override?: number
+): {
   openingBalance: number | null;
   source: OpeningBalanceSource;
   fundedOn: string | null;
 } {
   const firstDeposit = funding.transactions.find(t => t.amount > 0);
+  // An override replaces only the amount. The funding date is still the real
+  // one, and is what the account actually started trading from.
+  if (override != null) {
+    return {
+      openingBalance: override,
+      source: "override",
+      fundedOn: firstDeposit?.date ?? null,
+    };
+  }
   if (firstDeposit) {
     return {
       openingBalance: firstDeposit.amount,
@@ -139,6 +170,15 @@ export function deriveOpeningBalance(funding: AccountFunding): {
     };
   }
   return { openingBalance: null, source: "unknown", fundedOn: null };
+}
+
+/**
+ * Money, to the cent. Without this, opening x 1.1 on a $100,000 account is
+ * 110000.00000000001, and every derived figure carries that noise into the
+ * payload and into any invoice built from it.
+ */
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
 }
 
 /** The account shape this module needs out of MetaCopier's /accounts response. */
@@ -168,21 +208,27 @@ export function derivePropAccount(
   const labels = account.labels ?? [];
   const locked = firm.lockedLabel != null && labels.includes(firm.lockedLabel);
 
-  const { openingBalance, source, fundedOn } = deriveOpeningBalance(funding);
+  const { openingBalance, source, fundedOn } = deriveOpeningBalance(
+    funding,
+    OPENING_BALANCE_OVERRIDES[account.id]
+  );
   const currentEquity = typeof info.equity === "number" ? info.equity : null;
 
-  const breachLevel = openingBalance == null ? null : openingBalance * firm.breachMultiple;
+  const breachLevel =
+    openingBalance == null ? null : round2(openingBalance * firm.breachMultiple);
   // A locked account's target has already been met, so showing one invites the
   // reader to measure against a number that no longer governs anything.
-  const target = locked || openingBalance == null ? null : openingBalance * firm.targetMultiple;
+  const target =
+    locked || openingBalance == null ? null : round2(openingBalance * firm.targetMultiple);
   const availableEquity =
-    currentEquity == null || breachLevel == null ? null : currentEquity - breachLevel;
+    currentEquity == null || breachLevel == null ? null : round2(currentEquity - breachLevel);
 
   const eligibleForPayout =
     locked && currentEquity != null && openingBalance != null
-      ? currentEquity - openingBalance
+      ? round2(currentEquity - openingBalance)
       : null;
-  const netPayout = eligibleForPayout == null ? null : eligibleForPayout * firm.payoutShare;
+  const netPayout =
+    eligibleForPayout == null ? null : round2(eligibleForPayout * firm.payoutShare);
 
   const warnings: string[] = [];
   if (openingBalance == null) {
