@@ -43,4 +43,16 @@ export const ENV = {
   metacopierDemoAccountId:
     process.env.METACOPIER_DEMO_ACCOUNT_ID ??
     "fda0e4b2-83c8-48f7-8b12-9664cdd0bd6e", // 474776952 "06 - exness Master Demo"
+  // Google OAuth client used to send invoice mail as a real person's mailbox.
+  // One client covers every Google sender, personal Gmail and Workspace alike.
+  // Scope is gmail.send only: the grant can send mail and cannot read any.
+  googleMailClientId: process.env.GOOGLE_MAIL_CLIENT_ID ?? "",
+  googleMailClientSecret: process.env.GOOGLE_MAIL_CLIENT_SECRET ?? "",
+  // Public origin the OAuth redirect comes back to. Must match the authorised
+  // redirect URI on the Google client exactly, scheme and host included.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? "").replace(/\/$/, ""),
+  // 32-byte key (64 hex chars) encrypting stored OAuth grants at rest, so a
+  // stray database dump is not a licence to send mail as somebody.
+  // Generate with: openssl rand -hex 32
+  emailTokenKey: process.env.EMAIL_TOKEN_KEY ?? "",
 };

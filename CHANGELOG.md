@@ -5,6 +5,65 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.9.0] — 2026-10-22
+
+### Added
+
+- **Invoice senders** — the app can now send mail as a named person's mailbox,
+  which is the first half of emailing prop invoices. Google only for this
+  release: personal Gmail and Workspace both work, Microsoft 365 needs the
+  Graph integration and is stubbed with a clear error.
+
+  Sending "from Helen" means authenticating as Helen, so there is no shared
+  relay and no spoofed `From`. Each mailbox owner authorises their own mailbox
+  through a one-time link and can withdraw it themselves in their Google
+  account. Mail genuinely comes from them: it lands in their Sent folder and
+  replies go to their inbox, which is the whole reason a transactional provider
+  was rejected — `gmail.com` cannot be DKIM-verified, so no provider can ever
+  send as a personal Gmail, and provider-sent mail loses the reply thread.
+
+  **The scope is `gmail.send` and nothing else.** That grant can send and
+  cannot read, search or delete a single message. For a sender who is using
+  their own personal mailbox that is the difference between lending us
+  permission to send and handing over their email, and it is why this uses
+  OAuth rather than an app password — an app password would have given this
+  server full read access to a personal inbox.
+
+  Authorisation lives outside the admin session, because the person consenting
+  owns the mailbox and has no login here. The authority travels in the link: a
+  single-use nonce, HMAC-signed, expiring after 7 days. Guessing one gains
+  nothing — the callback refuses a Google account that is not the invited
+  address, so the worst case is a burned invite. Consenting as the wrong
+  account (easy with several Google logins) is refused outright rather than
+  stored, since a silently substituted sender on an invoice is worse than a
+  failed send.
+
+  Both tokens are encrypted at rest with AES-256-GCM under `EMAIL_TOKEN_KEY`.
+  This host keeps ad-hoc `.sql` dumps in the deploy root, and a plaintext
+  refresh token in one of those is a standing authority to send mail as a real
+  person; the key lives only in `.env`, which is never dumped or committed.
+
+  A test-send button proves a grant end to end before an invoice depends on
+  it, and sends to an address the admin names so nothing reaches a client by
+  way of a test. A revoked or expired grant marks itself and surfaces on the
+  Props screen with a "New link" button rather than failing silently.
+
+  New env: `GOOGLE_MAIL_CLIENT_ID`, `GOOGLE_MAIL_CLIENT_SECRET`,
+  `PUBLIC_BASE_URL`, `EMAIL_TOKEN_KEY`. Until they are set the card says which
+  are missing and shows the exact redirect URI to register.
+
+- `logEvent` gained an `email` category, so authorisations, refusals and sends
+  are visible in the admin Logs tab.
+
+### Notes
+
+- MIME messages are built in-house (`server/mime.ts`) rather than pulling in a
+  mail library, since all that is needed is one well-formed message and the
+  alternative is a transitive dependency tree on a host holding custodial
+  wallet keys. The parts that actually bite are covered by 21 tests: CRLF line
+  endings, RFC 2047 headers, base64 wrapped at 76 columns, RFC 2231 filenames,
+  and header injection via a newline in a display name or subject.
+
 ## [4.8.0] — 2026-10-22
 
 ### Added

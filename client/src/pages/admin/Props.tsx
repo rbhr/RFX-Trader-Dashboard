@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Briefcase, FileText, Lock, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "@/lib/toast";
 import AdminLayout from "@/components/AdminLayout";
+import InvoiceSenders from "@/components/InvoiceSenders";
 
 type PropAccount = {
   accountId: string;
@@ -102,6 +103,8 @@ export default function Props() {
           ) : (
             firms.map(firm => <FirmSection key={firm.key} firm={firm} />)
           )}
+
+          <InvoiceSenders />
         </div>
       </TooltipProvider>
     </AdminLayout>

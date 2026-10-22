@@ -397,3 +397,48 @@ export const logs = mysqlTable("logs", {
 
 export type Log = typeof logs.$inferSelect;
 export type InsertLog = typeof logs.$inferInsert;
+
+/**
+ * Mailboxes the app may send invoices as, one row per address.
+ *
+ * Sending "from Helen" means authenticating as Helen, so each row holds an
+ * OAuth grant that she made herself and can revoke herself. The scope is
+ * send-only (`gmail.send`), so a leaked grant can send mail but cannot read a
+ * single message — which matters when one of the senders is somebody's personal
+ * Gmail rather than a company mailbox.
+ *
+ * Both tokens are encrypted at rest. The host keeps ad-hoc `.sql` dumps lying
+ * around (see the parent CLAUDE.md), and a plaintext refresh token in one of
+ * those is a standing authority to send mail as a real person; the key lives
+ * only in `.env`, which is never dumped and never committed.
+ */
+export const emailSenders = mysqlTable("email_senders", {
+  id: int("id").autoincrement().primaryKey(),
+  emailAddress: varchar("emailAddress", { length: 320 }).notNull().unique(),
+  provider: mysqlEnum("provider", ["google", "microsoft"]).notNull(),
+  /** Name on the From header, e.g. "Helen Cooper". Falls back to the address. */
+  displayName: varchar("displayName", { length: 120 }),
+  status: mysqlEnum("status", ["Invited", "Active", "Revoked", "Error"])
+    .default("Invited")
+    .notNull(),
+  refreshTokenEnc: text("refreshTokenEnc"),
+  accessTokenEnc: text("accessTokenEnc"),
+  accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
+  scope: varchar("scope", { length: 500 }),
+  /** Why the grant stopped working, shown to the admin so it can be re-invited. */
+  lastError: varchar("lastError", { length: 500 }),
+  /**
+   * Single-use nonce in the authorise link. The person consenting is not an RFX
+   * admin — Helen has no login here — so the link itself has to carry the
+   * authority, and it must be spendable exactly once.
+   */
+  inviteNonce: varchar("inviteNonce", { length: 64 }),
+  inviteExpiresAt: timestamp("inviteExpiresAt"),
+  authorizedAt: timestamp("authorizedAt"),
+  lastUsedAt: timestamp("lastUsedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailSender = typeof emailSenders.$inferSelect;
+export type InsertEmailSender = typeof emailSenders.$inferInsert;

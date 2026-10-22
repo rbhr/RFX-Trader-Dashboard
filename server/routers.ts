@@ -43,6 +43,9 @@ import {
   deleteRiskLimitBreach,
   clearResolvedRiskLimitBreaches,
   getLogsPaged,
+  listEmailSenders,
+  upsertEmailSenderInvite,
+  deleteEmailSender as deleteEmailSenderRow,
   getPreviousMagicNumbers,
   addPreviousMagicNumber,
   removePreviousMagicNumber,
@@ -68,6 +71,14 @@ import {
   type CopyScaling,
 } from "./metacopier";
 import { getPropFirmSections } from "./propAccounts";
+import {
+  newInviteNonce,
+  signInviteNonce,
+  hasEmailTokenKey,
+} from "./emailTokenCrypto";
+import { isGoogleMailConfigured, googleMailRedirectUri } from "./googleMail";
+import { inviteTtlMs } from "./emailOauthRoutes";
+import { sendAs, requireActiveSender } from "./invoiceSenders";
 import {
   DAILY_PROFIT_TARGET_DEFAULTS,
   FEATURE_DAILY_PROFIT_TARGET,
@@ -2741,6 +2752,144 @@ export const appRouter = router({
       return { firms: await getPropFirmSections() };
     }),
 
+    // --- Invoice mail senders ------------------------------------------
+    // Mailboxes the app may send invoices as. The grant belongs to the person
+    // who owns the mailbox, so the admin's job here is only to invite and to
+    // see state — never to hold a credential.
+
+    getEmailSenders: adminProcedure.query(async () => {
+      const senders = await listEmailSenders();
+      return {
+        configured: isGoogleMailConfigured(),
+        hasEncryptionKey: hasEmailTokenKey(),
+        redirectUri: googleMailRedirectUri(),
+        senders: senders.map(s => ({
+          id: s.id,
+          emailAddress: s.emailAddress,
+          provider: s.provider,
+          displayName: s.displayName,
+          status: s.status,
+          scope: s.scope,
+          lastError: s.lastError,
+          authorizedAt: s.authorizedAt,
+          lastUsedAt: s.lastUsedAt,
+          inviteExpiresAt: s.inviteExpiresAt,
+        })),
+      };
+    }),
+
+    /**
+     * Creates (or resets) a sender and returns the link for its owner to open.
+     *
+     * The link is returned rather than emailed: we have no way to send mail
+     * until at least one sender exists, and handing the admin the URL lets them
+     * pass it on however they already talk to that person.
+     */
+    inviteEmailSender: adminProcedure
+      .input(
+        z.object({
+          emailAddress: z.string().email().max(320),
+          displayName: z.string().max(120).optional(),
+          provider: z.enum(["google", "microsoft"]).default("google"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        if (!hasEmailTokenKey()) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "EMAIL_TOKEN_KEY is not set, so a grant could not be stored safely. " +
+              "Generate one with: openssl rand -hex 32",
+          });
+        }
+        if (input.provider === "google" && !isGoogleMailConfigured()) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Google mail sending is not configured. Set GOOGLE_MAIL_CLIENT_ID, " +
+              "GOOGLE_MAIL_CLIENT_SECRET and PUBLIC_BASE_URL.",
+          });
+        }
+
+        const nonce = newInviteNonce();
+        const signature = signInviteNonce(nonce);
+        const expiresAt = new Date(Date.now() + inviteTtlMs());
+
+        await upsertEmailSenderInvite({
+          emailAddress: input.emailAddress,
+          provider: input.provider,
+          displayName: input.displayName?.trim() || null,
+          inviteNonce: nonce,
+          inviteExpiresAt: expiresAt,
+        });
+
+        logEvent(
+          "email",
+          `Invited ${input.emailAddress} to authorise invoice sending (expires ${expiresAt.toISOString()})`
+        );
+
+        const path = input.provider === "google" ? "google" : "microsoft";
+        return {
+          url: `${ENV.publicBaseUrl}/api/email-oauth/${path}/start?n=${encodeURIComponent(
+            nonce
+          )}&s=${encodeURIComponent(signature)}`,
+          expiresAt,
+        };
+      }),
+
+    /**
+     * Proves a sender works end to end, which is the only way to know a grant
+     * is good before an invoice depends on it. Goes to an address the admin
+     * names, so nothing is sent to a client by way of a test.
+     */
+    testEmailSender: adminProcedure
+      .input(
+        z.object({
+          emailAddress: z.string().email().max(320),
+          to: z.string().email().max(320),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const sender = await requireActiveSender(input.emailAddress);
+        try {
+          const result = await sendAs(input.emailAddress, {
+            to: [{ email: input.to }],
+            subject: "RFX test message",
+            text:
+              `This is a test from the RFX dashboard, sent as ${sender.emailAddress}.\n\n` +
+              `If you are reading it in the right mailbox, invoice sending is working.\n` +
+              `A copy should also be in ${sender.emailAddress}'s Sent folder.\n`,
+            html:
+              `<p>This is a test from the RFX dashboard, sent as ` +
+              `<strong>${sender.emailAddress}</strong>.</p>` +
+              `<p>If you are reading it in the right mailbox, invoice sending is working. ` +
+              `A copy should also be in that mailbox's Sent folder.</p>`,
+          });
+          logEvent(
+            "email",
+            `Test message sent as ${sender.emailAddress} to ${input.to} (id ${result.messageId})`
+          );
+          return { success: true as const, messageId: result.messageId };
+        } catch (error: any) {
+          const detail = error?.message ?? "unknown error";
+          logEvent(
+            "email",
+            `Test message as ${input.emailAddress} failed: ${detail}`,
+            "error"
+          );
+          throw new TRPCError({ code: "BAD_REQUEST", message: detail });
+        }
+      }),
+
+    /** Forgets a sender entirely, grant included. */
+    deleteEmailSender: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        await deleteEmailSenderRow(input.id);
+        logEvent("email", `Removed mail sender ${input.id}`);
+        return { success: true as const };
+      }),
+
     getCopierPause: adminProcedure.query(async () => readCopierPause()),
 
     // All-copiers D / M / A. D and M PAUSE: every live copier that is currently
@@ -3353,6 +3502,7 @@ export const appRouter = router({
               "payment",
               "missed_trade",
               "limit_close",
+              "email",
               "system",
             ])
             .optional(),

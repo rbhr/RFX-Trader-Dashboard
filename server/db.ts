@@ -21,6 +21,8 @@ import {
   adminSettings,
   logs,
   InsertLog,
+  emailSenders,
+  type EmailSender,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -961,4 +963,179 @@ export async function getTrailingRiskLimitTraders() {
   } catch {
     return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// Mail senders — the mailboxes the app may send invoices as.
+// ---------------------------------------------------------------------------
+
+export async function listEmailSenders(): Promise<EmailSender[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(emailSenders).orderBy(emailSenders.emailAddress);
+}
+
+export async function getEmailSenderByAddress(
+  emailAddress: string
+): Promise<EmailSender | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select()
+    .from(emailSenders)
+    .where(eq(emailSenders.emailAddress, emailAddress.toLowerCase()))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getEmailSenderByNonce(
+  nonce: string
+): Promise<EmailSender | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select()
+    .from(emailSenders)
+    .where(eq(emailSenders.inviteNonce, nonce))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Creates or re-invites a sender. Re-inviting clears any existing grant: the
+ * old refresh token is about to be replaced, and leaving it in place would mean
+ * a half-finished re-invite still sends under the previous authorisation.
+ */
+export async function upsertEmailSenderInvite(params: {
+  emailAddress: string;
+  provider: "google" | "microsoft";
+  displayName: string | null;
+  inviteNonce: string;
+  inviteExpiresAt: Date;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const emailAddress = params.emailAddress.toLowerCase();
+  const existing = await getEmailSenderByAddress(emailAddress);
+
+  if (existing) {
+    await db
+      .update(emailSenders)
+      .set({
+        provider: params.provider,
+        displayName: params.displayName,
+        status: "Invited",
+        refreshTokenEnc: null,
+        accessTokenEnc: null,
+        accessTokenExpiresAt: null,
+        scope: null,
+        lastError: null,
+        inviteNonce: params.inviteNonce,
+        inviteExpiresAt: params.inviteExpiresAt,
+        authorizedAt: null,
+      })
+      .where(eq(emailSenders.id, existing.id));
+    return;
+  }
+
+  await db.insert(emailSenders).values({
+    emailAddress,
+    provider: params.provider,
+    displayName: params.displayName,
+    status: "Invited",
+    inviteNonce: params.inviteNonce,
+    inviteExpiresAt: params.inviteExpiresAt,
+  });
+}
+
+/**
+ * Stores a completed grant and spends the invite nonce, so an authorise link
+ * cannot be replayed.
+ */
+export async function activateEmailSender(params: {
+  id: number;
+  refreshTokenEnc: string;
+  accessTokenEnc: string;
+  accessTokenExpiresAt: Date;
+  scope: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({
+      status: "Active",
+      refreshTokenEnc: params.refreshTokenEnc,
+      accessTokenEnc: params.accessTokenEnc,
+      accessTokenExpiresAt: params.accessTokenExpiresAt,
+      scope: params.scope,
+      lastError: null,
+      inviteNonce: null,
+      inviteExpiresAt: null,
+      authorizedAt: new Date(),
+    })
+    .where(eq(emailSenders.id, params.id));
+}
+
+export async function updateEmailSenderAccessToken(
+  id: number,
+  accessTokenEnc: string,
+  accessTokenExpiresAt: Date
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({ accessTokenEnc, accessTokenExpiresAt })
+    .where(eq(emailSenders.id, id));
+}
+
+/**
+ * Marks a grant unusable. The refresh token is dropped rather than kept: it no
+ * longer works, and holding a dead credential only invites a future reader to
+ * think the sender is one retry away from working.
+ */
+export async function markEmailSenderRevoked(
+  id: number,
+  reason: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({
+      status: "Revoked",
+      lastError: reason,
+      refreshTokenEnc: null,
+      accessTokenEnc: null,
+      accessTokenExpiresAt: null,
+    })
+    .where(eq(emailSenders.id, id));
+}
+
+export async function recordEmailSenderError(
+  id: number,
+  reason: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({ status: "Error", lastError: reason })
+    .where(eq(emailSenders.id, id));
+}
+
+export async function touchEmailSenderUsed(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailSenders)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(emailSenders.id, id));
+}
+
+export async function deleteEmailSender(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(emailSenders).where(eq(emailSenders.id, id));
 }

@@ -5,6 +5,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerEmailOauthRoutes } from "../emailOauthRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -51,6 +52,10 @@ async function startServer() {
   app.use(cookieParser());
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Mailbox authorisation under /api/email-oauth/*. Deliberately outside the
+  // admin session: the person consenting owns the mailbox and has no login
+  // here, so the one-time signed link in the URL is the authority.
+  registerEmailOauthRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
