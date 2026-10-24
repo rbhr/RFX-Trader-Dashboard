@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { ENV } from "./_core/env";
 import type { ConfirmationResult, SendResult } from "./walletErrors";
+import { withWalletSendGate } from "./walletSendGate";
 
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -74,31 +75,38 @@ export async function sendUsdtErc20(
 ): Promise<SendResult> {
   const { contract, provider, wallet } = getInstances();
 
+  // Validated outside the gate: a bad address should not occupy the wallet.
   if (!ethers.isAddress(recipientAddress)) {
     throw new Error("Invalid EVM wallet address");
   }
 
-  // Pre-check native balance for gas
-  const nativeBalance = await provider.getBalance(wallet.address);
-  if (nativeBalance < MIN_GAS_BALANCE) {
-    const current = ethers.formatEther(nativeBalance);
-    const required = ethers.formatEther(MIN_GAS_BALANCE);
-    throw new Error(
-      `Insufficient gas balance — wallet holds ${current} ${ENV.evmChainName} native token, need at least ${required} to cover gas`,
-    );
-  }
+  // Gated because ethers picks the nonce itself, by asking the chain. Two
+  // transfers overlapping both get the same answer, and the second transaction
+  // then replaces the first instead of following it — one payout recorded as
+  // broadcast that never lands.
+  return withWalletSendGate(`ERC20 payout of ${amount.toFixed(2)} USDT`, async () => {
+    // Pre-check native balance for gas
+    const nativeBalance = await provider.getBalance(wallet.address);
+    if (nativeBalance < MIN_GAS_BALANCE) {
+      const current = ethers.formatEther(nativeBalance);
+      const required = ethers.formatEther(MIN_GAS_BALANCE);
+      throw new Error(
+        `Insufficient gas balance — wallet holds ${current} ${ENV.evmChainName} native token, need at least ${required} to cover gas`,
+      );
+    }
 
-  const rawAmount = BigInt(Math.round(amount * Number(USDT_DECIMALS)));
+    const rawAmount = BigInt(Math.round(amount * Number(USDT_DECIMALS)));
 
-  // Anything that throws before this line never reached the network, so it is
-  // safe to report as a failure. Once `transfer` resolves we hold a broadcast
-  // transaction and the hash must never be lost, or the caller may retry and
-  // double-send real funds.
-  const tx = await contract.transfer(recipientAddress, rawAmount);
-  const txHash = tx.hash as string;
+    // Anything that throws before this line never reached the network, so it is
+    // safe to report as a failure. Once `transfer` resolves we hold a broadcast
+    // transaction and the hash must never be lost, or the caller may retry and
+    // double-send real funds.
+    const tx = await contract.transfer(recipientAddress, rawAmount);
+    const txHash = tx.hash as string;
 
-  console.log(`[EVM] USDT transfer broadcast: ${txHash}`);
-  return { txHash, confirmed: false, transferId: null };
+    console.log(`[EVM] USDT transfer broadcast: ${txHash}`);
+    return { txHash, confirmed: false, transferId: null };
+  });
 }
 
 /**

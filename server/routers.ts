@@ -145,7 +145,7 @@ import {
   isEvmConfigured,
 } from "./erc20";
 import { ENV } from "./_core/env";
-import { TxFailedError, type SendResult } from "./walletErrors";
+import { TxFailedError, WalletBusyError, type SendResult } from "./walletErrors";
 import { checkRateLimit, resetRateLimit } from "./rateLimit";
 import { randomInt } from "crypto";
 
@@ -154,6 +154,32 @@ const BCRYPT_ROUNDS = 12;
 
 // Trader IDs with a wallet payout currently being broadcast (double-send guard)
 const inFlightWalletPayments = new Set<number>();
+
+/**
+ * Turns a send-path throw into the tRPC error the admin screen sees.
+ *
+ * Everything the send paths throw happened *before* the transfer reached the
+ * network, so no payment is recorded and no baseline moved — but a wallet that
+ * is merely busy has to stay distinguishable from one that failed, or the
+ * client cannot know that retrying the identical payout is safe. That is what
+ * TOO_MANY_REQUESTS carries.
+ *
+ * Every case is written to the payment log. A rejected payout that leaves no
+ * trace in the Logs tab is a payout nobody knows to re-send: three were
+ * rejected on 2026-10-24 and the only record was the container's console.
+ */
+function walletSendError(err: any, who: string): TRPCError {
+  if (err instanceof WalletBusyError) {
+    logEvent("payment", `Payout to ${who} was not sent — ${err.message}`, "warn");
+    return new TRPCError({ code: "TOO_MANY_REQUESTS", message: err.message });
+  }
+
+  const detail = err instanceof TxFailedError
+    ? `Transfer failed — no funds were sent. ${err.message}`
+    : (err?.message ?? "On-chain transaction failed");
+  logEvent("payment", `Payout to ${who} was not sent — ${detail}`, "error");
+  return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: detail });
+}
 
 // In Testing Mode, payout sends are redirected here (a TRON/TRC20 wallet we
 // control) instead of the trader's real address, so the on-chain pipeline can
@@ -4020,17 +4046,10 @@ export const appRouter = router({
             // Both send paths only throw for failures that happened *before*
             // the transfer reached the network, so nothing was sent and no
             // payment is recorded.
-            if (err instanceof TxFailedError) {
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: `Transfer failed — no funds were sent. ${err.message}`,
-              });
-            }
-
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: err?.message ?? "On-chain transaction failed",
-            });
+            throw walletSendError(
+              err,
+              `${trader.name} (${trader.magicNumber})`
+            );
           }
 
           // Broadcast. Record it before returning, so the payout survives a
@@ -4355,16 +4374,10 @@ export const appRouter = router({
             // Both send paths only throw for failures that happened before the
             // transfer reached the network, so nothing was sent, nothing is
             // recorded and the baseline is untouched.
-            if (err instanceof TxFailedError) {
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: `Transfer failed — no funds were sent. ${err.message}`,
-              });
-            }
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: err?.message ?? "On-chain transaction failed",
-            });
+            throw walletSendError(
+              err,
+              `${trader.name} (${trader.magicNumber})`
+            );
           }
 
           const recordedHash =

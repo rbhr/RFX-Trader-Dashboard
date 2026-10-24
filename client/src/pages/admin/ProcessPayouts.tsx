@@ -66,6 +66,33 @@ import {
 
 const TEST_ADDRESS = "TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9";
 
+/**
+ * Pacing for a payout run.
+ *
+ * The wallet takes one transfer at a time: GasFree will not accept another
+ * until the previous one has left its pending state, which has taken anywhere
+ * from two seconds to a minute. The server returns as soon as the transaction
+ * hash is published — about a second — so this loop reaches the next payout
+ * long before the wallet is ready for it and is told so.
+ *
+ * The waiting therefore happens here, between requests, rather than on the
+ * server inside one. Holding a payout request open is what the broadcast-and-
+ * settle split exists to avoid: the browser gives up at around sixty seconds
+ * and reports a payout that actually succeeded as failed.
+ *
+ * A run of nine traders consequently takes a few minutes. That is the wallet's
+ * real throughput, not a delay we have added.
+ */
+const BUSY_RETRY_MS = 20_000;
+const BUSY_MAX_ATTEMPTS = 6;
+
+/** The server says the wallet is busy and this exact payout can be retried. */
+const isWalletBusy = (e: any) =>
+  e?.data?.code === "TOO_MANY_REQUESTS" ||
+  e?.shape?.data?.code === "TOO_MANY_REQUESTS";
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 type PayoutRow = {
   id: number;
   name: string;
@@ -113,6 +140,9 @@ export default function ProcessPayouts() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
+  // What the run is doing right now, so a wait for the wallet reads as progress
+  // rather than as a page that has hung.
+  const [runStatus, setRunStatus] = useState<string | null>(null);
   const [settleTarget, setSettleTarget] = useState<PayoutRow | null>(null);
   const [adjustTarget, setAdjustTarget] = useState<PayoutRow | null>(null);
   const [adjustDelta, setAdjustDelta] = useState<string>("");
@@ -238,22 +268,49 @@ export default function ProcessPayouts() {
     const targets = payableRows.filter(r => selected.has(r.id));
     let ok = 0;
     const fails: string[] = [];
-    for (const r of targets) {
-      try {
-        await processMutation.mutateAsync({
-          magicNumberId: r.id,
-          from: new Date(from),
-          to: new Date(to),
-          expectedPayoutAmount: r.payoutAmount,
-          cycle,
-          testingMode,
-        });
-        ok++;
-      } catch (e: any) {
-        fails.push(`${r.name}: ${e?.message || "failed"}`);
+
+    for (let i = 0; i < targets.length; i++) {
+      const r = targets[i];
+      const position = `${i + 1} of ${targets.length}`;
+
+      // Retry only on a busy wallet, and only the identical payout. The server
+      // has already confirmed nothing was sent, and it re-checks the figure
+      // against a fresh calculation each attempt, so a retry cannot pay twice
+      // or pay the wrong amount.
+      for (let attempt = 1; attempt <= BUSY_MAX_ATTEMPTS; attempt++) {
+        setRunStatus(`Paying ${r.name} (${position})…`);
+        try {
+          await processMutation.mutateAsync({
+            magicNumberId: r.id,
+            from: new Date(from),
+            to: new Date(to),
+            expectedPayoutAmount: r.payoutAmount,
+            cycle,
+            testingMode,
+          });
+          ok++;
+          break;
+        } catch (e: any) {
+          if (isWalletBusy(e) && attempt < BUSY_MAX_ATTEMPTS) {
+            setRunStatus(
+              `Waiting for the wallet to clear the previous transfer, then ` +
+                `paying ${r.name} (${position}) — attempt ${attempt + 1} of ${BUSY_MAX_ATTEMPTS}.`
+            );
+            await sleep(BUSY_RETRY_MS);
+            continue;
+          }
+          fails.push(
+            isWalletBusy(e)
+              ? `${r.name}: wallet still busy after ${BUSY_MAX_ATTEMPTS} attempts — nothing was sent, retry them`
+              : `${r.name}: ${e?.message || "failed"}`
+          );
+          break;
+        }
       }
     }
+
     setProcessing(false);
+    setRunStatus(null);
     if (fails.length === 0) {
       toast.success(`Processed ${ok} payout${ok !== 1 ? "s" : ""}`);
     } else {
@@ -536,9 +593,13 @@ export default function ProcessPayouts() {
                       </div>
                     )}
                     {processing && (
-                      <div className="text-xs text-amber-600 flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Processing — keep this tab open until it finishes.
+                      <div className="text-xs text-amber-600 flex items-start gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin mt-0.5 shrink-0" />
+                        <span>
+                          {runStatus ?? "Processing…"} Keep this tab open until it
+                          finishes — the wallet sends one payout at a time, so a
+                          run of several takes a few minutes.
+                        </span>
                       </div>
                     )}
                   </div>

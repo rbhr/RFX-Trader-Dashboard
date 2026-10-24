@@ -5,6 +5,60 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.11.0] — 2026-10-24
+
+### Fixed
+
+- **A payout run no longer reports payouts as failed when the wallet is simply
+  busy.** Three payouts were rejected in a three-second burst on 24 October
+  with `GasFree API error: too many pending transfers`, and the admin was shown
+  a failure for each.
+
+  Nothing was wrong with those payouts. GasFree accepts one transfer at a time
+  per account, and since 4.2.0 a payout returns as soon as the transaction hash
+  is published — about a second — rather than when the transfer settles, which
+  took anywhere from two seconds to a minute. So even the strictly serial run
+  loop reached the next submit while the previous transfer was still pending,
+  and was refused. That is back-pressure, not failure: nothing had been sent
+  and the identical payout could have gone through a moment later.
+
+  GasFree's refusal is now typed as `WalletBusyError` and surfaced as
+  `TOO_MANY_REQUESTS`, and the payout run waits twenty seconds and retries the
+  same trader, up to six times, instead of recording a failure. The waiting
+  happens in the browser between short requests rather than inside one, because
+  holding a payout request open is exactly what 4.2.0 exists to avoid — the
+  browser gives up at around sixty seconds and reports a payout that succeeded
+  as failed.
+
+  A nine-trader run therefore takes a few minutes. That is the wallet's real
+  throughput, and the screen now says so while it works rather than looking
+  like it has hung.
+
+- **A rejected payout is written to the payment log.** Every send-path failure
+  now goes through one `walletSendError` helper that logs before it throws. The
+  three rejections on 24 October left no trace in the Logs tab at all — only in
+  the container's console, which rotates — so a payout nobody was paid was also
+  a payout nobody knew to re-send.
+
+### Added
+
+- **One wallet broadcast at a time, across every network and every trader**
+  (`walletSendGate`). Both send paths sign against a nonce they read first —
+  GasFree from its own API, ethers from the chain — so two overlapping sends
+  mean two signatures over the same nonce. On GasFree the second is rejected;
+  on EVM one transaction silently *replaces* the other, which would leave a
+  payout recorded as broadcast that never lands.
+
+  `routers.ts` already refused a second payout for the same trader, but that
+  guard is keyed by trader: two browser tabs, or two admins, could still pay
+  two different traders in the same moment. The gate refuses rather than
+  queues, for the same reason the retry lives in the client — a queued request
+  would be a held-open one.
+
+- GasFree's own response `code` is now carried on the error it raises, so the
+  one place that has to match on a message string has a sturdier discriminator
+  available the day we learn which code means what.
+
 ## [4.10.0] — 2026-10-22
 
 ### Added

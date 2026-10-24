@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { TxFailedError } from "./walletErrors";
+import { TxFailedError, WalletBusyError } from "./walletErrors";
 
 // A payout returns as soon as the transfer has a hash; settlement is left to
 // paymentConfirmer. These pin what that contract has to guarantee for money:
@@ -12,6 +12,8 @@ const g = vi.hoisted(() => ({
   statusQueue: [] as any[],
   lastStatus: null as any,
   statusPolls: 0,
+  /** Set to make the submit call return a refusal instead of a transfer id. */
+  submitResponse: null as any,
 }));
 
 vi.mock("./_core/env", () => ({
@@ -56,10 +58,16 @@ function jsonOk(data: any) {
   return { ok: true, status: 200, json: async () => ({ code: 200, data }) };
 }
 
+/** How GasFree refuses: HTTP 200, with a non-200 code in the body. */
+function jsonRefusal(message: string, code = 400) {
+  return { ok: true, status: 200, json: async () => ({ code, message }) };
+}
+
 beforeEach(() => {
   g.statusQueue = [];
   g.lastStatus = null;
   g.statusPolls = 0;
+  g.submitResponse = null;
 
   vi.stubGlobal(
     "fetch",
@@ -75,7 +83,8 @@ beforeEach(() => {
         return jsonOk({
           tokens: [{ tokenAddress: "TUsdtContract", transferFee: "2000000" }],
         });
-      if (url.includes("/gasfree/submit")) return jsonOk({ id: "transfer-1" });
+      if (url.includes("/gasfree/submit"))
+        return g.submitResponse ?? jsonOk({ id: "transfer-1" });
       if (url.includes("/gasfree/transfer-1")) {
         g.statusPolls++;
         if (g.statusQueue.length) g.lastStatus = g.statusQueue.shift();
@@ -170,5 +179,73 @@ describe("GasFree transfer confirmation", () => {
     });
     // Polled repeatedly rather than giving up after one look.
     expect(g.statusPolls).toBeGreaterThan(5);
+  });
+});
+
+/**
+ * GasFree takes one transfer at a time per account, and a payout returns as
+ * soon as the hash is published rather than when the transfer settles — so a
+ * serial run reaches the next submit while the previous one is still pending
+ * and is refused. That refusal is back-pressure: nothing was sent, and the
+ * identical payout can be retried. Confusing it with a failure sent an admin
+ * looking for a problem that was not there, three times on 2026-10-24.
+ */
+describe("GasFree back-pressure", () => {
+  it("reports a busy wallet as retryable, not as a failed transfer", async () => {
+    const { sendUsdt } = await import("./tron");
+    g.submitResponse = jsonRefusal("too many pending transfers");
+
+    const err = await sendUsdt("TRecipient", 10).catch(e => e);
+    expect(err).toBeInstanceOf(WalletBusyError);
+    expect(err).not.toBeInstanceOf(TxFailedError);
+  });
+
+  it("says plainly that nothing was sent", async () => {
+    const { sendUsdt } = await import("./tron");
+    g.submitResponse = jsonRefusal("too many pending transfers");
+
+    const err = await sendUsdt("TRecipient", 10).catch(e => e);
+    expect(err.message).toContain("nothing was sent");
+  });
+
+  it("matches the refusal whatever case GasFree sends it in", async () => {
+    const { sendUsdt } = await import("./tron");
+    g.submitResponse = jsonRefusal("Too Many Pending Transfers");
+
+    await expect(sendUsdt("TRecipient", 10)).rejects.toBeInstanceOf(WalletBusyError);
+  });
+
+  it("leaves every other refusal a plain error", async () => {
+    // Only the pending-transfer limit is retryable. Treating, say, a balance
+    // problem as back-pressure would have the caller retry it six times.
+    const { sendUsdt } = await import("./tron");
+    g.submitResponse = jsonRefusal("insufficient balance");
+
+    const err = await sendUsdt("TRecipient", 10).catch(e => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(WalletBusyError);
+    expect(err.message).toContain("insufficient balance");
+  });
+
+  it("keeps GasFree's own code on the error, for a sturdier match later", async () => {
+    const { sendUsdt } = await import("./tron");
+    g.submitResponse = jsonRefusal("insufficient balance", 4001);
+
+    const err: any = await sendUsdt("TRecipient", 10).catch(e => e);
+    expect(err.gasFreeCode).toBe(4001);
+  });
+
+  it("frees the wallet after a refusal, so the retry can actually go through", async () => {
+    // The gate must not be left held by a send that was turned away, or one
+    // busy wallet would wedge every later payout until the container restarted.
+    const { sendUsdt } = await import("./tron");
+    g.submitResponse = jsonRefusal("too many pending transfers");
+    await expect(sendUsdt("TRecipient", 10)).rejects.toBeInstanceOf(WalletBusyError);
+
+    g.submitResponse = null;
+    g.statusQueue = [{ state: "SUCCESS", txnHash: "0xabc" }];
+    await expect(sendUsdt("TRecipient", 10)).resolves.toMatchObject({
+      txHash: "0xabc",
+    });
   });
 });

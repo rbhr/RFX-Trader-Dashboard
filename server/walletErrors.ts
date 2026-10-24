@@ -50,3 +50,26 @@ export type ConfirmationResult = {
   /** Human-readable detail for a failure. */
   detail: string;
 };
+
+/**
+ * The wallet cannot take another transfer *yet*, and nothing was sent.
+ *
+ * Deliberately distinct from `TxFailedError`, which means this payout will
+ * never work. A busy wallet means the *same* payout can be retried unchanged
+ * once the previous one clears, so the caller should wait rather than report a
+ * failure an admin will go looking for a cause for.
+ *
+ * GasFree accepts one transfer at a time per account, and a payout now returns
+ * as soon as the hash is published rather than when the transfer settles — so
+ * even a strictly serial run of payouts routinely reaches the next submit while
+ * the previous transfer is still pending. That is back-pressure, not failure.
+ */
+export class WalletBusyError extends Error {
+  /** Roughly how long to wait before retrying the same payout. */
+  retryAfterMs: number;
+  constructor(message: string, retryAfterMs = 20_000) {
+    super(message);
+    this.name = "WalletBusyError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}

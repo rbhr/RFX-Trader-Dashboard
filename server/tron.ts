@@ -3,9 +3,11 @@ import { createHmac } from "crypto";
 import { ENV } from "./_core/env";
 import {
   TxFailedError,
+  WalletBusyError,
   type ConfirmationResult,
   type SendResult,
 } from "./walletErrors";
+import { withWalletSendGate } from "./walletSendGate";
 
 const USDT_DECIMALS = 1_000_000;
 
@@ -123,6 +125,20 @@ function gasFreeHeaders(method: string, apiPath: string): Record<string, string>
   };
 }
 
+/**
+ * GasFree reports a refusal as HTTP 200 with a non-200 `code` in the body. The
+ * code is carried on the error because the message is the only thing we can
+ * currently tell refusals apart by, and a numeric code would be a sturdier
+ * discriminator the moment we know which one means what.
+ */
+function gasFreeApiError(json: any): Error {
+  const err = new Error(
+    `GasFree API error: ${json.message || json.reason || JSON.stringify(json)}`
+  );
+  (err as any).gasFreeCode = json.code ?? null;
+  return err;
+}
+
 async function gasFreeGet(path: string): Promise<any> {
   const res = await fetch(`${GASFREE_API_BASE}${path}`, {
     headers: gasFreeHeaders("GET", path),
@@ -132,7 +148,7 @@ async function gasFreeGet(path: string): Promise<any> {
   }
   const json = await res.json();
   if (json.code && json.code !== 200) {
-    throw new Error(`GasFree API error: ${json.message || json.reason || JSON.stringify(json)}`);
+    throw gasFreeApiError(json);
   }
   return json;
 }
@@ -148,12 +164,25 @@ async function gasFreePost(path: string, body: any): Promise<any> {
   }
   const json = await res.json();
   if (json.code && json.code !== 200) {
-    throw new Error(`GasFree API error: ${json.message || json.reason || JSON.stringify(json)}`);
+    throw gasFreeApiError(json);
   }
   return json;
 }
 
 // ─── GasFree transfer ─────────────────────────────────────────────
+
+/**
+ * GasFree's "one transfer at a time per account" back-pressure.
+ *
+ * Matched on the message text, which is not how money code should normally
+ * branch — but it is the only discriminator GasFree gives us today, and the
+ * match is narrow on purpose. It only ever reclassifies a refusal of the
+ * *submit* call, which by definition created no transfer, so a false positive
+ * here costs a retry and can never cost a double-send.
+ */
+function isPendingTransferLimit(err: unknown): boolean {
+  return /too many pending transfers/i.test(String((err as any)?.message ?? ""));
+}
 
 /**
  * Sends USDT via GasFree (no TRX needed — fee deducted in USDT).
@@ -215,18 +244,29 @@ async function sendUsdtGasFree(
   );
 
   // 6. Submit
-  const submitResult = await gasFreePost("/api/v1/gasfree/submit", {
-    token: ENV.tronUsdtContract,
-    serviceProvider: provider.address,
-    user: userAddress,
-    receiver: recipientAddress,
-    value: rawAmount,
-    maxFee: transferFeeRaw.toString(),
-    deadline: deadline.toString(),
-    version: "1",
-    nonce: nonce.toString(),
-    sig: signature,
-  });
+  let submitResult: any;
+  try {
+    submitResult = await gasFreePost("/api/v1/gasfree/submit", {
+      token: ENV.tronUsdtContract,
+      serviceProvider: provider.address,
+      user: userAddress,
+      receiver: recipientAddress,
+      value: rawAmount,
+      maxFee: transferFeeRaw.toString(),
+      deadline: deadline.toString(),
+      version: "1",
+      nonce: nonce.toString(),
+      sig: signature,
+    });
+  } catch (err: any) {
+    if (isPendingTransferLimit(err)) {
+      throw new WalletBusyError(
+        "GasFree is still settling this wallet's previous payout and would not " +
+          "accept another, so nothing was sent. It usually clears within a minute."
+      );
+    }
+    throw err;
+  }
 
   const transferId = submitResult.data?.id;
   if (!transferId) {
@@ -401,29 +441,32 @@ export async function sendUsdt(
 ): Promise<SendResult> {
   const tronWeb = getTronWeb();
 
+  // Validated outside the gate: a bad address should not occupy the wallet.
   if (!tronWeb.isAddress(recipientAddress)) {
     throw new Error("Invalid TRON wallet address");
   }
 
-  // Use GasFree if configured — no fallback to avoid double-sending
-  if (isGasFreeConfigured()) {
-    console.log("[TRON] Sending via GasFree...");
-    const result = await sendUsdtGasFree(recipientAddress, amount);
-    console.log(
-      `[TRON] GasFree transfer broadcast: ${result.txHash ?? `(no hash yet, id ${result.transferId})`}${result.confirmed ? " — already confirmed" : ""}`
-    );
-    return result;
-  }
+  return withWalletSendGate(`TRC20 payout of ${amount.toFixed(2)} USDT`, async () => {
+    // Use GasFree if configured — no fallback to avoid double-sending
+    if (isGasFreeConfigured()) {
+      console.log("[TRON] Sending via GasFree...");
+      const result = await sendUsdtGasFree(recipientAddress, amount);
+      console.log(
+        `[TRON] GasFree transfer broadcast: ${result.txHash ?? `(no hash yet, id ${result.transferId})`}${result.confirmed ? " — already confirmed" : ""}`
+      );
+      return result;
+    }
 
-  // Standard TRC-20 transfer (requires TRX for fees)
-  console.log("[TRON] Sending via standard TRC-20 transfer...");
-  const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
-  const rawAmount = Math.round(amount * USDT_DECIMALS);
+    // Standard TRC-20 transfer (requires TRX for fees)
+    console.log("[TRON] Sending via standard TRC-20 transfer...");
+    const contract = await tronWeb.contract().at(ENV.tronUsdtContract);
+    const rawAmount = Math.round(amount * USDT_DECIMALS);
 
-  const txHash = (await contract
-    .transfer(recipientAddress, rawAmount)
-    .send({ feeLimit: 100_000_000 })) as string;
+    const txHash = (await contract
+      .transfer(recipientAddress, rawAmount)
+      .send({ feeLimit: 100_000_000 })) as string;
 
-  // Broadcast, not yet confirmed — paymentConfirmer settles it by hash.
-  return { txHash, confirmed: false, transferId: null };
+    // Broadcast, not yet confirmed — paymentConfirmer settles it by hash.
+    return { txHash, confirmed: false, transferId: null };
+  });
 }
