@@ -171,7 +171,13 @@ const inFlightWalletPayments = new Set<number>();
 function walletSendError(err: any, who: string): TRPCError {
   if (err instanceof WalletBusyError) {
     logEvent("payment", `Payout to ${who} was not sent — ${err.message}`, "warn");
-    return new TRPCError({ code: "TOO_MANY_REQUESTS", message: err.message });
+    // The cause is what tells the error log this is back-pressure rather than a
+    // failure. The code alone cannot: the brute-force caps answer with it too.
+    return new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: err.message,
+      cause: err,
+    });
   }
 
   const detail = err instanceof TxFailedError

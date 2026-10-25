@@ -5,6 +5,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.11.1] — 2026-10-25
+
+### Fixed
+
+- **A busy wallet no longer writes an error line for a payout that then
+  succeeded.** 4.11.0 worked first time in production: on 25 October a payout
+  to Samad was refused one second after Farhan's was broadcast, the admin
+  screen waited and sent the identical payout again 23 seconds later, and both
+  settled and were announced. But the generic tRPC error handler had logged
+  `[trpc] mutation admin.processProfitSharePayout failed: TOO_MANY_REQUESTS`
+  along the way, so a payout run that went perfectly left a line reading like a
+  fault in a console that is grepped for exactly that.
+
+  Back-pressure is now reported as what it is, at warn level and without the
+  word "failed". The distinction is drawn on the error's `cause` being a
+  `WalletBusyError`, deliberately not on the `TOO_MANY_REQUESTS` code: the
+  app's three other uses of that code are the brute-force caps on login, 2FA
+  verification and password-reset requests, where a burst is evidence of an
+  attack and has to stay loud. Those are unchanged.
+
 ## [4.11.0] — 2026-10-24
 
 ### Fixed

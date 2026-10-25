@@ -69,11 +69,14 @@ async function startServer() {
       // loading slowly, and nothing said so. Input is deliberately not logged:
       // it carries passwords and 2FA codes.
       //
-      // formatTrpcError keeps external probes for procedures we do not have
-      // from burying the failures that matter; see its comment.
+      // formatTrpcError keeps external probes for procedures we do not have,
+      // and a wallet declining a payout it will take a moment later, from
+      // burying the failures that matter; see its comment.
       onError({ error, path, type }) {
-        const line = formatTrpcError(error, path, type);
-        if (line) console.error(line);
+        const entry = formatTrpcError(error, path, type);
+        if (!entry) return;
+        if (entry.level === "warn") console.warn(entry.line);
+        else console.error(entry.line);
       },
     })
   );
