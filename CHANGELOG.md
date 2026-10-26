@@ -37,13 +37,19 @@ hash.
   it. `evaluateSkip` and the new `copierCopiesNewTrades` are now exported and
   covered by `server/missedTradeMonitor.test.ts`, which the monitor had none of.
 
-### Known issue
+- **The trader's copier panel no longer tells a monitor-only trader their
+  trades are copying.** `trading.getCopierSettings` derived `notCopiedReason`
+  from `active` alone — the same mistaken assumption as above, on the surface
+  the trader actually reads. A monitor-only copier showed as copying normally,
+  which was 20 of the 21 traders carrying a Skip position rule, and it also
+  meant the news-blackout check ran against a copier that copies nothing.
 
-- The trader-facing copier panel (`trading.getCopierSettings`) derives
-  `notCopiedReason` from `active` alone, so it still reports a monitor-only
-  copier as copying normally. Same mistaken assumption, different surface, and
-  it only mislabels a panel rather than closing anything — left for a separate
-  change.
+  The panel now distinguishes all three states, with a third reason,
+  `"manage"`, reusing the wording of the `copierManage` notification the app
+  already sends when an admin makes that change: new trades are not copied, open
+  trades are still managed. English, Urdu and Arabic together. The existing
+  "not counted toward profit share" warning applies unchanged, since new trades
+  genuinely do not reach live in this state.
 
 ## [4.11.1] — 2026-10-25
 

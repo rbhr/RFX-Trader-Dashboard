@@ -1487,13 +1487,24 @@ export const appRouter = router({
           return null;
         }
 
-        // A disabled copier is an admin decision. An active one still skips
-        // new trades while its news filter is inside a blackout window.
-        let notCopiedReason: "admin" | "news" | null = traderCopier.active
-          ? null
-          : "admin";
+        // MetaCopier has three copier states and all three matter here. A
+        // disabled copier is an admin decision; a monitor-only one copies no
+        // new trades while still managing the open ones, which is its own
+        // thing to say and not the same as being switched off; and an active
+        // one still skips new trades while its news filter is inside a
+        // blackout window.
+        //
+        // Reading `active` alone reported monitor-only as copying normally,
+        // which was 20 of the 21 traders carrying a Skip position rule.
+        const copies =
+          traderCopier.active === true && traderCopier.monitorOnly !== true;
+        let notCopiedReason: "admin" | "manage" | "news" | null = !traderCopier.active
+          ? "admin"
+          : traderCopier.monitorOnly
+            ? "manage"
+            : null;
         let newsBlock: NewsBlock | null = null;
-        if (traderCopier.active) {
+        if (copies) {
           try {
             newsBlock = await getCopierNewsBlock(
               liveAccountId,
@@ -1515,6 +1526,7 @@ export const appRouter = router({
           multiplier: traderCopier.multiplier,
           fixedLotSize: traderCopier.fixedLotSize,
           isActive: traderCopier.active,
+          monitorOnly: !!traderCopier.monitorOnly,
           notCopiedReason,
           newsBlock,
           liveAccountNumber,

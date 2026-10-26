@@ -117,6 +117,8 @@ export const en = {
       "Your trades are not being copied into the Live Account due to News.",
     notCopiedAdmin:
       "Your trades are not being copied into the Live Account - Disabled by your Administrator.",
+    notCopiedManage:
+      "New trades are not being copied into the Live Account; your open trades are still managed.",
     notCountedWarning:
       "If you place trades now, they are not counted toward profit share since they are not executed in the Live Account.",
     newsDetail: "{symbols}: {title}, until {time}",

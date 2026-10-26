@@ -752,7 +752,9 @@ export default function Dashboard(props: {
                         <p className="text-base font-bold text-red-600">
                           {copierInfo.notCopiedReason === "news"
                             ? t("dashboard.notCopiedNews")
-                            : t("dashboard.notCopiedAdmin")}
+                            : copierInfo.notCopiedReason === "manage"
+                              ? t("dashboard.notCopiedManage")
+                              : t("dashboard.notCopiedAdmin")}
                         </p>
                         <p className="text-sm text-red-600">
                           {t("dashboard.notCountedWarning")}
