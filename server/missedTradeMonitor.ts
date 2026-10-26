@@ -14,6 +14,17 @@
  * violates that trader's OWN copier type-31 rule, so we exactly mirror what the
  * copier itself skipped. Failures are logged and retried next cycle; the trader
  * is notified only on a successful close, so there is no notification spam.
+ *
+ * Mirroring the copier means mirroring whether it copies at all. A copier only
+ * *skips* a trade it would otherwise have copied, so the rule is conditional on
+ * the copier being live: a disabled copier copies nothing and a monitor-only
+ * one copies no new trades, and in neither case is the missing SL/TP the reason
+ * a trade did not reach live. This monitor used to look only for the type-31
+ * feature and not at the copier carrying it, which on 2026-10-26 closed an
+ * XAUUSD position belonging to Zeeshan DZero (51190) — whose copier to live is
+ * disabled — and told them the SL/TP was why. Because the incubator account is
+ * the master of a dozen further copiers, that close propagated to every active
+ * one of them.
  */
 
 import { getAllActiveMagicNumbers } from "./db";
@@ -51,11 +62,30 @@ function isPendingOrder(p: any): boolean {
 }
 
 /**
+ * Whether this copier copies new trades at all, and so whether its type-31 rule
+ * can be the reason one did not reach live.
+ *
+ * MetaCopier has three states and the API spells both of them out: `active`
+ * false means "fully disabled/detached, will not copy any new trades and
+ * existing open positions are no longer managed", and `monitorOnly` true means
+ * "manages existing open positions but will not copy any new trades". The app
+ * shows these as DISABLED and MANAGE. A type-31 feature attached to either is
+ * inert — features have no `active` flag of their own, so the copier's state is
+ * the only thing that arms one.
+ */
+export function copierCopiesNewTrades(copier: {
+  active?: boolean;
+  monitorOnly?: boolean;
+}): boolean {
+  return copier.active === true && copier.monitorOnly !== true;
+}
+
+/**
  * Given the copier's type-31 `setting` and a position, decide whether the copier
  * would have skipped it (and which protection was missing). Mirrors MetaCopier's
  * own semantics: ifSlNotDefined / ifTpNotDefined gated by logicOperatorTpSl.
  */
-function evaluateSkip(
+export function evaluateSkip(
   setting: any,
   position: any
 ): { skipped: boolean; missing: string } {
@@ -157,6 +187,10 @@ async function checkAllTraders(): Promise<void> {
             String(c.customMagicNumber) === String(trader.magicNumber)
         );
         if (!copier) continue; // No copier on this master — fail safe.
+
+        // A disabled or monitor-only copier copies no new trades, so nothing it
+        // carries can be the reason this one did not copy. Leave it alone.
+        if (!copierCopiesNewTrades(copier)) continue;
 
         const features = await metaCopierService.getCopierFeatures(liveId, copier.id);
         const skipFeature = features.find((f: any) => f?.type?.id === 31);

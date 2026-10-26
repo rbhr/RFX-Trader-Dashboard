@@ -5,6 +5,46 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.12.0] — 2026-10-26
+
+### Fixed
+
+- **The missed-trade monitor no longer closes trades over a Skip position rule
+  that is not in effect.** It looked for the copier's type-31 "Skip position"
+  feature and acted on finding it, without looking at the copier carrying it.
+  MetaCopier has three copier states, and the app models all three elsewhere as
+  DISABLED, MANAGE and ACTIVE: `active: false` is "fully disabled/detached,
+  will not copy any new trades", and `monitorOnly: true` is "manages existing
+  open positions but will not copy any new trades". A Skip position feature on
+  either is inert — features carry no enable flag of their own, so the copier's
+  state is the only thing that arms one.
+
+  So the monitor was closing positions, and telling traders over Telegram that
+  a missing stop-loss or take-profit was why their trade had not reached live,
+  on copiers that were copying nothing either way. Of the 21 active traders
+  carrying a type-31 feature, **every one** was on such a copier: 20 monitor-only
+  and one disabled. None was correctly armed.
+
+  The disabled one did real damage. Zeeshan DZero (51190) had an XAUUSD
+  position closed on 26 October for a missing SL/TP, on a copier to live that
+  is switched off — and because that incubator account is the master of twelve
+  further copiers, ten of them active, the close propagated out to every one,
+  including both Uzo prop accounts.
+
+  The monitor now requires the copier to be in the ACTIVE state before it
+  evaluates the rule at all, consistent with its existing fail-safe stance of
+  leaving a trade alone whenever it cannot prove the copier would have skipped
+  it. `evaluateSkip` and the new `copierCopiesNewTrades` are now exported and
+  covered by `server/missedTradeMonitor.test.ts`, which the monitor had none of.
+
+### Known issue
+
+- The trader-facing copier panel (`trading.getCopierSettings`) derives
+  `notCopiedReason` from `active` alone, so it still reports a monitor-only
+  copier as copying normally. Same mistaken assumption, different surface, and
+  it only mislabels a panel rather than closing anything — left for a separate
+  change.
+
 ## [4.11.1] — 2026-10-25
 
 ### Fixed
