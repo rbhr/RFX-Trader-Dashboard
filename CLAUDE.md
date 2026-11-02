@@ -29,7 +29,10 @@ Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for e
   `include`s this stack; this stack no longer runs its own Caddy or Portainer.
 - **Domains**: tradersdash.rfx.capital and tradersdash.rftrust.co → `rfx-trader-dashboard:3000`
   over the external `rfx_edge` network. The container name is what the edge Caddyfile targets —
-  renaming it breaks routing.
+  renaming it breaks routing. **tda.rfx.capital** reaches the same container but only from the
+  tailnet, and is the sole place an `isAdmin` account can be used (see Admin access below).
+  The service publishes no host port: the edge Caddy is the only way in, which is what makes
+  `req.ip` trustworthy.
 - **Pull + rebuild app** (full deploy command — injects git short hash as BUILD_HASH for the version
   footer). **Run it from `/home/rfx`, not from this folder.** This stack is `include`d by the parent
   compose file, so it is no longer a standalone project: running compose here uses project name
@@ -45,6 +48,27 @@ Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for e
 - **View logs**: `docker logs rfx-trader-dashboard --tail 50 -f`
 - **DB shell**: `docker compose exec dashboard-mysql mysql -urfx -p rfx_trader`
   (MySQL data is bind-mounted at `data/mysql` on the host, so it survives container recreation.)
+
+## Admin access
+
+Admin accounts are usable **only from the tailnet**, over `https://tda.rfx.capital`, since
+2026-11-02 — someone logged in as `admin` from the internet (default password; `isAdmin`
+accounts are exempt from the Telegram 2FA every trader gets) and moved 2030 USDT out of the
+custodial wallet. `server/adminNetwork.ts` holds the rule; the edge Caddy enforces it again at
+the hostname. Traders are unaffected on `tradersdash.*`.
+
+The app-side check lives in **`tradingProcedure`**, not `adminProcedure`: most admin
+procedures take a plain `tradingProcedure` and test `isAdmin` inline — `sendWalletPayment`
+among them — so the session middleware is the only chokepoint that cannot be forgotten. Put
+new admin surfaces behind `tradingProcedure`; if one must read the session cookie directly
+(as `server/liveStream.ts` does), repeat the check with `isTailnetAdminRequest`.
+`trading.login` refuses an admin before comparing the password and writes an `auth` log row.
+
+Still open from that incident, in `/home/rfx/.claude/plans/precious-cooking-pretzel.md`:
+`updateUsdtInfo` lets an account change its own payout address with no 2FA, no logging and no
+cool-off; `payments` records no destination address; `trading_sessions.ipAddress` stores
+Cloudflare's address rather than `CF-Connecting-IP`, so `hasSeenDevice` is near-meaningless;
+and a password change does not invalidate sessions.
 
 ## Translations (English / Urdu / Arabic)
 
