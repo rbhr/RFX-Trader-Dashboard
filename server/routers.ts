@@ -990,14 +990,13 @@ export const appRouter = router({
   }),
 
   trading: router({
-    // Get all available magic numbers for login dropdown
-    getMagicNumbers: publicProcedure.query(async () => {
-      const magicNumbers = await getAllActiveMagicNumbers();
-      return magicNumbers.map(mn => ({
-        magicNumber: mn.magicNumber,
-        name: mn.name,
-      }));
-    }),
+    // There is deliberately no procedure listing the magic numbers. One
+    // existed, unauthenticated, for a login dropdown that became a text input
+    // in fff20a3 — so for a long time it served every active trader's magic
+    // number and name to anyone who asked, with no client calling it. The
+    // magic number is half a credential and the login rate limiter is keyed
+    // per magic number, so a roster is exactly what makes stuffing all of
+    // them practical. Removed 2026-11-02.
 
     login: publicProcedure
       .input(

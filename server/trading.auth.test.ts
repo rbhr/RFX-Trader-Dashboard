@@ -1,36 +1,17 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { appRouter } from "./routers";
+import { getAllActiveMagicNumbers } from "./db";
 import type { TrpcContext } from "./_core/context";
 
 describe("Trading Authentication", () => {
   let testMagicNumber: string;
 
   beforeAll(async () => {
-    // Get a valid magic number from the database
-    const caller = appRouter.createCaller({
-      req: { protocol: "https", headers: {}, cookies: {} } as any,
-      res: { cookie: () => {}, clearCookie: () => {} } as any,
-      user: null,
-    });
-    
-    const magicNumbers = await caller.trading.getMagicNumbers();
-    expect(magicNumbers.length).toBeGreaterThan(0);
-    testMagicNumber = magicNumbers[0]!.magicNumber;
-  });
-
-  it("should fetch list of available magic numbers", async () => {
-    const caller = appRouter.createCaller({
-      req: { protocol: "https", headers: {}, cookies: {} } as any,
-      res: { cookie: () => {}, clearCookie: () => {} } as any,
-      user: null,
-    });
-
-    const magicNumbers = await caller.trading.getMagicNumbers();
-    
-    expect(Array.isArray(magicNumbers)).toBe(true);
-    expect(magicNumbers.length).toBeGreaterThan(0);
-    expect(magicNumbers[0]).toHaveProperty("magicNumber");
-    expect(magicNumbers[0]).toHaveProperty("name");
+    // Straight from the database: the API no longer hands out a roster of
+    // magic numbers, and nothing about these tests needs it to.
+    const traders = await getAllActiveMagicNumbers();
+    expect(traders.length).toBeGreaterThan(0);
+    testMagicNumber = traders[0]!.magicNumber;
   });
 
   it("should reject login with invalid magic number", async () => {

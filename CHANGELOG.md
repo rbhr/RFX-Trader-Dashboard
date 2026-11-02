@@ -38,6 +38,15 @@ hash.
   tailnet address. The edge Caddy reaches the container over `rfx_edge` by name,
   so nothing needed the published port.
 
+- **Removed the unauthenticated endpoint that listed every trader.**
+  `trading.getMagicNumbers` returned all 28 active accounts' magic numbers and
+  names to any caller, with no session. It was built for a login dropdown that
+  became a plain text input long ago, and no client code had called it since —
+  but it stayed reachable, and it was handing out the admin login id along with
+  everyone else's. A magic number is half a credential and the login rate
+  limiter is keyed per magic number, so a published roster is what makes
+  stuffing all of them at once practical.
+
 - **Refused admin logins are now recorded.** A new `auth` log category (visible
   in the admin Logs tab) captures the magic number, source address, Host and
   user agent of every off-network admin login attempt. The probe that opened the
