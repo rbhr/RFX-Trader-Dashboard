@@ -193,6 +193,24 @@ export async function getTradingSessionByToken(sessionToken: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+/**
+ * Records a payment step-up on one session. Scoped to the session rather than
+ * the account on purpose: clearing a payment to move money is something a
+ * particular browser did, and a second stolen session must not inherit it.
+ */
+export async function markSessionTotpVerified(
+  sessionToken: string,
+  at: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(tradingSessions)
+    .set({ totpVerifiedAt: at })
+    .where(eq(tradingSessions.sessionToken, sessionToken));
+}
+
 export async function deleteTradingSession(sessionToken: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

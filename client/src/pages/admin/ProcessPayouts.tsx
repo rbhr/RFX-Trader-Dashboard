@@ -50,6 +50,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { toast } from "@/lib/toast";
+import { usePaymentStepUp } from "@/components/PaymentStepUp";
 import {
   Banknote,
   ArrowLeft,
@@ -175,6 +176,7 @@ export default function ProcessPayouts() {
   }, [previewQuery.data]);
 
   const processMutation = trpc.admin.processProfitSharePayout.useMutation();
+  const { ensureElevated, dialog: stepUpDialog } = usePaymentStepUp();
   const setBaselineMutation = trpc.admin.setPayoutBaseline.useMutation();
   const adjustProfitMutation = trpc.admin.adjustProfit.useMutation();
 
@@ -264,6 +266,9 @@ export default function ProcessPayouts() {
 
   const runPayouts = async () => {
     setConfirmOpen(false);
+    // Asked for before the first transfer, never between them: re-running a
+    // partly-finished batch would pay the traders at the top of the list twice.
+    if (!(await ensureElevated())) return;
     setProcessing(true);
     const targets = payableRows.filter(r => selected.has(r.id));
     let ok = 0;
@@ -824,6 +829,7 @@ export default function ProcessPayouts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {stepUpDialog}
     </AdminLayout>
   );
 }

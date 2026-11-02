@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "@/lib/toast";
+import { isStepUpError, usePaymentStepUp } from "@/components/PaymentStepUp";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DollarSign, Send, Copy, ExternalLink, Download, AlertCircle, Wallet, Loader2, Pencil, Check, Banknote } from "lucide-react";
 import {
@@ -57,6 +58,7 @@ export default function ManagePayments() {
   const { data: walletInfo } = trpc.admin.getWalletInfo.useQuery(undefined, { refetchInterval: 30_000 });
   const makePaymentMutation = trpc.admin.makePayment.useMutation();
   const sendWalletPaymentMutation = trpc.admin.sendWalletPayment.useMutation();
+  const { ensureElevated, dialog: stepUpDialog } = usePaymentStepUp();
   const updateHashMutation = trpc.admin.updatePaymentHash.useMutation();
 
   // Update payment date to current time on mount
@@ -127,6 +129,9 @@ export default function ManagePayments() {
 
   const handleConfirmPayment = async () => {
     setConfirmDialogOpen(false);
+    // Only a wallet send moves money; recording a payment made elsewhere does
+    // not, so it is not worth a code.
+    if (paymentMode === "wallet" && !(await ensureElevated())) return;
     try {
       if (paymentMode === "wallet") {
         const result = await sendWalletPaymentMutation.mutateAsync({
@@ -163,6 +168,12 @@ export default function ManagePayments() {
       resetForm();
       refetchPayments();
     } catch (error: any) {
+      if (isStepUpError(error)) {
+        toast.error(
+          "Your authenticator window expired before the payment went out. Nothing was sent — confirm a new code and try again."
+        );
+        return;
+      }
       if (paymentMode === "wallet") {
         toast.error(
           `${error?.message || "Payment failed"} — check the payment history below before re-sending: a broadcast payout is recorded even if this request failed.`
@@ -883,6 +894,7 @@ export default function ManagePayments() {
           )}
         </DialogContent>
       </Dialog>
+      {stepUpDialog}
     </AdminLayout>
   );
 }

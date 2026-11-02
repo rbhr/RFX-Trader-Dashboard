@@ -17,7 +17,13 @@ import { toast } from "@/lib/toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSelector } from "@/components/LanguageSelector";
 
-type LoginStep = "credentials" | "two_factor" | "forgot_magic" | "forgot_code" | "forgot_newpass";
+type LoginStep =
+  | "credentials"
+  | "two_factor"
+  | "authenticator"
+  | "forgot_magic"
+  | "forgot_code"
+  | "forgot_newpass";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -27,12 +33,18 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  // Authenticator code, or a recovery code, which is not six digits.
+  const [totpCode, setTotpCode] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const loginMutation = trpc.trading.login.useMutation({
     onSuccess: (data) => {
+      if (data.requiresTotp) {
+        setStep("authenticator");
+        return;
+      }
       if (data.requires2FA) {
         setStep("two_factor");
         toast.info(t("common.codeSentToTelegram"));
@@ -117,6 +129,12 @@ export default function Login() {
     });
   };
 
+  const handleTotpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!totpCode) return;
+    loginMutation.mutate({ magicNumber, password, rememberMe, totpCode });
+  };
+
   const handleForgotRequest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!magicNumber) {
@@ -156,7 +174,7 @@ export default function Login() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="space-y-4 text-center">
           <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-            {step === "two_factor" ? (
+            {step === "two_factor" || step === "authenticator" ? (
               <ShieldCheck className="w-8 h-8 text-primary" />
             ) : (
               <TrendingUp className="w-8 h-8 text-primary" />
@@ -164,16 +182,18 @@ export default function Login() {
           </div>
           <div>
             <CardTitle className="text-2xl">
-              {step === "two_factor"
+              {step === "two_factor" || step === "authenticator"
                 ? t("login.verifyTitle")
                 : step.startsWith("forgot")
                   ? t("login.resetTitle")
                   : t("common.appName")}
             </CardTitle>
             <CardDescription className="mt-2">
-              {step === "two_factor"
-                ? t("login.verifySubtitle")
-                : step === "forgot_magic"
+              {step === "authenticator"
+                ? t("login.authenticatorSubtitle")
+                : step === "two_factor"
+                  ? t("login.verifySubtitle")
+                  : step === "forgot_magic"
                   ? t("login.resetEnterMagic")
                   : step === "forgot_code"
                     ? t("login.resetEnterCode")
@@ -296,6 +316,59 @@ export default function Login() {
                 onClick={() => {
                   setStep("credentials");
                   setTwoFactorCode("");
+                }}
+              >
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" />
+                {t("login.backToLogin")}
+              </button>
+            </form>
+          )}
+
+          {step === "authenticator" && (
+            <form onSubmit={handleTotpSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="totpCode">{t("login.authenticatorCode")}</Label>
+                <Input
+                  id="totpCode"
+                  type="text"
+                  dir="ltr"
+                  maxLength={16}
+                  value={totpCode}
+                  // A recovery code carries letters and a dash, so this is not
+                  // narrowed to digits the way the Telegram code is.
+                  onChange={(e) => setTotpCode(e.target.value.trim())}
+                  placeholder={t("login.authenticatorPlaceholder")}
+                  disabled={isPending}
+                  autoFocus
+                  autoComplete="one-time-code"
+                  className="text-center text-2xl tracking-widest font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("login.authenticatorRecoveryHint")}
+                </p>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isPending || totpCode.length < 6}
+              >
+                {loginMutation.isPending ? (
+                  <>
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                    {t("common.verifying")}
+                  </>
+                ) : (
+                  t("login.verifyAndSignIn")
+                )}
+              </Button>
+
+              <button
+                type="button"
+                className="w-full text-sm text-muted-foreground hover:text-primary flex items-center justify-center gap-1"
+                onClick={() => {
+                  setStep("credentials");
+                  setTotpCode("");
                 }}
               >
                 <ArrowLeft className="h-3 w-3 rtl:rotate-180" />

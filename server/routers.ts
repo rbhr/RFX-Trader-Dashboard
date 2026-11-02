@@ -11,6 +11,7 @@ import {
   createTradingSession,
   getTradingSessionByToken,
   deleteTradingSession,
+  markSessionTotpVerified,
   getAllMagicNumbers,
   getMagicNumberById,
   updateMagicNumber,
@@ -106,6 +107,7 @@ import {
 } from "./tradingControls";
 import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
+import QRCode from "qrcode";
 import {
   sendTelegramMessage,
   buildPaymentMessage,
@@ -130,7 +132,18 @@ import { confirmEquityBreach } from "./breachConfirm";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
 import { logEvent, type LogCategory } from "./logStore";
 import type { TwoFactorPurpose } from "../drizzle/schema";
-import { USDT_ADDRESS_COOL_OFF_HOURS } from "@shared/const";
+import {
+  PAYMENT_ELEVATION_MINUTES,
+  USDT_ADDRESS_COOL_OFF_HOURS,
+} from "@shared/const";
+import {
+  beginTotpEnrolment,
+  clearTotp,
+  completeTotpEnrolment,
+  consumeTotpCode,
+  recoveryCodesRemaining,
+  totpEnabled,
+} from "./totpAuth";
 import {
   addressHoldReason,
   assertAddressSettled,
@@ -209,6 +222,46 @@ const TEST_PAYOUT_ADDRESS = "TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9";
  * written first and is the record that matters: before this existed, the only
  * trace of the 2026-11-02 swap was an incidental onboarding line.
  */
+/**
+ * Refuses to move money unless this session has entered a TOTP code recently.
+ *
+ * Both halves matter. An account with no authenticator cannot send at all —
+ * on 2026-11-02 a password was the only thing between the internet and
+ * `sendWalletPayment`, and a password is one secret that one phishing page
+ * collects. And the clearance is recorded on the *session*, not the account,
+ * so a second stolen session does not inherit it.
+ *
+ * One code clears a short window rather than a single transfer, because a code
+ * lasts 30 seconds and cannot be replayed: a payout run of twenty traders
+ * could not otherwise be completed at all.
+ */
+function assertPaymentElevation(ctx: {
+  tradingSession: {
+    session: { totpVerifiedAt?: Date | null };
+    magicNumber: { totpSecret: string | null; totpEnabledAt: Date | null };
+  };
+}): void {
+  if (!totpEnabled(ctx.tradingSession.magicNumber)) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "Moving money requires an authenticator app. Set one up in " +
+        "Settings → Security, then try again.",
+    });
+  }
+  const verifiedAt = ctx.tradingSession.session.totpVerifiedAt;
+  const expiresAt = verifiedAt
+    ? verifiedAt.getTime() + PAYMENT_ELEVATION_MINUTES * 60 * 1000
+    : 0;
+  if (expiresAt <= Date.now()) {
+    // The client watches for this exact message and asks for a code.
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "PAYMENT_STEP_UP_REQUIRED",
+    });
+  }
+}
+
 async function announceUsdtAddressChange(
   trader: {
     id: number;
@@ -1084,6 +1137,8 @@ export const appRouter = router({
           password: z.string(),
           rememberMe: z.boolean().optional(),
           twoFactorCode: z.string().optional(),
+          /** Authenticator code, or one recovery code, when TOTP is on. */
+          totpCode: z.string().min(6).max(16).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -1141,10 +1196,49 @@ export const appRouter = router({
             message: "Invalid password",
           });
         }
-        const knownDevice = await hasSeenDevice(magicNumberData.id, clientIp);
+        // An authenticator, where one is enrolled, replaces both the Telegram
+        // code and the known-device exemption. It is asked for on every login:
+        // `hasSeenDevice` matches on an IP that is always Cloudflare's, so
+        // "this device is known" means almost nothing.
+        if (totpEnabled(magicNumberData)) {
+          if (!input.totpCode) {
+            return {
+              success: false,
+              requires2FA: false,
+              requiresTotp: true,
+              magicNumber: magicNumberData.magicNumber,
+              name: magicNumberData.name,
+              isAdmin: false,
+            };
+          }
 
-        if (
-          !knownDevice &&
+          const codesLeftBefore = recoveryCodesRemaining(magicNumberData);
+          const used = await consumeTotpCode(magicNumberData, input.totpCode);
+          if (!used) {
+            logEvent(
+              "auth",
+              `Authenticator code refused — ${magicNumberData.magicNumber} ` +
+                `from ${clientIp ?? "unknown IP"}`,
+              "warn"
+            );
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid authenticator code",
+            });
+          }
+          if (used === "recovery") {
+            // Worth a permanent record either way: either they have lost their
+            // phone, or somebody else has their recovery codes.
+            logEvent(
+              "auth",
+              `🔑 Recovery code used to sign in — ${magicNumberData.name} ` +
+                `(magic ${magicNumberData.magicNumber}); ` +
+                `${codesLeftBefore - 1} of ${codesLeftBefore} remaining`,
+              "warn"
+            );
+          }
+        } else if (
+          !(await hasSeenDevice(magicNumberData.id, clientIp)) &&
           magicNumberData.telegramChatId &&
           !magicNumberData.isAdmin
         ) {
@@ -1161,6 +1255,7 @@ export const appRouter = router({
             return {
               success: false,
               requires2FA: true,
+              requiresTotp: false,
               magicNumber: magicNumberData.magicNumber,
               name: magicNumberData.name,
               isAdmin: false,
@@ -1214,6 +1309,7 @@ export const appRouter = router({
         return {
           success: true,
           requires2FA: false,
+          requiresTotp: false,
           magicNumber: magicNumberData.magicNumber,
           name: magicNumberData.name,
           isAdmin: magicNumberData.isAdmin || false,
@@ -1331,6 +1427,7 @@ export const appRouter = router({
           currentPassword: z.string(),
           newPassword: z.string().min(6),
           twoFactorCode: z.string().length(6).optional(),
+          totpCode: z.string().min(6).max(16).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -1347,7 +1444,20 @@ export const appRouter = router({
           });
         }
 
-        if (trader.telegramChatId) {
+        // An authenticator takes precedence over the Telegram code, and
+        // works for an account that has no Telegram at all — which is what
+        // left the admin with a password as its only factor.
+        if (totpEnabled(trader)) {
+          if (!input.totpCode) {
+            return { success: false, requires2FA: false, requiresTotp: true };
+          }
+          if (!(await consumeTotpCode(trader, input.totpCode))) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid authenticator code",
+            });
+          }
+        } else if (trader.telegramChatId) {
           if (!input.twoFactorCode) {
             await generateAndSend2FACode(
               trader.id,
@@ -1358,7 +1468,7 @@ export const appRouter = router({
               "password_change",
               trader.language
             );
-            return { success: false, requires2FA: true };
+            return { success: false, requires2FA: true, requiresTotp: false };
           }
 
           const codeValid = await verifyTwoFactorCodeWithCap(
@@ -1380,7 +1490,125 @@ export const appRouter = router({
         // Password change may complete onboarding → activate live copiers.
         void maybeActivateOnboarding(trader.id);
 
-        return { success: true, requires2FA: false };
+        return { success: true, requires2FA: false, requiresTotp: false };
+      }),
+
+    /* ── Authenticator (TOTP) ──────────────────────────────────────── */
+
+    /**
+     * Step one of enrolment: mint a secret and hand back the QR. Guarded by
+     * the account password, so somebody with only a stolen session cannot
+     * quietly swap the second factor for one of their own.
+     *
+     * The secret is stored but inert until confirmTotpEnrolment, so an
+     * abandoned attempt — or a second one started by mistake — cannot lock
+     * anybody out.
+     */
+    startTotpEnrolment: tradingProcedure
+      .input(z.object({ password: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const trader = ctx.tradingSession.magicNumber;
+        if (!(await verifyPassword(input.password, trader.password))) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Current password is incorrect",
+          });
+        }
+        const { secret, uri } = await beginTotpEnrolment(trader);
+        // Rendered server-side: a data URL cannot carry markup into the page,
+        // and the client never needs the QR library.
+        const qrDataUrl = await QRCode.toDataURL(uri, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 240,
+        });
+        logEvent(
+          "auth",
+          `Authenticator setup started — ${trader.name} (magic ${trader.magicNumber})`
+        );
+        return { secret, uri, qrDataUrl };
+      }),
+
+    /**
+     * Step two: prove the secret made it onto the phone, then turn it on and
+     * issue the recovery codes. They are returned exactly once — only hashes
+     * are kept — so the client has to show them before it navigates away.
+     */
+    confirmTotpEnrolment: tradingProcedure
+      .input(z.object({ code: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const trader = ctx.tradingSession.magicNumber;
+        const recoveryCodes = await completeTotpEnrolment(trader, input.code);
+        logEvent(
+          "auth",
+          `🔐 Authenticator enabled — ${trader.name} (magic ${trader.magicNumber})`
+        );
+        return { success: true, recoveryCodes };
+      }),
+
+    /** Turns it off. Needs the password *and* a current code. */
+    disableTotp: tradingProcedure
+      .input(z.object({ password: z.string(), code: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const trader = ctx.tradingSession.magicNumber;
+        if (!(await verifyPassword(input.password, trader.password))) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Current password is incorrect",
+          });
+        }
+        if (!totpEnabled(trader)) {
+          return { success: true };
+        }
+        if (!(await consumeTotpCode(trader, input.code))) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid authenticator code",
+          });
+        }
+        await clearTotp(trader.id);
+        logEvent(
+          "auth",
+          `⚠️ Authenticator disabled — ${trader.name} (magic ${trader.magicNumber})`,
+          "warn"
+        );
+        return { success: true };
+      }),
+
+    /**
+     * Clears this session to move money for the next few minutes. Separate
+     * from the payment itself so one code covers a payout run; see
+     * assertPaymentElevation for why it is bound to the session.
+     */
+    verifyPaymentStepUp: tradingProcedure
+      .input(z.object({ code: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const trader = ctx.tradingSession.magicNumber;
+        if (!totpEnabled(trader)) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Moving money requires an authenticator app. Set one up in " +
+              "Settings → Security, then try again.",
+          });
+        }
+        if (!(await consumeTotpCode(trader, input.code))) {
+          logEvent(
+            "auth",
+            `Payment step-up refused — ${trader.name} (magic ${trader.magicNumber})`,
+            "warn"
+          );
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid authenticator code",
+          });
+        }
+        const at = new Date();
+        await markSessionTotpVerified(ctx.tradingSession.session.sessionToken, at);
+        return {
+          success: true,
+          expiresAt: new Date(at.getTime() + PAYMENT_ELEVATION_MINUTES * 60 * 1000),
+        };
       }),
 
     getSession: tradingProcedure
@@ -1405,6 +1633,18 @@ export const appRouter = router({
           telegramHandle: trader.telegramHandle || null,
           telegramConnected: !!trader.telegramChatId,
           showMyTradesUrl: trader.showMyTradesUrl || null,
+          // Always the caller's own authenticator, never the viewed trader's:
+          // this drives the caller's Security screen and the payment prompt.
+          totpEnabled: totpEnabled(ctx.tradingSession.magicNumber),
+          totpRecoveryRemaining: recoveryCodesRemaining(
+            ctx.tradingSession.magicNumber
+          ),
+          paymentElevationExpiresAt: ctx.tradingSession.session.totpVerifiedAt
+            ? new Date(
+                ctx.tradingSession.session.totpVerifiedAt.getTime() +
+                  PAYMENT_ELEVATION_MINUTES * 60 * 1000
+              )
+            : null,
         };
       }),
 
@@ -1435,6 +1675,7 @@ export const appRouter = router({
           usdtAddress: z.string().optional(),
           usdtNetwork: z.enum(["TRC20", "ERC20"]).optional(),
           twoFactorCode: z.string().length(6).optional(),
+          totpCode: z.string().min(6).max(16).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -1448,7 +1689,17 @@ export const appRouter = router({
         const addressChanged = next !== undefined && next !== previous;
         const replacingAddress = addressChanged && previous !== null;
 
-        if (replacingAddress && trader.telegramChatId) {
+        if (replacingAddress && totpEnabled(trader)) {
+          if (!input.totpCode) {
+            return { success: false, requires2FA: false, requiresTotp: true };
+          }
+          if (!(await consumeTotpCode(trader, input.totpCode))) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid authenticator code",
+            });
+          }
+        } else if (replacingAddress && trader.telegramChatId) {
           if (!input.twoFactorCode) {
             await generateAndSend2FACode(
               trader.id,
@@ -1459,7 +1710,7 @@ export const appRouter = router({
               "usdt_address_change",
               trader.language
             );
-            return { success: false, requires2FA: true };
+            return { success: false, requires2FA: true, requiresTotp: false };
           }
 
           const codeValid = await verifyTwoFactorCodeWithCap(
@@ -1490,7 +1741,7 @@ export const appRouter = router({
         // Saving USDT details may complete onboarding → activate live copiers.
         void maybeActivateOnboarding(trader.id);
 
-        return { success: true, requires2FA: false };
+        return { success: true, requires2FA: false, requiresTotp: false };
       }),
 
     // Update Telegram handle for current trader
@@ -4204,6 +4455,7 @@ export const appRouter = router({
             });
           }
           assertAddressSettled(trader);
+          assertPaymentElevation(ctx);
 
           const network = trader.usdtNetwork as "TRC20" | "ERC20";
           let sent: SendResult;
@@ -4449,6 +4701,9 @@ export const appRouter = router({
             message: "Admin access required",
           });
         }
+        // One step-up covers a whole payout run: the client calls this once
+        // per trader, and the window outlasts the run.
+        assertPaymentElevation(ctx);
 
         if (inFlightWalletPayments.has(input.magicNumberId)) {
           throw new TRPCError({

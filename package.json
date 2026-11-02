@@ -1,6 +1,6 @@
 {
   "name": "rfx-trader-web",
-  "version": "4.14.0",
+  "version": "4.15.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -72,6 +72,7 @@
     "nanoid": "^5.1.5",
     "next-themes": "^0.4.6",
     "node-telegram-bot-api": "^0.67.0",
+    "qrcode": "1.5.4",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.1",
     "react-dom": "^19.2.1",
@@ -98,6 +99,7 @@
     "@types/google.maps": "^3.58.1",
     "@types/node": "^24.7.0",
     "@types/node-telegram-bot-api": "^0.64.14",
+    "@types/qrcode": "1.5.5",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
     "@vitejs/plugin-react": "^5.0.4",

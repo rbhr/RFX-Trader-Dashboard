@@ -1964,10 +1964,12 @@ export default function ManageTraders() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleEdit(trader)}
-                            disabled={trader.isAdmin}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          {/* Delete stays off for the admin row: removing it
+                              would lock everyone out of /admin, and nothing
+                              here is worth that risk. */}
                           <Button
                             variant="outline"
                             size="sm"

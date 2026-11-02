@@ -57,6 +57,21 @@ accounts are exempt from the Telegram 2FA every trader gets) and moved 2030 USDT
 custodial wallet. `server/adminNetwork.ts` holds the rule; the edge Caddy enforces it again at
 the hostname. Traders are unaffected on `tradersdash.*`.
 
+**An authenticator (TOTP) is the admin's second factor**, since 4.15.0 — the account has no
+Telegram, so the code every trader gets could never reach it. `server/totp.ts` is the
+arithmetic (RFC 6238, tested against the published vectors); `server/totpAuth.ts` is enrolment
+and spending a code, including the two rules that make a correct code fail: a step at or below
+the last one accepted is a replay, and a recovery code is deleted as it is used. The secret is
+encrypted with `EMAIL_TOKEN_KEY`.
+
+**Moving money needs a step-up.** `sendWalletPayment` and `processProfitSharePayout` call
+`assertPaymentElevation`, which refuses a session that has not entered a code in the last
+`PAYMENT_ELEVATION_MINUTES`, and refuses an account with no authenticator outright. The
+clearance lives on `trading_sessions.totpVerifiedAt`, not the account, so a second stolen
+session does not inherit it. The client asks *before* the first transfer
+(`client/src/components/PaymentStepUp.tsx`): re-running a half-finished payout run would pay
+the traders at the top of the list twice.
+
 The app-side check lives in **`tradingProcedure`**, not `adminProcedure`: most admin
 procedures take a plain `tradingProcedure` and test `isAdmin` inline — `sendWalletPayment`
 among them — so the session middleware is the only chokepoint that cannot be forgotten. Put

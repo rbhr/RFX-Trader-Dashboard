@@ -5,6 +5,56 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.15.0] — 2026-11-02
+
+### Security
+
+- **An authenticator app (TOTP) is now a second factor for sign-in, and is
+  required before any money moves.** The admin account had no second factor at
+  all — it has no Telegram, so the Telegram code every trader gets could never
+  reach it, and a password was the only thing between the internet and
+  `sendWalletPayment`. A password is one secret, and one phishing page collects
+  it.
+
+  Enrolment is self-service, under Settings → Security: confirm your password,
+  scan the QR, type a code back to prove it arrived, then write down ten
+  one-time recovery codes. The secret is stored encrypted with
+  `EMAIL_TOKEN_KEY`, so a database dump is not a working second factor, and it
+  stays inert until a code proves it reached the phone — an abandoned setup
+  cannot lock anybody out.
+
+  Where an authenticator is enrolled it replaces the Telegram code and the
+  known-device exemption, at sign-in and for a password or payout-address
+  change. It is asked for every time: `hasSeenDevice` matches on an IP that is
+  always Cloudflare's, so "this device is known" never meant much.
+
+- **Moving money needs a fresh code.** `sendWalletPayment` and the
+  profit-share run both refuse a session that has not entered one in the last
+  five minutes, and refuse outright an account with no authenticator at all.
+  One code clears a window rather than a single transfer — a code lasts 30
+  seconds and cannot be reused, so a payout run of twenty traders could not
+  otherwise be completed — and the clearance is recorded on the session, so a
+  second stolen session does not inherit it. The prompt comes before the first
+  transfer, never between them: re-running a half-finished batch would pay the
+  traders at the top of the list twice.
+
+- **A code cannot be replayed.** The highest 30-second step already accepted is
+  stored, and anything at or below it is refused even though the arithmetic is
+  correct. Five wrong codes locks the account out for five minutes. Recovery
+  codes are deleted as they are spent, and using one is written to the admin
+  log — either a phone was lost, or somebody else has the codes.
+
+  TOTP is implemented against `node:crypto` rather than a library:
+  `server/totp.ts` is one HMAC and a truncation, the RFC publishes test
+  vectors, and `server/totp.test.ts` runs all six of them.
+
+### Changed
+
+- The admin row can be edited from Manage Traders again. Delete and the Active
+  switch stay disabled — removing or deactivating it would lock everyone out of
+  `/admin` — and the MetaCopier sync already skips admin rows, so editing one
+  has no side effects there.
+
 ## [4.14.0] — 2026-11-02
 
 ### Security

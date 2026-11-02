@@ -11,3 +11,11 @@ export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
  * an attacker wallet, send, point it back — 234 seconds end to end.
  */
 export const USDT_ADDRESS_COOL_OFF_HOURS = 4;
+
+/**
+ * How long one TOTP code keeps a session cleared to move money. A code lasts
+ * 30 seconds and cannot be replayed, so binding one to each transfer would
+ * make a payout run of twenty traders impossible; this binds one to a short
+ * window of them instead. A session with no step-up cannot send at all.
+ */
+export const PAYMENT_ELEVATION_MINUTES = 5;

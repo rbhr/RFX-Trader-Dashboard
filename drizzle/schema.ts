@@ -107,6 +107,17 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   // that took 2030 USDT on 2026-11-02. Anything that writes usdtAddress must
   // stamp this; `trading.updateUsdtInfo` is currently the only writer.
   usdtAddressUpdatedAt: timestamp("usdtAddressUpdatedAt"),
+  // TOTP (authenticator app) second factor. The secret is stored encrypted
+  // with EMAIL_TOKEN_KEY — a database dump must not be a working second
+  // factor — and is only in force once totpEnabledAt is set, which happens
+  // when the trader proves they can read a code off it. totpLastStep is the
+  // highest step already accepted, so a code cannot be replayed inside its own
+  // 30-second window. Recovery codes are SHA-256 hashes, one JSON array; each
+  // is removed as it is used.
+  totpSecret: varchar("totpSecret", { length: 512 }),
+  totpEnabledAt: timestamp("totpEnabledAt"),
+  totpLastStep: int("totpLastStep"),
+  totpRecoveryCodes: text("totpRecoveryCodes"),
   // Set once the trader completes onboarding (Telegram linked, password changed,
   // USDT details set) and their live copiers are activated. One-way: never cleared.
   liveCopiersActivatedAt: timestamp("liveCopiersActivatedAt"),
@@ -121,12 +132,20 @@ export type InsertMagicNumber = typeof magicNumbers.$inferInsert;
  * Trading sessions table
  * Tracks user login sessions with magic number associations
  */
+/**
+ * A trader's login session. `totpVerifiedAt` is the payment step-up: moving
+ * money needs a TOTP code entered within the last PAYMENT_ELEVATION_MINUTES,
+ * so one code covers a payout run rather than one code per transfer — and a
+ * stolen session alone cannot send anything.
+ */
 export const tradingSessions = mysqlTable("trading_sessions", {
   id: int("id").autoincrement().primaryKey(),
   sessionToken: varchar("sessionToken", { length: 255 }).notNull().unique(),
   magicNumberId: int("magicNumberId").notNull(),
   ipAddress: varchar("ipAddress", { length: 45 }),
   userAgent: text("userAgent"),
+  /** Last payment step-up on this session; null until a code is entered. */
+  totpVerifiedAt: timestamp("totpVerifiedAt"),
   expiresAt: timestamp("expiresAt").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
