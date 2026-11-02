@@ -23,6 +23,7 @@ import AdminLayout from "@/components/AdminLayout";
 import { PaginationBar, type PageSize } from "@/components/Pagination";
 
 type LogCategory =
+  | "auth"
   | "onboarding"
   | "trailing"
   | "breach"
@@ -37,6 +38,7 @@ type LogCategory =
 
 const FILTERS: { key: LogCategory | undefined; label: string }[] = [
   { key: undefined, label: "All" },
+  { key: "auth", label: "Auth" },
   { key: "onboarding", label: "Onboarding" },
   { key: "trailing", label: "Trailing Stop" },
   { key: "breach", label: "Breaches" },
@@ -51,6 +53,7 @@ const FILTERS: { key: LogCategory | undefined; label: string }[] = [
 ];
 
 const CATEGORY_LABEL: Record<LogCategory, string> = {
+  auth: "Auth",
   onboarding: "Onboarding",
   trailing: "Trailing Stop",
   breach: "Breach",

@@ -10,6 +10,7 @@
 import { createLog } from "./db";
 
 export type LogCategory =
+  | "auth"
   | "onboarding"
   | "trailing"
   | "breach"

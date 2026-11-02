@@ -128,6 +128,7 @@ import { getLastCheckedAt } from "./breachMonitor";
 import { confirmEquityBreach } from "./breachConfirm";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
 import { logEvent, type LogCategory } from "./logStore";
+import { assertAdminNetwork } from "./adminNetwork";
 import { socketStatus, reconnectMetaCopierSocket } from "./metacopierSocket";
 import {
   getWalletAddress as getTronWalletAddress,
@@ -290,6 +291,12 @@ const tradingProcedure = publicProcedure.use(async ({ ctx, next }) => {
     await deleteTradingSession(sessionToken);
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Session expired" });
   }
+
+  // An admin session is only usable from the tailnet. This is the chokepoint
+  // for every admin procedure: adminProcedure below, and the many that take a
+  // plain tradingProcedure and check isAdmin inline — sendWalletPayment among
+  // them. Guarding here means a new one cannot forget it.
+  if (sessionData.magicNumber.isAdmin) assertAdminNetwork(ctx.req);
 
   return next({
     ctx: {
@@ -1027,6 +1034,25 @@ export const appRouter = router({
           });
         }
 
+        // Refuse an admin login off the tailnet before the password is even
+        // compared, so the account is not on the internet's brute-force
+        // surface at all. Logged persistently: the probe that opened the
+        // 2026-11-02 theft left only a bare UNAUTHORIZED in container stdout.
+        if (magicNumberData.isAdmin) {
+          try {
+            assertAdminNetwork(ctx.req);
+          } catch (e) {
+            logEvent(
+              "auth",
+              `Admin login refused off-network — ${input.magicNumber} from ` +
+                `${clientIp ?? "unknown IP"} (host ${ctx.req.headers.host ?? "?"}, ` +
+                `UA ${ctx.req.headers["user-agent"] ?? "?"})`,
+              "warn"
+            );
+            throw e;
+          }
+        }
+
         const passwordValid = await verifyPassword(
           input.password,
           magicNumberData.password
@@ -1135,7 +1161,7 @@ export const appRouter = router({
 
     requestPasswordReset: publicProcedure
       .input(z.object({ magicNumber: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         // Limit reset-code requests so the endpoint can't be used to spam
         // a trader's Telegram or stack brute-force windows
         if (!checkRateLimit(`pwreset:${input.magicNumber}`, 3, 15 * 60 * 1000)) {
@@ -1152,6 +1178,7 @@ export const appRouter = router({
             message: "Magic number not found",
           });
         }
+        if (trader.isAdmin) assertAdminNetwork(ctx.req);
 
         if (!trader.telegramChatId) {
           throw new TRPCError({
@@ -1189,7 +1216,7 @@ export const appRouter = router({
           newPassword: z.string().min(6),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const trader = await getMagicNumberByNumber(input.magicNumber);
         if (!trader) {
           throw new TRPCError({
@@ -1197,6 +1224,7 @@ export const appRouter = router({
             message: "Magic number not found",
           });
         }
+        if (trader.isAdmin) assertAdminNetwork(ctx.req);
 
         const codeValid = await verifyTwoFactorCodeWithCap(
           trader.id,
@@ -3562,6 +3590,7 @@ export const appRouter = router({
         z.object({
           category: z
             .enum([
+              "auth",
               "onboarding",
               "trailing",
               "breach",

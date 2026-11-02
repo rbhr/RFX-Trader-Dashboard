@@ -27,8 +27,11 @@ services:
       DATABASE_URL: mysql://rfx:${MYSQL_PASSWORD}@mysql:3306/rfx_trader
       NODE_ENV: production
       PORT: 3000
-    ports:
-      - "3000:3000"
+    # Deliberately no `ports:` — the edge Caddy reaches this container over
+    # rfx_edge as rfx-trader-dashboard:3000. Publishing 3000 on the host put
+    # Express directly on 0.0.0.0, past TLS, the rate limiters and the
+    # tailnet-only admin gate (which trusts req.ip precisely because Caddy is
+    # the only hop). See /home/rfx/CLAUDE.md.
     networks:
       - internal
       - rfx_edge # reachable by the edge Caddy as rfx-trader-dashboard:3000

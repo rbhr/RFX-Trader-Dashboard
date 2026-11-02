@@ -16,6 +16,7 @@ import { getTradingSessionByToken, getMagicNumberById } from "./db";
 import { resolveViewPositions, metaCopierService } from "./metacopier";
 import { socketEvents } from "./metacopierSocket";
 import { ENV } from "./_core/env";
+import { isTailnetAdminRequest } from "./adminNetwork";
 import { createDebug } from "./_core/debug";
 
 const debug = createDebug("socket");
@@ -32,6 +33,17 @@ export function registerLiveStreamRoutes(app: Express): void {
         : undefined;
       if (!sessionData || new Date() > sessionData.session.expiresAt) {
         res.status(401).end();
+        return;
+      }
+      // This route reads the session cookie itself, so it never passes through
+      // tradingProcedure — the tailnet rule for admin accounts has to be
+      // repeated here. Express route, not tRPC, hence the bare 403.
+      if (
+        sessionData.magicNumber.isAdmin &&
+        ENV.isProduction &&
+        !isTailnetAdminRequest({ host: req.headers.host, ip: req.ip })
+      ) {
+        res.status(403).end();
         return;
       }
       const caller = sessionData.magicNumber;

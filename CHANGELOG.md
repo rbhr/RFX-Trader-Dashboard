@@ -5,6 +5,45 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.13.0] — 2026-11-02
+
+### Security
+
+- **Admin accounts can now only be used from the tailnet.** On 2 November
+  somebody logged in as `admin` from the public internet, pointed the
+  Administrator row's USDT address at a wallet of their own, sent a 2030 USDT
+  payout to it and set the address back. The password was the account's default
+  and `isAdmin` accounts are exempt from the Telegram 2FA every trader gets, so
+  the public login page was the entire attack surface.
+
+  Nothing about an admin account needs to be reachable from the internet, so it
+  no longer is. A new hostname, `tda.rfx.capital`, is a DNS-only record for the
+  host's Tailscale address, and the edge Caddy serves it from a block that
+  refuses any request whose source address is outside `100.64.0.0/10`. The app
+  then enforces the same rule itself, in `server/adminNetwork.ts`: an admin
+  login is refused before the password is even compared, and `tradingProcedure`
+  refuses every call on an admin session. Guarding the session middleware rather
+  than `adminProcedure` is deliberate — most admin procedures take a plain
+  `tradingProcedure` and check `isAdmin` inline, `sendWalletPayment` among them,
+  so this is the one place that cannot be forgotten. `/api/live/positions` reads
+  the session cookie directly and is gated separately.
+
+  Traders are unaffected: `tradersdash.rfx.capital` and `tradersdash.rftrust.co`
+  behave exactly as before.
+
+- **The app no longer publishes port 3000 on the host.** It had bound
+  `0.0.0.0:3000`, which put Express on the network past TLS, the CORS allowlist
+  and the rate limiters — and past the new admin gate, since a client arriving
+  there supplies the right-most `X-Forwarded-For` entry itself and could claim a
+  tailnet address. The edge Caddy reaches the container over `rfx_edge` by name,
+  so nothing needed the published port.
+
+- **Refused admin logins are now recorded.** A new `auth` log category (visible
+  in the admin Logs tab) captures the magic number, source address, Host and
+  user agent of every off-network admin login attempt. The probe that opened the
+  2 November theft left nothing behind but a bare `UNAUTHORIZED` line in
+  container stdout.
+
 ## [4.12.0] — 2026-10-26
 
 ### Fixed
