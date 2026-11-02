@@ -199,6 +199,9 @@ export const en = {
     network: "Network",
     selectNetwork: "Select network",
     saveUsdt: "Save USDT Information",
+    usdtChangeNote:
+      "Changing an address you have already saved needs a verification code on Telegram, and payouts are held for {hours} hours afterwards.",
+    verifyAndSaveUsdt: "Verify & Save Address",
     usdtUpdated: "USDT information updated",
     usdtUpdateFailed: "Failed to update USDT information",
     trc20Invalid: "TRC20 address must be 34 characters and start with 'T'",
@@ -309,6 +312,11 @@ export const en = {
       message:
         "An admin has reviewed your account and re-enabled trading. You may now resume trading.",
     },
+    usdtAddressChanged: {
+      title: "[Magic {magicNumber}] Payout Address Changed",
+      message:
+        "Your payout address was changed to {newAddress}. No payout will be sent to it for {holdHours} hours. If you did not make this change, contact RFX immediately and change your password.",
+    },
     onboardingComplete: {
       title: "[Magic {magicNumber}] Onboarding Complete",
       message:
@@ -347,6 +355,9 @@ export const en = {
     purposeLogin: "login from a new device",
     purposeReset: "password reset",
     purposeChange: "password change",
+    purposeUsdtChange: "payout address change",
+    usdtAddressChanged:
+      "[Magic {magicNumber}] 🔑 <b>Payout Address Changed</b>\n\n{greeting}\n\nThe USDT address your payouts are sent to has been changed to:\n\n<code>{newAddress}</code>\n\nPrevious address: <code>{previousAddress}</code>\n\nNo payout will be sent to the new address for {holdHours} hours. <b>If you did not make this change, contact RFX immediately</b> and change your password.",
     test:
       "Hello World! 👋 This is a test message from RFX Trader Dashboard, {name}. Your Telegram notifications are working correctly.",
     startNoUsername:

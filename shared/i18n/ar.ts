@@ -190,6 +190,9 @@ export const ar: Translations = {
     network: "الشبكة",
     selectNetwork: "اختر الشبكة",
     saveUsdt: "حفظ معلومات USDT",
+    usdtChangeNote:
+      "يتطلب تغيير عنوان محفوظ مسبقاً رمز تحقق على Telegram، وتُحجَب المدفوعات بعده مدة {hours} ساعة.",
+    verifyAndSaveUsdt: "تحقّق واحفظ العنوان",
     usdtUpdated: "تم تحديث معلومات USDT",
     usdtUpdateFailed: "تعذّر تحديث معلومات USDT",
     trc20Invalid: "يجب أن يتكوّن عنوان TRC20 من 34 حرفاً وأن يبدأ بالحرف 'T'",
@@ -296,6 +299,11 @@ export const ar: Translations = {
       message:
         "راجع أحد المسؤولين حسابك وأعاد تفعيل التداول. يمكنك الآن استئناف التداول.",
     },
+    usdtAddressChanged: {
+      title: "[Magic {magicNumber}] تم تغيير عنوان الدفع",
+      message:
+        "تم تغيير عنوان الدفع الخاص بك إلى {newAddress}. لن يُرسل إليه أي مبلغ مدة {holdHours} ساعة. إذا لم تقم بهذا التغيير فاتصل بـ RFX فوراً وغيّر كلمة مرورك.",
+    },
     onboardingComplete: {
       title: "[Magic {magicNumber}] اكتمل التسجيل",
       message:
@@ -333,6 +341,9 @@ export const ar: Translations = {
     purposeLogin: "تسجيل الدخول من جهاز جديد",
     purposeReset: "إعادة تعيين كلمة المرور",
     purposeChange: "تغيير كلمة المرور",
+    purposeUsdtChange: "تغيير عنوان الدفع",
+    usdtAddressChanged:
+      "[Magic {magicNumber}] 🔑 <b>تم تغيير عنوان الدفع</b>\n\n{greeting}\n\nتم تغيير عنوان USDT الذي تُرسل إليه مدفوعاتك إلى:\n\n<code>{newAddress}</code>\n\nالعنوان السابق: <code>{previousAddress}</code>\n\nلن يُرسل أي مبلغ إلى العنوان الجديد مدة {holdHours} ساعة. <b>إذا لم تقم بهذا التغيير فاتصل بـ RFX فوراً</b> وغيّر كلمة مرورك.",
     test:
       "Hello World! 👋 {name}، هذه رسالة تجريبية من لوحة متداولي RFX. إشعارات Telegram لديك تعمل بشكل صحيح.",
     startNoUsername:

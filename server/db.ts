@@ -23,6 +23,7 @@ import {
   InsertLog,
   emailSenders,
   type EmailSender,
+  type TwoFactorPurpose,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -792,7 +793,7 @@ export async function removePreviousMasterAccount(id: number) {
 export async function createTwoFactorCode(
   magicNumberId: number,
   code: string,
-  purpose: "login_2fa" | "password_reset" | "password_change"
+  purpose: TwoFactorPurpose
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -824,7 +825,7 @@ export async function createTwoFactorCode(
 /** Burns all outstanding codes for a trader+purpose (used when the attempt cap is hit). */
 export async function invalidateTwoFactorCodes(
   magicNumberId: number,
-  purpose: "login_2fa" | "password_reset" | "password_change"
+  purpose: TwoFactorPurpose
 ) {
   const db = await getDb();
   if (!db) return;
@@ -844,7 +845,7 @@ export async function invalidateTwoFactorCodes(
 export async function verifyTwoFactorCode(
   magicNumberId: number,
   code: string,
-  purpose: "login_2fa" | "password_reset" | "password_change"
+  purpose: TwoFactorPurpose
 ): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;

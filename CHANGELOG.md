@@ -5,6 +5,40 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.14.0] — 2026-11-02
+
+### Security
+
+- **Changing a payout address now needs a verification code, and holds payouts
+  for four hours afterwards.** This is the path the 2 November theft actually
+  used: a payout's destination is whatever `magic_numbers.usdtAddress` holds at
+  the moment the money moves, and an account could change its own address with
+  no second factor, no record and no delay. Point it at an attacker wallet,
+  send, point it back — 234 seconds, and the only trace left in the app was a
+  narration the attacker typed.
+
+  Replacing an address already on file now requires a Telegram code, the same
+  two-step flow as a password change. The first save during onboarding does
+  not: there is no destination to protect yet.
+
+  The waiting period is the part that matters. A code and a log line only make
+  the sequence noisy; refusing to pay out to an address that moved in the last
+  four hours makes it useless, because the money cannot leave before the trader
+  has been told their destination changed. It is enforced where the address is
+  read — in `sendWalletPayment` and in the profit-share run — and the payout
+  candidate list shows "Address changed — held until …" so an admin sees it
+  before starting anything. Test payouts are unaffected; they go to our own
+  wallet and never read the trader's address.
+
+  Every change is now written to the admin log with both the old and new
+  address, sent to the trader on Telegram and in-app in their own language, and
+  copied to the team's alert channel.
+
+### Fixed
+
+- A payout address is now trimmed before it is stored. A trailing space in a
+  TRON address is a failed payout.
+
 ## [4.13.0] — 2026-11-02
 
 ### Security

@@ -189,6 +189,9 @@ export const ur: Translations = {
     network: "نیٹ ورک",
     selectNetwork: "نیٹ ورک منتخب کریں",
     saveUsdt: "USDT معلومات محفوظ کریں",
+    usdtChangeNote:
+      "پہلے سے محفوظ ایڈریس تبدیل کرنے کے لیے Telegram پر تصدیقی کوڈ درکار ہوتا ہے، اور اس کے بعد {hours} گھنٹے تک ادائیگیاں روک دی جاتی ہیں۔",
+    verifyAndSaveUsdt: "تصدیق کریں اور ایڈریس محفوظ کریں",
     usdtUpdated: "USDT معلومات اپ ڈیٹ ہو گئیں",
     usdtUpdateFailed: "USDT معلومات اپ ڈیٹ نہیں ہو سکیں",
     trc20Invalid: "TRC20 ایڈریس 34 حروف کا ہونا چاہیے اور 'T' سے شروع ہونا چاہیے",
@@ -295,6 +298,11 @@ export const ur: Translations = {
       message:
         "ایک ایڈمن نے آپ کے اکاؤنٹ کا جائزہ لے کر ٹریڈنگ دوبارہ فعال کر دی ہے۔ اب آپ دوبارہ ٹریڈنگ کر سکتے ہیں۔",
     },
+    usdtAddressChanged: {
+      title: "[Magic {magicNumber}] ادائیگی کا ایڈریس تبدیل ہو گیا",
+      message:
+        "آپ کی ادائیگی کا ایڈریس {newAddress} پر تبدیل کر دیا گیا ہے۔ اگلے {holdHours} گھنٹے تک اس پر کوئی ادائیگی نہیں بھیجی جائے گی۔ اگر یہ تبدیلی آپ نے نہیں کی تو فوراً RFX سے رابطہ کریں اور اپنا پاس ورڈ تبدیل کریں۔",
+    },
     onboardingComplete: {
       title: "[Magic {magicNumber}] آن بورڈنگ مکمل ہو گئی",
       message:
@@ -332,6 +340,9 @@ export const ur: Translations = {
     purposeLogin: "نئی ڈیوائس سے لاگ اِن",
     purposeReset: "پاس ورڈ ری سیٹ",
     purposeChange: "پاس ورڈ کی تبدیلی",
+    purposeUsdtChange: "ادائیگی کے ایڈریس کی تبدیلی",
+    usdtAddressChanged:
+      "[Magic {magicNumber}] 🔑 <b>ادائیگی کا ایڈریس تبدیل ہو گیا</b>\n\n{greeting}\n\nجس USDT ایڈریس پر آپ کی ادائیگیاں بھیجی جاتی ہیں وہ تبدیل کر دیا گیا ہے:\n\n<code>{newAddress}</code>\n\nپچھلا ایڈریس: <code>{previousAddress}</code>\n\nاگلے {holdHours} گھنٹے تک نئے ایڈریس پر کوئی ادائیگی نہیں بھیجی جائے گی۔ <b>اگر یہ تبدیلی آپ نے نہیں کی تو فوراً RFX سے رابطہ کریں</b> اور اپنا پاس ورڈ تبدیل کریں۔",
     test:
       "Hello World! 👋 {name}، یہ RFX ٹریڈر ڈیش بورڈ کی طرف سے ایک ٹیسٹ پیغام ہے۔ آپ کی Telegram اطلاعات درست کام کر رہی ہیں۔",
     startNoUsername:

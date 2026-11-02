@@ -338,6 +338,33 @@ export function buildMissedTradeMessage(
 }
 
 /**
+ * Tell a trader their payout address was changed — the message that lets
+ * somebody notice a change they did not make, which is the whole point of the
+ * cool-off it announces. Addresses and the hold are wrapped so they read
+ * left-to-right in Urdu and Arabic.
+ */
+export function buildUsdtAddressChangedMessage(
+  params: {
+    traderName: string;
+    magicNumber: string;
+    previousAddress: string;
+    newAddress: string;
+    holdHours: number;
+  },
+  lang: Language = "en"
+): string {
+  const { traderName, magicNumber, previousAddress, newAddress, holdHours } =
+    params;
+  return translate(lang, "telegram.usdtAddressChanged", {
+    magicNumber,
+    greeting: translate(lang, "telegram.greeting", { name: traderName }),
+    previousAddress,
+    newAddress,
+    holdHours: String(holdHours),
+  });
+}
+
+/**
  * Build a risk limit breach alert message for the admin. English only.
  */
 export function buildAdminRiskLimitAlertMessage(params: {

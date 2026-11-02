@@ -111,6 +111,7 @@ import {
   buildPaymentMessage,
   buildRiskLimitBreachMessage,
   buildAdminRiskLimitAlertMessage,
+  buildUsdtAddressChangedMessage,
   localizedTelegram,
   copyToAlertChannel,
 } from "./telegram";
@@ -128,6 +129,12 @@ import { getLastCheckedAt } from "./breachMonitor";
 import { confirmEquityBreach } from "./breachConfirm";
 import { getTrailingLastCheckedAt } from "./trailingRiskLimit";
 import { logEvent, type LogCategory } from "./logStore";
+import type { TwoFactorPurpose } from "../drizzle/schema";
+import { USDT_ADDRESS_COOL_OFF_HOURS } from "@shared/const";
+import {
+  addressHoldReason,
+  assertAddressSettled,
+} from "./payoutAddressHold";
 import { assertAdminNetwork } from "./adminNetwork";
 import { socketStatus, reconnectMetaCopierSocket } from "./metacopierSocket";
 import {
@@ -193,13 +200,83 @@ function walletSendError(err: any, who: string): TRPCError {
 // be exercised without paying traders or touching their accounting.
 const TEST_PAYOUT_ADDRESS = "TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9";
 
+/**
+ * Record and announce a payout-address change: the admin log, the trader's
+ * Telegram, their in-app notifications and the team's alert channel.
+ *
+ * Never throws — a delivery failure must not roll back a change the trader
+ * asked for and has already been charged a 2FA code for. The log line is
+ * written first and is the record that matters: before this existed, the only
+ * trace of the 2026-11-02 swap was an incidental onboarding line.
+ */
+async function announceUsdtAddressChange(
+  trader: {
+    id: number;
+    name: string;
+    magicNumber: string;
+    telegramHandle: string | null;
+    telegramChatId: string | null;
+    language: string | null;
+  },
+  previous: string | null,
+  next: string | null
+): Promise<void> {
+  const from = previous ?? "(none)";
+  const to = next ?? "(none)";
+
+  logEvent(
+    "payment",
+    `🔑 ${trader.name} (magic ${trader.magicNumber}) changed their payout address: ` +
+      `${from} → ${to}. Payouts to it are held for ${USDT_ADDRESS_COOL_OFF_HOURS}h.`,
+    "warn"
+  );
+
+  try {
+    await createSystemNotification({
+      magicNumberId: trader.id,
+      key: "usdtAddressChanged",
+      params: {
+        magicNumber: trader.magicNumber,
+        newAddress: to,
+        holdHours: String(USDT_ADDRESS_COOL_OFF_HOURS),
+      },
+      type: "warning",
+    });
+  } catch (e) {
+    console.warn(`[USDT] In-app notify failed for ${trader.name}:`, e);
+  }
+
+  const { message, english, opts } = localizedTelegram(
+    buildUsdtAddressChangedMessage,
+    {
+      traderName: trader.name,
+      magicNumber: trader.magicNumber,
+      previousAddress: from,
+      newAddress: to,
+      holdHours: USDT_ADDRESS_COOL_OFF_HOURS,
+    },
+    trader.language
+  );
+  if (trader.telegramChatId) {
+    await sendTelegramMessage(
+      trader.telegramHandle ?? "",
+      message,
+      trader.telegramChatId,
+      opts
+    ).catch(e =>
+      console.warn(`[USDT] Telegram to ${trader.name} failed:`, e)
+    );
+  }
+  await copyToAlertChannel(english).catch(() => {});
+}
+
 async function generateAndSend2FACode(
   magicNumberId: number,
   telegramHandle: string | null,
   telegramChatId: string | null,
   traderName: string,
   magicNumber: string,
-  purpose: "login_2fa" | "password_reset" | "password_change",
+  purpose: TwoFactorPurpose,
   language: string | null | undefined
 ): Promise<boolean> {
   if (!telegramHandle || !telegramChatId) return false;
@@ -212,7 +289,9 @@ async function generateAndSend2FACode(
       ? "telegram.purposeLogin"
       : purpose === "password_reset"
         ? "telegram.purposeReset"
-        : "telegram.purposeChange";
+        : purpose === "usdt_address_change"
+          ? "telegram.purposeUsdtChange"
+          : "telegram.purposeChange";
 
   const lang: Language = toLanguage(language);
   const message = translate(lang, "telegram.verificationCode", {
@@ -236,7 +315,7 @@ async function generateAndSend2FACode(
 async function verifyTwoFactorCodeWithCap(
   magicNumberId: number,
   code: string,
-  purpose: "login_2fa" | "password_reset" | "password_change"
+  purpose: TwoFactorPurpose
 ): Promise<boolean> {
   const key = `2fa:${magicNumberId}:${purpose}`;
   if (!checkRateLimit(key, 5, 5 * 60 * 1000)) {
@@ -1341,25 +1420,77 @@ export const appRouter = router({
       }),
 
     // Update USDT payment information
+    // Changing the payout destination is the single most dangerous thing an
+    // account can do to itself: `sendWalletPayment` and the profit-share run
+    // both send to whatever usdtAddress holds at the moment the money moves.
+    // So a change to an address already set needs a 2FA code, is logged, is
+    // announced to the trader on Telegram and in-app, and starts a cool-off
+    // during which nothing will pay out to it.
+    //
+    // The first save has none of that: there is no destination to protect yet,
+    // and it happens during onboarding.
     updateUsdtInfo: tradingProcedure
       .input(
         z.object({
           usdtAddress: z.string().optional(),
           usdtNetwork: z.enum(["TRC20", "ERC20"]).optional(),
+          twoFactorCode: z.string().length(6).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const magicNumberId = ctx.tradingSession.magicNumber.id;
+        const trader = ctx.tradingSession.magicNumber;
+        const previous = trader.usdtAddress?.trim() || null;
+        // Trimmed: a trailing space in an address is a failed payout.
+        const next =
+          input.usdtAddress === undefined
+            ? undefined
+            : input.usdtAddress.trim() || null;
+        const addressChanged = next !== undefined && next !== previous;
+        const replacingAddress = addressChanged && previous !== null;
 
-        await updateMagicNumber(magicNumberId, {
-          usdtAddress: input.usdtAddress,
+        if (replacingAddress && trader.telegramChatId) {
+          if (!input.twoFactorCode) {
+            await generateAndSend2FACode(
+              trader.id,
+              trader.telegramHandle,
+              trader.telegramChatId,
+              trader.name,
+              trader.magicNumber,
+              "usdt_address_change",
+              trader.language
+            );
+            return { success: false, requires2FA: true };
+          }
+
+          const codeValid = await verifyTwoFactorCodeWithCap(
+            trader.id,
+            input.twoFactorCode,
+            "usdt_address_change"
+          );
+          if (!codeValid) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid or expired verification code",
+            });
+          }
+        }
+
+        await updateMagicNumber(trader.id, {
+          usdtAddress: next === undefined ? undefined : (next ?? ""),
           usdtNetwork: input.usdtNetwork,
+          // Only on a real move, so re-saving an unchanged address does not
+          // restart the hold.
+          ...(addressChanged ? { usdtAddressUpdatedAt: new Date() } : {}),
         });
 
-        // Saving USDT details may complete onboarding → activate live copiers.
-        void maybeActivateOnboarding(magicNumberId);
+        if (addressChanged) {
+          await announceUsdtAddressChange(trader, previous, next);
+        }
 
-        return { success: true };
+        // Saving USDT details may complete onboarding → activate live copiers.
+        void maybeActivateOnboarding(trader.id);
+
+        return { success: true, requires2FA: false };
       }),
 
     // Update Telegram handle for current trader
@@ -4072,6 +4203,7 @@ export const appRouter = router({
               message: "Trader has no USDT address or network configured",
             });
           }
+          assertAddressSettled(trader);
 
           const network = trader.usdtNetwork as "TRC20" | "ERC20";
           let sent: SendResult;
@@ -4253,6 +4385,9 @@ export const appRouter = router({
           } else if (!t.usdtAddress || !t.usdtNetwork) {
             payable = false;
             reason = "No USDT address set";
+          } else if (addressHoldReason(t)) {
+            payable = false;
+            reason = addressHoldReason(t);
           } else if (!waitOk) {
             payable = false;
             const nextDue = lastPayoutAt
@@ -4386,6 +4521,7 @@ export const appRouter = router({
                 message: "Trader has no USDT address or network configured",
               });
             }
+            assertAddressSettled(trader);
             destination = trader.usdtAddress;
             network = trader.usdtNetwork as "TRC20" | "ERC20";
           }

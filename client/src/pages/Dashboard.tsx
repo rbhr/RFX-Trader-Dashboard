@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { USDT_ADDRESS_COOL_OFF_HOURS } from "@shared/const";
 import { useTradingSession } from "@/hooks/useTradingSession";
 import { useLivePositions } from "@/hooks/useLivePositions";
 import { Button } from "@/components/ui/button";
@@ -189,6 +190,10 @@ export default function Dashboard(props: {
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passwordChangeStep, setPasswordChangeStep] = useState<"form" | "2fa">("form");
   const [passwordChangeCode, setPasswordChangeCode] = useState("");
+  // Replacing a payout address already on file needs a Telegram code, the
+  // same two-step flow as a password change.
+  const [usdtChangeStep, setUsdtChangeStep] = useState<"form" | "2fa">("form");
+  const [usdtChangeCode, setUsdtChangeCode] = useState("");
 
   // View-as-trader: use external prop (from AdminDashboard) or internal state
   const [internalViewAsTraderId, setViewAsTraderId] = useState<number | undefined>(undefined);
@@ -242,7 +247,22 @@ export default function Dashboard(props: {
 
   const { data: paymentHistory, isLoading: paymentsLoading } = trpc.trading.getPayments.useQuery(viewAsInput);
   const { data: notifications, refetch: refetchNotifications } = trpc.trading.getNotifications.useQuery(viewAsInput);
-  const updateUsdtMutation = trpc.trading.updateUsdtInfo.useMutation();
+  const updateUsdtMutation = trpc.trading.updateUsdtInfo.useMutation({
+    onSuccess: data => {
+      if (data.requires2FA) {
+        setUsdtChangeStep("2fa");
+        toast.info(t("common.codeSentToTelegram"));
+        return;
+      }
+      toast.success(t("settings.usdtUpdated"));
+      setUsdtChangeCode("");
+      setUsdtChangeStep("form");
+      void utils.trading.getSession.invalidate();
+    },
+    onError: error => {
+      toast.error(tError(error.message));
+    },
+  });
   const updateTelegramMutation = trpc.trading.updateTelegramHandle.useMutation();
   const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
   const changePasswordMutation = trpc.trading.changePassword.useMutation({
@@ -477,22 +497,20 @@ export default function Dashboard(props: {
     await logout();
   };
 
-  const handleSaveUsdtInfo = async () => {
+  // Success, failure and the "needs a code" branch are all handled on the
+  // mutation itself, so this only validates and fires.
+  const handleSaveUsdtInfo = (twoFactorCode?: string) => {
     const validationError = validateUsdtAddress(usdtAddress, usdtNetwork);
     if (validationError) {
       setUsdtAddressError(validationError);
       return;
     }
     setUsdtAddressError(null);
-    try {
-      await updateUsdtMutation.mutateAsync({
-        usdtAddress: usdtAddress || undefined,
-        usdtNetwork: usdtNetwork || undefined,
-      });
-      toast.success(t("settings.usdtUpdated"));
-    } catch (error) {
-      toast.error(t("settings.usdtUpdateFailed"));
-    }
+    updateUsdtMutation.mutate({
+      usdtAddress: usdtAddress || undefined,
+      usdtNetwork: usdtNetwork || undefined,
+      ...(twoFactorCode ? { twoFactorCode } : {}),
+    });
   };
 
   // Initialize USDT fields when own session loads (not viewed trader)
@@ -1328,6 +1346,48 @@ export default function Dashboard(props: {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {usdtChangeStep === "2fa" ? (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        {t("settings.codeSentEnterBelow")}
+                      </p>
+                      <div className="space-y-2">
+                        <Label htmlFor="usdtChangeCode">{t("common.verificationCode")}</Label>
+                        <Input
+                          id="usdtChangeCode"
+                          type="text"
+                          inputMode="numeric"
+                          dir="ltr"
+                          maxLength={6}
+                          value={usdtChangeCode}
+                          onChange={(e) => setUsdtChangeCode(e.target.value.replace(/\D/g, ""))}
+                          placeholder={t("common.enterSixDigitCode")}
+                          disabled={updateUsdtMutation.isPending}
+                          autoFocus
+                          className="text-center text-2xl tracking-widest font-mono"
+                        />
+                      </div>
+                      <Button
+                        className="w-full"
+                        onClick={() => handleSaveUsdtInfo(usdtChangeCode)}
+                        disabled={updateUsdtMutation.isPending || usdtChangeCode.length !== 6}
+                      >
+                        {updateUsdtMutation.isPending ? t("common.verifying") : t("settings.verifyAndSaveUsdt")}
+                      </Button>
+                      <button
+                        type="button"
+                        className="w-full text-sm text-muted-foreground hover:text-primary"
+                        onClick={() => {
+                          setUsdtChangeStep("form");
+                          setUsdtChangeCode("");
+                          setUsdtAddress(selfSession?.usdtAddress || "");
+                          setUsdtNetwork(selfSession?.usdtNetwork || "");
+                        }}
+                      >
+                        {t("common.cancel")}
+                      </button>
+                    </div>
+                  ) : (
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="usdtAddress">{t("settings.usdtAddress")}</Label>
@@ -1361,10 +1421,16 @@ export default function Dashboard(props: {
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button onClick={handleSaveUsdtInfo} disabled={updateUsdtMutation.isPending || !!usdtAddressError}>
+                    {selfSession?.usdtAddress && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.usdtChangeNote", { hours: String(USDT_ADDRESS_COOL_OFF_HOURS) })}
+                      </p>
+                    )}
+                    <Button onClick={() => handleSaveUsdtInfo()} disabled={updateUsdtMutation.isPending || !!usdtAddressError}>
                       {updateUsdtMutation.isPending ? t("common.saving") : t("settings.saveUsdt")}
                     </Button>
                   </div>
+                  )}
                 </CardContent>
               </Card>
 

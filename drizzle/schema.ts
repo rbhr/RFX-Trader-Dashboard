@@ -102,6 +102,11 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   showMyTradesUrl: varchar("showMyTradesUrl", { length: 500 }),
   usdtAddress: varchar("usdtAddress", { length: 255 }),
   usdtNetwork: mysqlEnum("usdtNetwork", ["TRC20", "ERC20"]),
+  // When usdtAddress last moved. Payouts are refused while it is recent (see
+  // USDT_ADDRESS_COOL_OFF_HOURS), which is what breaks the swap-send-restore
+  // that took 2030 USDT on 2026-11-02. Anything that writes usdtAddress must
+  // stamp this; `trading.updateUsdtInfo` is currently the only writer.
+  usdtAddressUpdatedAt: timestamp("usdtAddressUpdatedAt"),
   // Set once the trader completes onboarding (Telegram linked, password changed,
   // USDT details set) and their live copiers are activated. One-way: never cleared.
   liveCopiersActivatedAt: timestamp("liveCopiersActivatedAt"),
@@ -366,6 +371,7 @@ export const twoFactorCodes = mysqlTable("two_factor_codes", {
     "login_2fa",
     "password_reset",
     "password_change",
+    "usdt_address_change",
   ]).notNull(),
   used: boolean("used").notNull().default(false),
   expiresAt: timestamp("expiresAt").notNull(),
@@ -373,6 +379,8 @@ export const twoFactorCodes = mysqlTable("two_factor_codes", {
 });
 
 export type TwoFactorCode = typeof twoFactorCodes.$inferSelect;
+/** The reasons a code can be issued for — one source of truth for the enum. */
+export type TwoFactorPurpose = TwoFactorCode["purpose"];
 export type InsertTwoFactorCode = typeof twoFactorCodes.$inferInsert;
 
 /**
