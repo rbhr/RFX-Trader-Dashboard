@@ -190,6 +190,11 @@ export const en = {
     telegramHandleHelp:
       "Used to receive payment and important notifications via Telegram",
     telegramSaved: "Telegram handle saved",
+    telegramConnect: "Connect Telegram",
+    telegramConnectHelp:
+      "Connects this account to the Telegram app on the device you open it from. Use this to move an account to a different Telegram.",
+    telegramConnectIssued:
+      "Open this link on the device that has Telegram, within {minutes} minutes. It works once:",
     connected: "Connected",
     notConnected: "Not connected — send /start to @RFXTraderBot",
     sendTestMessage: "Send Test Message",
@@ -232,6 +237,9 @@ export const en = {
     totpOff: "Off",
     totpSetUp: "Set Up Authenticator",
     totpTurnOff: "Turn Off Authenticator",
+    totpReplace: "Replace Authenticator",
+    totpReplaceNeedsCode:
+      "Enter your password and a code from your current authenticator. The one you have now keeps working until the new one is confirmed.",
     totpTurnedOff: "Authenticator turned off",
     totpConfirmPassword: "Enter your password to continue.",
     totpScan:
@@ -394,6 +402,10 @@ export const en = {
       "✅ <b>Re-linked!</b>\n\nYour Telegram is connected to {count} account(s):\n{accounts}\n\n• 📊 <b>Dashboard:</b> {dashboardLink}\n\nNotifications will continue to be delivered here.",
     help:
       "👋 This bot sends your RFX Trader Dashboard notifications. To link this chat to your account, send /start.",
+    startLinkExpired:
+      "That link has expired or has already been used. Open your RFX dashboard, go to Settings → Account and tap Connect Telegram for a fresh one.",
+    startAlreadyLinked:
+      "This account is already connected to a Telegram account. If that is not you, open your RFX dashboard, go to Settings → Account and tap <b>Connect Telegram</b> — a link from there will move it here.",
     startUnknown:
       "👋 Hi @{username}! To link your Telegram to RFX Trader Dashboard, please save your Telegram handle in your dashboard settings first, then send /start again.",
   },

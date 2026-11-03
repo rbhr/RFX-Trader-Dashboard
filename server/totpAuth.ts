@@ -1,6 +1,10 @@
 import { TRPCError } from "@trpc/server";
 
-import { updateMagicNumber } from "./db";
+import {
+  claimRecoveryCodes,
+  claimTotpStep,
+  updateMagicNumber,
+} from "./db";
 import { decryptToken, encryptToken } from "./emailTokenCrypto";
 import { TOTP_CHANGE_COOL_OFF_HOURS } from "@shared/const";
 import { checkRateLimit, resetRateLimit } from "./rateLimit";
@@ -32,6 +36,7 @@ export type TotpTrader = {
   id: number;
   magicNumber: string;
   totpSecret: string | null;
+  totpPendingSecret?: string | null;
   totpEnabledAt: Date | null;
   totpLastStep: number | null;
   totpRecoveryCodes: string | null;
@@ -62,35 +67,28 @@ export function recoveryCodesRemaining(trader: TotpTrader): number {
 }
 
 /**
- * Starts enrolment: a fresh secret, stored encrypted but *not* yet in force,
- * and the URI/secret to put in front of the person. Enrolment is only
- * completed by `completeTotpEnrolment`, so a half-finished attempt can never
- * lock anybody out.
+ * Starts enrolment: a fresh secret stored as *pending*, and the URI and secret
+ * to put in front of the person.
  *
- * Starting one *over the top of a working authenticator* is a replacement, and
- * stamps the cool-off: that is the move somebody with the password and one
- * code would make to point the second factor at their own phone.
+ * Touches nothing that is already in force. A working authenticator, its
+ * recovery codes and its replay counter all survive until
+ * `completeTotpEnrolment` proves the new secret reached a device — so an
+ * enrolment that is started and abandoned, or started by somebody who should
+ * not have, leaves the account exactly as it was.
+ *
+ * It did not always work that way: the first version wrote over `totpSecret`
+ * and cleared `totpEnabledAt` and the recovery codes here, which let a stolen
+ * session plus the password strip somebody's second factor before proving
+ * anything. Whoever calls this must still require a current code to *replace*
+ * a working factor — see `startTotpEnrolment`.
  */
-export async function beginTotpEnrolment(
-  trader: {
-    id: number;
-    magicNumber: string;
-    totpSecret?: string | null;
-    totpEnabledAt?: Date | null;
-  },
-  now: Date = new Date()
-): Promise<{ secret: string; uri: string }> {
-  const replacing = totpEnabled({
-    totpSecret: trader.totpSecret ?? null,
-    totpEnabledAt: trader.totpEnabledAt ?? null,
-  });
+export async function beginTotpEnrolment(trader: {
+  id: number;
+  magicNumber: string;
+}): Promise<{ secret: string; uri: string }> {
   const secret = generateTotpSecret();
   await updateMagicNumber(trader.id, {
-    totpSecret: encryptToken(secret),
-    totpEnabledAt: null,
-    totpLastStep: null,
-    totpRecoveryCodes: null,
-    ...(replacing ? { totpChangedAt: now } : {}),
+    totpPendingSecret: encryptToken(secret),
   });
   return {
     secret,
@@ -108,7 +106,7 @@ export async function completeTotpEnrolment(
   code: string,
   now: Date = new Date()
 ): Promise<string[]> {
-  if (!trader.totpSecret) {
+  if (!trader.totpPendingSecret) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: "Start the authenticator setup again — no pending secret.",
@@ -116,7 +114,9 @@ export async function completeTotpEnrolment(
   }
   assertAttemptAllowed(trader.id);
 
-  const step = verifyTotpCode(decryptToken(trader.totpSecret), code, { now });
+  const step = verifyTotpCode(decryptToken(trader.totpPendingSecret), code, {
+    now,
+  });
   if (step === null) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
@@ -125,11 +125,17 @@ export async function completeTotpEnrolment(
   }
   resetRateLimit(attemptKey(trader.id));
 
+  // Only now does the factor actually change, so this is where the payout hold
+  // is stamped — and only when something was displaced.
+  const replacing = totpEnabled(trader);
   const { codes, hashes } = generateRecoveryCodes();
   await updateMagicNumber(trader.id, {
+    totpSecret: trader.totpPendingSecret,
+    totpPendingSecret: null,
     totpEnabledAt: now,
     totpLastStep: step,
     totpRecoveryCodes: JSON.stringify(hashes),
+    ...(replacing ? { totpChangedAt: now } : {}),
   });
   return codes;
 }
@@ -144,6 +150,7 @@ export async function clearTotp(
 ): Promise<void> {
   await updateMagicNumber(traderId, {
     totpSecret: null,
+    totpPendingSecret: null,
     totpEnabledAt: null,
     totpLastStep: null,
     totpRecoveryCodes: null,
@@ -227,7 +234,10 @@ export async function consumeTotpCode(
       // Correct arithmetic, already spent.
       return null;
     }
-    await updateMagicNumber(trader.id, { totpLastStep: step });
+    // The database decides, not the read above: `claimTotpStep` only reports
+    // success for the request whose UPDATE actually advanced the step, so two
+    // arriving with the same code cannot both be accepted.
+    if (!(await claimTotpStep(trader.id, step))) return null;
     resetRateLimit(attemptKey(trader.id));
     return "totp";
   }
@@ -236,9 +246,13 @@ export async function consumeTotpCode(
   const index = matchRecoveryCode(code, hashes);
   if (index !== null) {
     const remaining = hashes.filter((_, i) => i !== index);
-    await updateMagicNumber(trader.id, {
-      totpRecoveryCodes: JSON.stringify(remaining),
-    });
+    // Compare-and-swap against the list as read, for the same reason.
+    const claimed = await claimRecoveryCodes(
+      trader.id,
+      trader.totpRecoveryCodes ?? null,
+      JSON.stringify(remaining)
+    );
+    if (!claimed) return null;
     resetRateLimit(attemptKey(trader.id));
     return "recovery";
   }

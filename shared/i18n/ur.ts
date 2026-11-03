@@ -180,6 +180,11 @@ export const ur: Translations = {
     telegramHandleHelp:
       "Telegram کے ذریعے ادائیگی اور اہم اطلاعات وصول کرنے کے لیے استعمال ہوتا ہے",
     telegramSaved: "Telegram ہینڈل محفوظ ہو گیا",
+    telegramConnect: "Telegram منسلک کریں",
+    telegramConnectHelp:
+      "جس ڈیوائس پر آپ یہ لنک کھولیں گے، اس کی Telegram ایپ سے یہ اکاؤنٹ منسلک ہو جائے گا۔ اکاؤنٹ کو کسی دوسرے Telegram پر منتقل کرنے کے لیے یہی استعمال کریں۔",
+    telegramConnectIssued:
+      "جس ڈیوائس پر Telegram ہے، اس پر {minutes} منٹ کے اندر یہ لنک کھولیں۔ یہ ایک بار کام کرے گا:",
     connected: "منسلک ہے",
     notConnected: "منسلک نہیں — @RFXTraderBot کو /start بھیجیں",
     sendTestMessage: "ٹیسٹ پیغام بھیجیں",
@@ -222,6 +227,9 @@ export const ur: Translations = {
     totpOff: "آف",
     totpSetUp: "Authenticator ترتیب دیں",
     totpTurnOff: "Authenticator بند کریں",
+    totpReplace: "Authenticator تبدیل کریں",
+    totpReplaceNeedsCode:
+      "اپنا پاس ورڈ اور موجودہ authenticator کا کوڈ درج کریں۔ نیا authenticator تصدیق ہونے تک موجودہ کام کرتا رہے گا۔",
     totpTurnedOff: "Authenticator بند کر دیا گیا",
     totpConfirmPassword: "جاری رکھنے کے لیے اپنا پاس ورڈ درج کریں۔",
     totpScan:
@@ -379,6 +387,10 @@ export const ur: Translations = {
       "✅ <b>دوبارہ منسلک ہو گیا!</b>\n\nآپ کا Telegram {count} اکاؤنٹ(س) سے منسلک ہے:\n{accounts}\n\n• 📊 <b>ڈیش بورڈ:</b> {dashboardLink}\n\nاطلاعات یہیں موصول ہوتی رہیں گی۔",
     help:
       "👋 یہ بوٹ آپ کے RFX ٹریڈر ڈیش بورڈ کی اطلاعات بھیجتا ہے۔ اس چیٹ کو اپنے اکاؤنٹ سے منسلک کرنے کے لیے /start بھیجیں۔",
+    startLinkExpired:
+      "یہ لنک ختم ہو چکا ہے یا پہلے استعمال ہو چکا ہے۔ اپنا RFX ڈیش بورڈ کھولیں، Settings → Account پر جائیں اور نیا لنک حاصل کرنے کے لیے Connect Telegram دبائیں۔",
+    startAlreadyLinked:
+      "یہ اکاؤنٹ پہلے ہی کسی Telegram اکاؤنٹ سے منسلک ہے۔ اگر یہ آپ نہیں ہیں تو اپنا RFX ڈیش بورڈ کھولیں، Settings → Account پر جائیں اور <b>Connect Telegram</b> دبائیں — وہاں سے بھیجا گیا لنک اسے یہاں منتقل کر دے گا۔",
     startUnknown:
       "👋 @{username}! اپنا Telegram، RFX ٹریڈر ڈیش بورڈ سے منسلک کرنے کے لیے پہلے اپنے ڈیش بورڈ کی ترتیبات میں اپنا Telegram ہینڈل محفوظ کریں، پھر دوبارہ /start بھیجیں۔",
   },

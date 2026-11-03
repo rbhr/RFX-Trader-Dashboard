@@ -16,7 +16,12 @@ ranked-first finding sat unactioned for four months, while the app logged
 `password still default` for that account on every onboarding re-check — including twice
 during the theft. Detection without action is not a control.
 
-Reviewed 2026-07-24; status updated 2026-11-03.
+A second review on 2026-11-03 went over the remediation code itself and found four more,
+three of them in code written that day — they are #5–#7 below, plus independent confirmation
+of #3. All are now fixed. That review arrived as a loose `rr.MD`; it is folded in here so
+there is one standing list.
+
+Reviewed 2026-07-24 and 2026-11-03; status updated 2026-11-03.
 
 ## Context: what's already solid (no action needed)
 
@@ -52,29 +57,25 @@ Reviewed 2026-07-24; status updated 2026-11-03.
   and rotated. The `!isAdmin` clause still exists but is now unreachable in practice for the
   one admin account, which has TOTP enrolled.
 
-### 2. Plaintext password fallback — STILL OPEN
-- **Location:** `server/routers.ts`, `verifyPassword` — falls back to `password === hash` for
-  any stored value that is not `$2a$`/`$2b$`-shaped.
-- **Status:** re-checked 2026-11-02 during the incident — **0 rows are non-bcrypt**, so it was
-  not how the attacker got in and is not currently exploitable. Latent foot-gun unchanged: any
-  future seed or import that writes a plaintext password silently "works", and a database read
-  would then expose usable credentials.
-- **Fix:** return `false` for any non-bcrypt hash. Zero behavioural impact today; it is a
-  two-line change and the cheapest item on this list.
+### 2. Plaintext password fallback — FIXED v4.18.1
+- **Was:** `verifyPassword` fell back to `password === hash` for any stored value that was not
+  `$2a$`/`$2b$`-shaped. Flagged 2026-07-24, re-confirmed by the 2026-11-03 review.
+- **Status when fixed:** 0 of 33 rows non-bcrypt, so it was never how anyone got in, and
+  removing it changed nothing — which is when to remove it.
+- **Now:** an unsupported format is refused and written to the `auth` log, so a broken row is
+  visible rather than a mystery. The on-login re-hash migration went with it; it could no
+  longer be reached.
 
-### 3. Telegram username-binding takeover — STILL OPEN
-- **Location:** `server/telegram.ts` — on `/start`, the bot binds the sender's chat ID to
-  every trader whose stored `telegramHandle` equals the sender's *current* Telegram username,
-  overwriting any existing binding.
-- **Why it matters:** Telegram 2FA and password-reset codes go to that chat ID. If a trader's
-  stored handle is an **unregistered or renamed** username, somebody can register it, `/start`,
-  capture the binding, then run a password reset → account takeover. Narrow (needs a stale or
-  free handle) but a real path.
-- **Mitigated slightly** since v4.15.0: an account with an authenticator takes TOTP instead of
-  the Telegram code for login and password change, so a captured binding is not sufficient for
-  those. A password *reset* still goes through Telegram, and no trader has TOTP yet.
-- **Fix:** don't overwrite an established `telegramChatId` without re-verification; bind via a
-  dashboard-generated one-time token rather than a raw username match.
+### 3. Telegram username-binding takeover — FIXED v4.18.1
+- **Was:** on `/start`, the bot bound the sender's chat ID to every trader whose stored
+  `telegramHandle` equalled the sender's *current* username, overwriting any existing binding.
+  Telegram 2FA and password-reset codes go to that chat, so somebody who registered a trader's
+  abandoned username could `/start`, capture the binding and run a password reset.
+- **Now:** a bare `/start` only ever completes a **first** link — anything already bound keeps
+  the chat ID it has, and the attempt is logged. Moving an account to a different Telegram
+  needs a single-use token issued to a signed-in session (Settings → Account → **Connect
+  Telegram**, `t.me/<bot>?start=<token>`, 15 minutes, spent by a conditional update so one
+  token cannot bind twice).
 
 ### 4. IP-based "known device" skips 2FA — HALF FIXED v4.16.0
 - **Was:** any active session from the same egress IP was treated as trusted, skipping 2FA —
@@ -87,6 +88,38 @@ Reviewed 2026-07-24; status updated 2026-11-03.
   rather than an IP. Mobile addresses rotate, so a real device still looks new sometimes —
   which errs towards asking for 2FA, the safe direction.
 
+### 5. An existing authenticator could be replaced with only a session and password — FIXED v4.18.1
+- **Was:** `startTotpEnrolment` verified the password, then `beginTotpEnrolment` immediately
+  wrote the new secret over `totpSecret` and cleared `totpEnabledAt`, `totpLastStep` and the
+  recovery codes. So a stolen session plus the password stripped the account's second factor
+  and destroyed its ten recovery codes **before proving anything**, then let the holder confirm
+  their own. The four-hour payout hold delayed spending; it did not prevent the takeover. A
+  comment in that function claimed the opposite — that an abandoned enrolment could not lock
+  anybody out — which was true of the new secret and false of the old one.
+- **Now:** the new secret lands in a separate `totpPendingSecret` and nothing in force is
+  touched until a code from the new device confirms it, so an abandoned or unwanted attempt
+  leaves the account exactly as it was. Replacing a working authenticator additionally requires
+  a current code from it, or one recovery code — recovery codes are accepted precisely so that
+  a lost phone does not force a disable first, which is the thing being guarded. The payout
+  hold is stamped on confirmation, when the factor actually changes.
+
+### 6. Verification codes were not consumed atomically — FIXED v4.18.1
+- **Was:** every code path read state and then wrote it. `consumeTotpCode` compared against a
+  `totpLastStep` loaded earlier; `verifyTwoFactorCode` did `select … where used = false`
+  followed by `update … where id = ?`. Two concurrent requests carrying one valid code both
+  passed. It mattered most for recovery codes, where two simultaneous uses burnt one slot and
+  granted two sessions.
+- **Now:** every code is claimed by a conditional update that must report exactly one affected
+  row — `claimTotpStep` (the step must advance), `claimRecoveryCodes` (compare-and-swap on the
+  list as read), and `used = false` in the WHERE for Telegram codes.
+
+### 7. Admin password edits bypassed session revocation — FIXED v4.18.1
+- **Was:** `updateTrader` wrote a new password hash and revoked nothing, while the self-service
+  change and reset paths both evicted sessions. An admin resetting a trader's password —
+  exactly what you do when that trader reports a compromise — left the stolen session alive.
+- **Now:** a password written from there evicts every session for that account and logs the
+  count.
+
 ## Resolved since the 2026-07-24 review
 
 - **`server/tron.ts` treated broadcast as success** — a TRC20 transfer that reverted on-chain
@@ -98,10 +131,15 @@ Reviewed 2026-07-24; status updated 2026-11-03.
   now returns as soon as it is broadcast and the UI says "Payment broadcast — confirming
   on-chain" rather than claiming either outcome.
 
-## Suggested order when resuming
+## What is left
 
-**#2** first: two lines, no behavioural change today, and it is the last way a database read
-could yield a usable credential. **#3** next, and it needs a small design change (token-based
-Telegram linking) — it is the remaining account-takeover path, and the one the 2 November
-attacker tried first, at 06:17, before pivoting to the admin account. **#4**'s device cookie
-is hardening and can wait.
+Only **#4**'s signed device cookie, which is hardening: real client addresses already made
+`hasSeenDevice` compare actual devices rather than Cloudflare edges, and a rotating mobile
+address errs towards asking for 2FA, which is the safe direction.
+
+Everything else on this list is fixed. The thing to carry forward is not any individual
+finding but the two review passes themselves: the first was written and shelved, and the
+account it described was emptied four months later. The second read the *fixes* rather than
+the original code and found three fresh holes in work that had typechecked, passed its tests
+and shipped the same day — including one where a comment asserted a safety the code did not
+provide. Review the remediation, not only the thing being remediated.

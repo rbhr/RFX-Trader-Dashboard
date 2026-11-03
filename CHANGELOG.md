@@ -5,6 +5,57 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.18.1] — 2026-11-03
+
+### Security
+
+A second review, this time of the remediation code itself rather than what it was remediating,
+found four more. Three were in code written the same day.
+
+- **An existing authenticator could be replaced with only a session and the password.**
+  `startTotpEnrolment` checked the password and then immediately wrote the new secret over
+  `totpSecret`, clearing `totpEnabledAt`, the replay counter and the ten recovery codes — so a
+  stolen session plus the password stripped the account's second factor and destroyed its
+  recovery codes *before proving anything*, and the holder could then confirm their own. The
+  payout hold delayed spending; it did not prevent the takeover. A comment in that function
+  asserted the opposite, which was true of the new secret and false of the old one.
+
+  The new secret now lands in a separate `totpPendingSecret` and nothing in force is touched
+  until a code from the new device confirms it, so an abandoned or unwanted attempt leaves the
+  account exactly as it was. Replacing a working authenticator also needs a current code from
+  it, or one recovery code — accepted precisely so a lost phone does not force a disable first,
+  which is the thing being guarded. The payout hold is stamped on confirmation, when the factor
+  actually changes.
+
+- **Verification codes were not consumed atomically.** Every path read state and then wrote it,
+  so two concurrent requests carrying one valid code both passed. It mattered most for recovery
+  codes, where two simultaneous uses burnt one slot and granted two sessions. Each code is now
+  claimed by a conditional update that must affect exactly one row: the TOTP step must advance,
+  the recovery list is compare-and-swapped against what was read, and `used = false` moves into
+  the WHERE for Telegram codes.
+
+- **A Telegram username could still capture somebody's codes.** `/start` bound the sender's
+  chat ID to every trader whose stored handle matched their *current* username, overwriting
+  established bindings — so an abandoned username, re-registered, took delivery of that
+  trader's verification and password-reset codes. A bare `/start` now only ever completes a
+  **first** link; anything already bound keeps the chat ID it has, and the attempt is logged.
+  Moving an account to a different Telegram needs a single-use token issued to a signed-in
+  session: Settings → Account → **Connect Telegram**, valid 15 minutes, spent by a conditional
+  update so one token cannot bind twice.
+
+- **An admin password reset left the account's sessions alive.** `updateTrader` wrote a new
+  hash and revoked nothing, while the self-service change and reset paths both evicted
+  sessions — so the one response you make when a trader reports a compromise was the one that
+  left the stolen session working. It now evicts every session for that account and logs the
+  count.
+
+- **The plaintext password fallback is gone.** `verifyPassword` had fallen back to
+  `password === hash` for any stored value that was not bcrypt-shaped, flagged as a latent
+  foot-gun since 2026-07-24. 0 of 33 rows were non-bcrypt, so removing it changed nothing —
+  which is when to remove it. An unsupported format is now refused and logged, rather than
+  refused silently, and the on-login re-hash migration went with it since it could no longer be
+  reached.
+
 ## [4.18.0] — 2026-11-03
 
 ### Added

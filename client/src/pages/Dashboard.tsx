@@ -265,6 +265,13 @@ export default function Dashboard(props: {
     },
   });
   const updateTelegramMutation = trpc.trading.updateTelegramHandle.useMutation();
+  // A one-time link is the only way to move an account to a different Telegram:
+  // the bot will not rebind an established chat id from a username match.
+  const [telegramLink, setTelegramLink] = useState<{ url: string; minutes: number } | null>(null);
+  const telegramLinkMutation = trpc.trading.createTelegramLinkToken.useMutation({
+    onSuccess: data => setTelegramLink({ url: data.url, minutes: data.minutes }),
+    onError: error => toast.error(tError(error.message)),
+  });
   const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
   const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
   const markAllReadMutation = trpc.trading.markAllNotificationsRead.useMutation();
@@ -1318,6 +1325,43 @@ export default function Dashboard(props: {
                           }}
                         />
                       </p>
+                    )}
+
+                    {!isViewingAsTrader && (
+                      <div className="space-y-2 pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          {t("settings.telegramConnectHelp")}
+                        </p>
+                        {telegramLink ? (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              {t("settings.telegramConnectIssued", {
+                                minutes: String(telegramLink.minutes),
+                              })}
+                            </p>
+                            <a
+                              href={telegramLink.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              dir="ltr"
+                              className="block font-mono text-xs break-all text-primary hover:underline"
+                            >
+                              {telegramLink.url}
+                            </a>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => telegramLinkMutation.mutate()}
+                            disabled={telegramLinkMutation.isPending}
+                          >
+                            {telegramLinkMutation.isPending
+                              ? t("common.saving")
+                              : t("settings.telegramConnect")}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardContent>

@@ -13,6 +13,7 @@ import {
   deleteTradingSession,
   deleteTradingSessionsForTrader,
   markSessionTotpVerified,
+  setTelegramLinkToken,
   getAllMagicNumbers,
   getMagicNumberById,
   updateMagicNumber,
@@ -117,6 +118,7 @@ import {
   buildUsdtAddressChangedMessage,
   localizedTelegram,
   copyToAlertChannel,
+  telegramDeepLink,
 } from "./telegram";
 import { createSystemNotification } from "./systemNotifications";
 import {
@@ -216,6 +218,9 @@ function walletSendError(err: any, who: string): TRPCError {
 // In Testing Mode, payout sends are redirected here (a TRON/TRC20 wallet we
 // control) instead of the trader's real address, so the on-chain pipeline can
 // be exercised without paying traders or touching their accounting.
+/** How long a Telegram link stays usable once issued. */
+const TELEGRAM_LINK_TOKEN_MINUTES = 15;
+
 /** How long an admin session lasts, whatever "remember me" said. */
 const ADMIN_SESSION_DAYS = 1;
 
@@ -403,6 +408,19 @@ async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
+/**
+ * Verifies a password against a bcrypt hash, and against nothing else.
+ *
+ * This used to fall back to `password === hash` for any stored value that was
+ * not bcrypt-shaped, which had been flagged as a latent foot-gun since
+ * 2026-07-24: a seed or import that wrote a plaintext password would silently
+ * "work", and a database read would then hand over usable credentials. The
+ * audit during the 2026-11-02 incident confirmed 0 non-bcrypt rows out of 33,
+ * so removing it changes nothing today — which is exactly when to remove it.
+ *
+ * An unsupported format is refused and logged rather than refused silently:
+ * nobody should have to guess why a login stopped working.
+ */
 async function verifyPassword(
   password: string,
   hash: string
@@ -410,7 +428,13 @@ async function verifyPassword(
   if (hash.startsWith("$2b$") || hash.startsWith("$2a$")) {
     return bcrypt.compare(password, hash);
   }
-  return password === hash;
+  logEvent(
+    "auth",
+    `Stored password is not a bcrypt hash — login refused. Reset the ` +
+      `account's password; a non-bcrypt value is never accepted.`,
+    "error"
+  );
+  return false;
 }
 
 // Custom procedure for trading authentication
@@ -1295,15 +1319,6 @@ export const appRouter = router({
           }
         }
 
-        // Hash plaintext password on first successful login (migration)
-        if (
-          !magicNumberData.password.startsWith("$2b$") &&
-          !magicNumberData.password.startsWith("$2a$")
-        ) {
-          const hashed = await hashPassword(input.password);
-          await updateMagicNumber(magicNumberData.id, { password: hashed });
-        }
-
         const sessionToken = nanoid(32);
         // An admin session lasts a day whatever was asked for: it can move
         // money, it is reachable only from the tailnet, and with an
@@ -1550,16 +1565,28 @@ export const appRouter = router({
     /* ── Authenticator (TOTP) ──────────────────────────────────────── */
 
     /**
-     * Step one of enrolment: mint a secret and hand back the QR. Guarded by
-     * the account password, so somebody with only a stolen session cannot
-     * quietly swap the second factor for one of their own.
+     * Step one of enrolment: mint a pending secret and hand back the QR.
      *
-     * The secret is stored but inert until confirmTotpEnrolment, so an
-     * abandoned attempt — or a second one started by mistake — cannot lock
-     * anybody out.
+     * Needs the account password, and — when a working authenticator is
+     * already enrolled — a current code from it, or one recovery code.
+     * Without that second requirement a stolen session plus the password was
+     * enough to point the second factor at somebody else's phone; and because
+     * the pending secret is stored separately, the existing factor and its
+     * recovery codes survive until `confirmTotpEnrolment` proves the new one
+     * arrived. So an abandoned attempt leaves the account untouched.
+     *
+     * A lost phone is why a recovery code is accepted here: otherwise the only
+     * way to re-enrol would be to disable the factor first, which is the very
+     * thing being guarded.
      */
     startTotpEnrolment: tradingProcedure
-      .input(z.object({ password: z.string() }))
+      .input(
+        z.object({
+          password: z.string(),
+          /** Required when replacing a working authenticator. */
+          code: z.string().min(6).max(16).optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const trader = ctx.tradingSession.magicNumber;
         if (!(await verifyPassword(input.password, trader.password))) {
@@ -1568,7 +1595,33 @@ export const appRouter = router({
             message: "Current password is incorrect",
           });
         }
+
         const replacing = totpEnabled(trader);
+        if (replacing) {
+          if (!input.code) {
+            // The client asks for a code and calls again.
+            return {
+              success: false,
+              requiresExistingCode: true,
+              secret: null,
+              uri: null,
+              qrDataUrl: null,
+            };
+          }
+          if (!(await consumeTotpCode(trader, input.code))) {
+            logEvent(
+              "auth",
+              `Authenticator replacement refused — wrong code for ` +
+                `${trader.name} (magic ${trader.magicNumber})`,
+              "warn"
+            );
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid authenticator code",
+            });
+          }
+        }
+
         const { secret, uri } = await beginTotpEnrolment(trader);
         // Rendered server-side: a data URL cannot carry markup into the page,
         // and the client never needs the QR library.
@@ -1580,12 +1633,20 @@ export const appRouter = router({
         logEvent(
           "auth",
           replacing
-            ? `⚠️ Authenticator being REPLACED — ${trader.name} (magic ${trader.magicNumber}). ` +
-                `Payouts held for ${TOTP_CHANGE_COOL_OFF_HOURS}h.`
+            ? `⚠️ Authenticator replacement started — ${trader.name} ` +
+                `(magic ${trader.magicNumber}). The current one stays in force ` +
+                `until a code from the new one is confirmed; payouts are then ` +
+                `held for ${TOTP_CHANGE_COOL_OFF_HOURS}h.`
             : `Authenticator setup started — ${trader.name} (magic ${trader.magicNumber})`,
           replacing ? "warn" : "info"
         );
-        return { secret, uri, qrDataUrl };
+        return {
+          success: true,
+          requiresExistingCode: false,
+          secret,
+          uri,
+          qrDataUrl,
+        };
       }),
 
     /**
@@ -1809,6 +1870,35 @@ export const appRouter = router({
 
         return { success: true, requires2FA: false, requiresTotp: false };
       }),
+
+    /**
+     * Issues a one-time link that connects Telegram to *this* account.
+     *
+     * The bot will not rebind an established chat id from a username match —
+     * a Telegram username can be abandoned and re-registered by somebody else,
+     * and the codes delivered to that chat are the ones that reset a password.
+     * A token issued to a signed-in session is the authority instead.
+     */
+    createTelegramLinkToken: tradingProcedure.mutation(async ({ ctx }) => {
+      const trader = ctx.tradingSession.magicNumber;
+      const token = nanoid(32);
+      const expiresAt = new Date(Date.now() + TELEGRAM_LINK_TOKEN_MINUTES * 60_000);
+      await setTelegramLinkToken(trader.id, token, expiresAt);
+
+      const url = await telegramDeepLink(token);
+      if (!url) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Telegram is not configured on this server.",
+        });
+      }
+      logEvent(
+        "telegram",
+        `Telegram link issued for ${trader.name} (magic ${trader.magicNumber}), ` +
+          `valid ${TELEGRAM_LINK_TOKEN_MINUTES} minutes`
+      );
+      return { url, expiresAt, minutes: TELEGRAM_LINK_TOKEN_MINUTES };
+    }),
 
     // Update Telegram handle for current trader
     updateTelegramHandle: tradingProcedure
@@ -2918,6 +3008,20 @@ export const appRouter = router({
           updateData.lifetimeIncome = data.lifetimeIncome.toString();
 
         await updateMagicNumber(id, updateData);
+
+        // A password written from here is a reset done *for* somebody, usually
+        // because their account is suspected compromised — so it has to evict
+        // their sessions like the self-service paths do. Missing this left a
+        // stolen session alive through exactly the response meant to kill it.
+        if (data.password !== undefined) {
+          const evicted = await deleteTradingSessionsForTrader(id);
+          logEvent(
+            "auth",
+            `Password reset by an admin for trader ${id} — ` +
+              `${evicted} session(s) signed out`,
+            "warn"
+          );
+        }
 
         // Keep the MetaCopier side in step on every edit: link an MT account
         // that already exists in MetaCopier, make sure the demo copier is there

@@ -33,7 +33,7 @@ export function AuthenticatorCard() {
   const { data: selfSession } = trpc.trading.getSession.useQuery(undefined);
 
   const [totpStep, setTotpStep] = useState<
-    "idle" | "password" | "scan" | "recovery" | "disable"
+    "idle" | "password" | "replace" | "scan" | "recovery" | "disable"
   >("idle");
   const [totpPassword, setTotpPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
@@ -46,8 +46,16 @@ export function AuthenticatorCard() {
 
   const startTotpMutation = trpc.trading.startTotpEnrolment.useMutation({
     onSuccess: data => {
-      setTotpSetup(data);
+      // Replacing a working authenticator needs a code from the current one
+      // first. The existing factor stays in force until the new one is
+      // confirmed, so cancelling here leaves everything as it was.
+      if (data.requiresExistingCode || !data.secret || !data.uri || !data.qrDataUrl) {
+        setTotpStep("replace");
+        return;
+      }
+      setTotpSetup({ secret: data.secret, uri: data.uri, qrDataUrl: data.qrDataUrl });
       setTotpPassword("");
+      setTotpCode("");
       setTotpStep("scan");
     },
     onError: error => toast.error(tError(error.message)),
@@ -95,9 +103,14 @@ export function AuthenticatorCard() {
             )}
           </div>
           {selfSession?.totpEnabled ? (
-            <Button variant="outline" onClick={() => setTotpStep("disable")}>
-              {t("settings.totpTurnOff")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setTotpStep("replace")}>
+                {t("settings.totpReplace")}
+              </Button>
+              <Button variant="outline" onClick={() => setTotpStep("disable")}>
+                {t("settings.totpTurnOff")}
+              </Button>
+            </div>
           ) : (
             <Button onClick={() => setTotpStep("password")}>
               {t("settings.totpSetUp")}
@@ -106,10 +119,12 @@ export function AuthenticatorCard() {
         </div>
       )}
 
-      {(totpStep === "password" || totpStep === "disable") && (
+      {(totpStep === "password" || totpStep === "disable" || totpStep === "replace") && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            {t("settings.totpConfirmPassword")}
+            {totpStep === "replace"
+              ? t("settings.totpReplaceNeedsCode")
+              : t("settings.totpConfirmPassword")}
           </p>
           <div className="space-y-2">
             <Label htmlFor="totpPassword">{t("settings.currentPassword")}</Label>
@@ -121,7 +136,7 @@ export function AuthenticatorCard() {
               autoFocus
             />
           </div>
-          {totpStep === "disable" && (
+          {(totpStep === "disable" || totpStep === "replace") && (
             <div className="space-y-2">
               <Label htmlFor="totpDisableCode">{t("login.authenticatorCode")}</Label>
               <Input
@@ -140,13 +155,15 @@ export function AuthenticatorCard() {
               onClick={() => {
                 if (totpStep === "disable") {
                   disableTotpMutation.mutate({ password: totpPassword, code: totpCode });
+                } else if (totpStep === "replace") {
+                  startTotpMutation.mutate({ password: totpPassword, code: totpCode });
                 } else {
                   startTotpMutation.mutate({ password: totpPassword });
                 }
               }}
               disabled={
                 !totpPassword ||
-                (totpStep === "disable" && totpCode.length < 6) ||
+                ((totpStep === "disable" || totpStep === "replace") && totpCode.length < 6) ||
                 startTotpMutation.isPending ||
                 disableTotpMutation.isPending
               }

@@ -115,6 +115,17 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   // 30-second window. Recovery codes are SHA-256 hashes, one JSON array; each
   // is removed as it is used.
   totpSecret: varchar("totpSecret", { length: 512 }),
+  /**
+   * An enrolment in progress, encrypted, not yet in force.
+   *
+   * Kept apart from totpSecret so that starting a new enrolment cannot take
+   * the working factor away. The first version of this wrote the new secret
+   * over totpSecret and cleared totpEnabledAt and the recovery codes
+   * immediately, which meant a stolen session plus the password was enough to
+   * disable somebody's authenticator and destroy their recovery codes before
+   * proving anything — found in review on 2026-11-03.
+   */
+  totpPendingSecret: varchar("totpPendingSecret", { length: 512 }),
   totpEnabledAt: timestamp("totpEnabledAt"),
   totpLastStep: int("totpLastStep"),
   totpRecoveryCodes: text("totpRecoveryCodes"),
@@ -125,6 +136,18 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   // immediately. A first enrolment does not stamp this; there was nothing to
   // displace, and holding it would block payouts the day the feature ships.
   totpChangedAt: timestamp("totpChangedAt"),
+  /**
+   * A single-use token for linking Telegram from the dashboard.
+   *
+   * `/start` used to bind the sender's chat id to every trader whose stored
+   * `telegramHandle` matched the sender's *current* username, overwriting any
+   * established binding — so somebody who registered a trader's abandoned
+   * username could take delivery of their verification and password-reset
+   * codes. A plain `/start` now only ever completes a *first* link; changing an
+   * established one needs a token issued to a signed-in session.
+   */
+  telegramLinkToken: varchar("telegramLinkToken", { length: 64 }),
+  telegramLinkTokenExpiresAt: timestamp("telegramLinkTokenExpiresAt"),
   // Set once the trader completes onboarding (Telegram linked, password changed,
   // USDT details set) and their live copiers are activated. One-way: never cleared.
   liveCopiersActivatedAt: timestamp("liveCopiersActivatedAt"),

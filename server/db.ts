@@ -198,6 +198,60 @@ export async function getTradingSessionByToken(sessionToken: string) {
  * the account on purpose: clearing a payment to move money is something a
  * particular browser did, and a second stolen session must not inherit it.
  */
+/**
+ * Issues a single-use Telegram link token for one trader, replacing any
+ * outstanding one.
+ */
+export async function setTelegramLinkToken(
+  magicNumberId: number,
+  token: string,
+  expiresAt: Date
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(magicNumbers)
+    .set({ telegramLinkToken: token, telegramLinkTokenExpiresAt: expiresAt })
+    .where(eq(magicNumbers.id, magicNumberId));
+}
+
+/**
+ * Spends a Telegram link token and returns the trader it belonged to, or
+ * undefined. The token is cleared in the same conditional update that claims
+ * it, so two `/start`s carrying one token cannot both bind.
+ */
+export async function consumeTelegramLinkToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(magicNumbers)
+    .where(
+      and(
+        eq(magicNumbers.telegramLinkToken, token),
+        gt(magicNumbers.telegramLinkTokenExpiresAt, new Date())
+      )
+    )
+    .limit(1);
+  if (rows.length === 0) return undefined;
+
+  const [claim] = await db
+    .update(magicNumbers)
+    .set({ telegramLinkToken: null, telegramLinkTokenExpiresAt: null })
+    .where(
+      and(
+        eq(magicNumbers.id, rows[0]!.id),
+        eq(magicNumbers.telegramLinkToken, token)
+      )
+    );
+  if (((claim as { affectedRows?: number }).affectedRows ?? 0) !== 1) {
+    return undefined;
+  }
+  return rows[0];
+}
+
 export async function markSessionTotpVerified(
   sessionToken: string,
   at: Date = new Date()
@@ -911,12 +965,70 @@ export async function verifyTwoFactorCode(
 
   if (result.length === 0) return false;
 
-  await db
+  // Claim it, rather than trusting the read above. `used: false` in the WHERE
+  // is what makes a code single-use under concurrency: two requests carrying
+  // the same code both pass the select, and only the one whose UPDATE actually
+  // changed a row is accepted.
+  const [claim] = await db
     .update(twoFactorCodes)
     .set({ used: true })
-    .where(eq(twoFactorCodes.id, result[0].id));
+    .where(and(eq(twoFactorCodes.id, result[0].id), eq(twoFactorCodes.used, false)));
 
-  return true;
+  return ((claim as { affectedRows?: number }).affectedRows ?? 0) === 1;
+}
+
+/**
+ * Records a TOTP step as spent, and says whether this caller was the one to
+ * spend it.
+ *
+ * The step must advance, checked in the UPDATE itself: a read-then-write let
+ * two concurrent requests carrying the same 6-digit code both see the old step
+ * and both be accepted, which is the replay the step number exists to stop.
+ */
+export async function claimTotpStep(
+  magicNumberId: number,
+  step: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const [result] = await db
+    .update(magicNumbers)
+    .set({ totpLastStep: step })
+    .where(
+      and(
+        eq(magicNumbers.id, magicNumberId),
+        or(isNull(magicNumbers.totpLastStep), lt(magicNumbers.totpLastStep, step))
+      )
+    );
+  return ((result as { affectedRows?: number }).affectedRows ?? 0) === 1;
+}
+
+/**
+ * Swaps the stored recovery-code list for one with a code removed, only if the
+ * list is still exactly as the caller read it. Compare-and-swap, so two
+ * requests spending the same code cannot both succeed.
+ */
+export async function claimRecoveryCodes(
+  magicNumberId: number,
+  previous: string | null,
+  next: string
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const [result] = await db
+    .update(magicNumbers)
+    .set({ totpRecoveryCodes: next })
+    .where(
+      and(
+        eq(magicNumbers.id, magicNumberId),
+        previous === null
+          ? isNull(magicNumbers.totpRecoveryCodes)
+          : eq(magicNumbers.totpRecoveryCodes, previous)
+      )
+    );
+  return ((result as { affectedRows?: number }).affectedRows ?? 0) === 1;
 }
 
 export async function cleanupExpiredTwoFactorCodes() {

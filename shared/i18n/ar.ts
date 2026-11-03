@@ -181,6 +181,11 @@ export const ar: Translations = {
     telegramHandleHelp:
       "يُستخدم لاستلام إشعارات الدفع والإشعارات المهمة عبر Telegram",
     telegramSaved: "تم حفظ معرّف Telegram",
+    telegramConnect: "ربط Telegram",
+    telegramConnectHelp:
+      "يربط هذا الحساب بتطبيق Telegram على الجهاز الذي تفتح منه الرابط. استخدمه لنقل الحساب إلى Telegram آخر.",
+    telegramConnectIssued:
+      "افتح هذا الرابط على الجهاز الذي يحتوي Telegram خلال {minutes} دقيقة. يعمل مرة واحدة:",
     connected: "متصل",
     notConnected: "غير متصل — أرسل /start إلى @RFXTraderBot",
     sendTestMessage: "إرسال رسالة تجريبية",
@@ -223,6 +228,9 @@ export const ar: Translations = {
     totpOff: "معطّل",
     totpSetUp: "إعداد Authenticator",
     totpTurnOff: "إيقاف Authenticator",
+    totpReplace: "استبدال Authenticator",
+    totpReplaceNeedsCode:
+      "أدخل كلمة مرورك ورمزاً من تطبيق authenticator الحالي. سيظل الحالي يعمل حتى يتم تأكيد الجديد.",
     totpTurnedOff: "تم إيقاف Authenticator",
     totpConfirmPassword: "أدخل كلمة مرورك للمتابعة.",
     totpScan:
@@ -380,6 +388,10 @@ export const ar: Translations = {
       "✅ <b>تمت إعادة الربط!</b>\n\nTelegram الخاص بك مرتبط بعدد {count} من الحسابات:\n{accounts}\n\n• 📊 <b>لوحة التحكم:</b> {dashboardLink}\n\nسيستمر وصول الإشعارات إلى هنا.",
     help:
       "👋 يرسل هذا البوت إشعارات لوحة متداولي RFX الخاصة بك. لربط هذه المحادثة بحسابك، أرسل /start.",
+    startLinkExpired:
+      "انتهت صلاحية هذا الرابط أو تم استخدامه بالفعل. افتح لوحة RFX واذهب إلى Settings → Account واضغط Connect Telegram للحصول على رابط جديد.",
+    startAlreadyLinked:
+      "هذا الحساب مرتبط بحساب Telegram بالفعل. إن لم يكن ذلك أنت، فافتح لوحة RFX واذهب إلى Settings → Account واضغط <b>Connect Telegram</b> — الرابط من هناك سينقله إلى هنا.",
     startUnknown:
       "👋 مرحباً @{username}! لربط Telegram الخاص بك بلوحة متداولي RFX، احفظ أولاً معرّف Telegram في إعدادات لوحة التحكم، ثم أرسل /start مرة أخرى.",
   },

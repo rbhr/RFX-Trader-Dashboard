@@ -1,5 +1,9 @@
 import TelegramBot from "node-telegram-bot-api";
-import { getMagicNumbersByTelegramHandle, updateMagicNumber } from "./db";
+import {
+  consumeTelegramLinkToken,
+  getMagicNumbersByTelegramHandle,
+  updateMagicNumber,
+} from "./db";
 import { maybeActivateOnboarding } from "./onboarding";
 import { logEvent } from "./logStore";
 import { toLanguage, translate, type Language } from "@shared/i18n";
@@ -7,6 +11,28 @@ import { ENV } from "./_core/env";
 
 let bot: TelegramBot | null = null;
 let pollingStarted = false;
+
+/**
+ * The bot's own @username, for building `t.me` deep links. Asked once and
+ * cached; a link is not worth a round trip per request.
+ */
+let cachedBotUsername: string | null = null;
+
+export async function telegramDeepLink(payload: string): Promise<string | null> {
+  const b = getBot();
+  if (!b) return null;
+  if (!cachedBotUsername) {
+    try {
+      const me = await b.getMe();
+      cachedBotUsername = me.username ?? null;
+    } catch (e) {
+      console.warn("[Telegram] getMe failed, cannot build a deep link:", e);
+      return null;
+    }
+  }
+  if (!cachedBotUsername) return null;
+  return `https://t.me/${cachedBotUsername}?start=${encodeURIComponent(payload)}`;
+}
 
 function getBot(): TelegramBot | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -73,6 +99,58 @@ export function startTelegramPolling(): void {
     }
 
     if (isStart) {
+      // `/start <token>` — a link opened from a signed-in dashboard. The token
+      // is the authority, so this may rebind an established chat id; `/start`
+      // on its own may not (see below).
+      const payload = (text ?? "").replace(/^\/start(@\w+)?\s*/i, "").trim();
+      if (payload) {
+        try {
+          const trader = await consumeTelegramLinkToken(payload);
+          if (!trader) {
+            await pollingBot.sendMessage(
+              chatId,
+              translate(
+                toLanguage(msg.from?.language_code),
+                "telegram.startLinkExpired"
+              )
+            );
+            logEvent(
+              "telegram",
+              `/start with an unknown or expired link token (chat ${chatId})`,
+              "warn"
+            );
+            return;
+          }
+
+          const wasLinked = !!trader.telegramChatId;
+          await updateMagicNumber(trader.id, { telegramChatId: String(chatId) });
+          const lang = toLanguage(trader.language);
+          await pollingBot.sendMessage(
+            chatId,
+            translate(lang, wasLinked ? "telegram.startRelinked" : "telegram.startLinked", {
+              count: 1,
+              accounts: `• [Magic ${trader.magicNumber}] ${trader.name}`,
+              dashboardLink: `<a href="https://tradersdash.rftrust.co/">https://tradersdash.rftrust.co/</a>`,
+            }),
+            { parse_mode: "HTML", disable_web_page_preview: true } as any
+          );
+          logEvent(
+            "telegram",
+            `${wasLinked ? "Re-linked" : "Linked"} ${trader.name} (magic ${trader.magicNumber}) ` +
+              `to chat ${chatId} via a dashboard link token`
+          );
+          await maybeActivateOnboarding(trader.id);
+        } catch (err) {
+          console.error("[Telegram] Error handling /start token:", err);
+          logEvent(
+            "telegram",
+            `/start token (chat ${chatId}) failed: ${err instanceof Error ? err.message : String(err)}`,
+            "error"
+          );
+        }
+        return;
+      }
+
       // A Telegram account with no public @username can't be matched to a
       // dashboard handle. Without this branch the /start is silently dropped
       // (no link, no reply, no log) — tell the user how to fix it instead.
@@ -88,9 +166,27 @@ export function startTelegramPolling(): void {
         return;
       }
       try {
-        const traders = await getMagicNumbersByTelegramHandle(username);
+        const matched = await getMagicNumbersByTelegramHandle(username);
+        // A username match is only ever enough for a *first* link. Anything
+        // already bound keeps the chat id it has: a Telegram username can be
+        // abandoned and re-registered by somebody else, and the codes that go
+        // to that chat are the ones that reset a password.
+        const traders = matched.filter((t) => !t.telegramChatId);
+        const alreadyLinked = matched.filter((t) => !!t.telegramChatId);
+
+        if (alreadyLinked.length > 0) {
+          logEvent(
+            "telegram",
+            `/start from @${username} (chat ${chatId}) — ignored for ` +
+              `${alreadyLinked.length} already-linked account(s): ` +
+              `${alreadyLinked.map((t) => t.magicNumber).join(", ")}. ` +
+              `Re-linking needs a dashboard link.`,
+            "warn"
+          );
+        }
+
         if (traders.length > 0) {
-          const anyFirstLink = traders.some((t) => !t.telegramChatId);
+          const anyFirstLink = true;
 
           for (const t of traders) {
             await updateMagicNumber(t.id, { telegramChatId: String(chatId) });
@@ -119,6 +215,17 @@ export function startTelegramPolling(): void {
           for (const t of traders) {
             await maybeActivateOnboarding(t.id);
           }
+        } else if (alreadyLinked.length > 0) {
+          // The handle is known but every match is already connected, possibly
+          // to a different Telegram account. Send them through the dashboard.
+          await pollingBot.sendMessage(
+            chatId,
+            translate(
+              toLanguage(alreadyLinked[0]!.language),
+              "telegram.startAlreadyLinked"
+            ),
+            { parse_mode: "HTML", disable_web_page_preview: true } as any
+          );
         } else {
           await pollingBot.sendMessage(
             chatId,
