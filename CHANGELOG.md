@@ -61,6 +61,17 @@ hash.
   `server/totp.ts` is one HMAC and a truncation, the RFC publishes test
   vectors, and `server/totp.test.ts` runs all six of them.
 
+### Added
+
+- **An admin Security page**, at `/admin/security`. The admin never sees the
+  trader Settings dialog — `/admin/dashboard` renders the trader dashboard with
+  a `viewAsTraderId`, and the Settings button is hidden while viewing as
+  somebody else — so the one account that most needs an authenticator had
+  nowhere to enrol one. The card is now a shared component used by both, and
+  the page also shows what has to be true before the session can move money:
+  whether an authenticator is enrolled, recovery codes left, whether the
+  payment window is open, and any hold from a recent authenticator change.
+
 ### Changed
 
 - The admin row can be edited from Manage Traders again. Delete and the Active

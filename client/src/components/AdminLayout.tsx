@@ -12,6 +12,7 @@ import {
   LogOut,
   TrendingUp,
   ShieldAlert,
+  ShieldCheck,
   ScrollText,
   Waypoints,
   Briefcase,
@@ -99,6 +100,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { title: "Props", href: "/admin/props", icon: Briefcase, badge: 0 },
     { title: "Risk Limit Breaches", href: "/admin/risk-breaches", icon: ShieldAlert, badge: activeBreachCount },
     { title: "System Logs", href: "/admin/logs", icon: ScrollText, badge: 0 },
+    { title: "Security", href: "/admin/security", icon: ShieldCheck, badge: 0 },
   ];
 
   const handleLogout = () => logoutMutation.mutate();
