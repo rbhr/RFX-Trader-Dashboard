@@ -5,6 +5,37 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.17.0] — 2026-11-03
+
+### Security
+
+- **A payment row now records where the money went.** Every other field of the
+  2 November transfer was stored; the destination was not. Worse, the admin
+  Payments view and the transmission proof had been showing the trader's
+  *current* address under the heading "Address" — so for that payout they
+  displayed `TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9`, the address the attacker put
+  back, rather than the one the money actually went to. The only in-app trace
+  of the real destination was a narration the attacker typed.
+
+  `payments.destinationAddress` is now written from the address handed to the
+  wallet, at the moment it is handed over, by both sending paths — including
+  Testing Mode, where our own wallet is the honest answer. Neither payment list
+  falls back to the trader's address any more: the proof reads "Sent to", and
+  "Not recorded" where the app did not send the transfer (a manually recorded
+  payment, or any row written before this column existed).
+
+- **Changing a password now signs out every other session.** The attacker's
+  three sessions stayed valid until 9 November, and rotating the password would
+  not have touched them — only deleting the table by hand did. A password
+  change now evicts every other session for that account, sparing the one
+  making the change; a reset, which happens from the login page with no session
+  to spare, evicts all of them. Both write a count to the admin log.
+
+- **An admin session lasts a day**, whatever "remember me" asked for. It can
+  move money, it is reachable only from the tailnet, and with an authenticator
+  enrolled signing in again takes ten seconds — a month of "remember me" on the
+  account that holds the wallet is not a trade worth making.
+
 ## [4.16.0] — 2026-11-03
 
 ### Security

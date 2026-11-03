@@ -30,6 +30,11 @@ export type PaymentDetails = {
   networkFee?: number;
   network?: "TRC20" | "ERC20";
   paymentDate: Date;
+  /**
+   * The address the transfer was sent to. Set by the paths that actually send;
+   * left undefined by a manual record, which did not.
+   */
+  destinationAddress?: string | null;
   narration?: string;
   paymentType?: string;
   payoutPeriodFrom?: Date;
@@ -143,6 +148,7 @@ export async function recordConfirmedPayment(params: PaymentDetails) {
     amount: amount.toFixed(2),
     networkFee: networkFee.toFixed(2),
     transactionHash: params.transactionHash,
+    destinationAddress: params.destinationAddress ?? null,
     paymentDate: params.paymentDate,
     network: params.network ?? null,
     narration: params.narration ?? null,
@@ -174,6 +180,7 @@ export async function recordPendingPayment(
     amount: amount.toFixed(2),
     networkFee: networkFee.toFixed(2),
     transactionHash: params.transactionHash,
+    destinationAddress: params.destinationAddress ?? null,
     paymentDate: params.paymentDate,
     network: params.network ?? null,
     narration: params.narration ?? null,

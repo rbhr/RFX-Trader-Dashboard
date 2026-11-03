@@ -10,7 +10,7 @@ export interface ProofPayment {
   narration?: string | null;
   paymentDate: string | Date;
   traderName?: string | null;
-  usdtAddress?: string | null;
+  destinationAddress?: string | null;
 }
 
 /**
@@ -81,13 +81,15 @@ export function TransmissionProofDialog({
               )}
 
               <div className="flex justify-between py-3 border-b">
-                <span className="text-muted-foreground">Address</span>
+                <span className="text-muted-foreground">Sent to</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm break-all">{payment.usdtAddress || "N/A"}</span>
-                  {payment.usdtAddress && (
+                  <span className="font-mono text-sm break-all">
+                    {payment.destinationAddress || "Not recorded"}
+                  </span>
+                  {payment.destinationAddress && (
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(payment.usdtAddress!);
+                        navigator.clipboard.writeText(payment.destinationAddress!);
                         toast.success("Address copied");
                       }}
                       className="p-1 hover:bg-accent rounded shrink-0"

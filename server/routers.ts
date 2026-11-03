@@ -11,6 +11,7 @@ import {
   createTradingSession,
   getTradingSessionByToken,
   deleteTradingSession,
+  deleteTradingSessionsForTrader,
   markSessionTotpVerified,
   getAllMagicNumbers,
   getMagicNumberById,
@@ -215,6 +216,9 @@ function walletSendError(err: any, who: string): TRPCError {
 // In Testing Mode, payout sends are redirected here (a TRON/TRC20 wallet we
 // control) instead of the trader's real address, so the on-chain pipeline can
 // be exercised without paying traders or touching their accounting.
+/** How long an admin session lasts, whatever "remember me" said. */
+const ADMIN_SESSION_DAYS = 1;
+
 const TEST_PAYOUT_ADDRESS = "TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9";
 
 /**
@@ -1301,8 +1305,19 @@ export const appRouter = router({
         }
 
         const sessionToken = nanoid(32);
+        // An admin session lasts a day whatever was asked for: it can move
+        // money, it is reachable only from the tailnet, and with an
+        // authenticator enrolled signing in again costs ten seconds. A month
+        // of "remember me" on the account that holds the wallet is not a
+        // trade worth making — three of the attacker's sessions on
+        // 2026-11-02 were valid until the 9th.
+        const sessionDays = magicNumberData.isAdmin
+          ? ADMIN_SESSION_DAYS
+          : input.rememberMe
+            ? 30
+            : 7;
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + (input.rememberMe ? 30 : 7));
+        expiresAt.setDate(expiresAt.getDate() + sessionDays);
 
         await createTradingSession({
           sessionToken,
@@ -1315,9 +1330,7 @@ export const appRouter = router({
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(TRADING_SESSION_COOKIE, sessionToken, {
           ...cookieOptions,
-          maxAge: input.rememberMe
-            ? 30 * 24 * 60 * 60 * 1000
-            : 7 * 24 * 60 * 60 * 1000,
+          maxAge: sessionDays * 24 * 60 * 60 * 1000,
         });
 
         resetRateLimit(magicKey);
@@ -1431,6 +1444,16 @@ export const appRouter = router({
         const hashed = await hashPassword(input.newPassword);
         await updateMagicNumber(trader.id, { password: hashed });
 
+        // A reset is done from the login page, not from a session, so there is
+        // none to spare: anyone holding one is signed out. Somebody resetting
+        // a password they have lost control of needs exactly that.
+        const evicted = await deleteTradingSessionsForTrader(trader.id);
+        logEvent(
+          "auth",
+          `Password reset for ${trader.name} (magic ${trader.magicNumber}) — ` +
+            `${evicted} session(s) signed out`
+        );
+
         // Password change may complete onboarding → activate live copiers.
         void maybeActivateOnboarding(trader.id);
 
@@ -1502,6 +1525,21 @@ export const appRouter = router({
 
         const hashed = await hashPassword(input.newPassword);
         await updateMagicNumber(trader.id, { password: hashed });
+
+        // Every other session for this account dies with the old password.
+        // The one making the change is spared, so nobody is logged out of the
+        // page they are standing on.
+        const evicted = await deleteTradingSessionsForTrader(
+          trader.id,
+          ctx.tradingSession.session.sessionToken
+        );
+        if (evicted > 0) {
+          logEvent(
+            "auth",
+            `Password changed by ${trader.name} (magic ${trader.magicNumber}) — ` +
+              `${evicted} other session(s) signed out`
+          );
+        }
 
         // Password change may complete onboarding → activate live copiers.
         void maybeActivateOnboarding(trader.id);
@@ -1847,7 +1885,7 @@ export const appRouter = router({
           paymentDate: p.paymentDate,
           createdAt: p.createdAt,
           traderName: trader.name,
-          usdtAddress: trader.usdtAddress ?? null,
+          destinationAddress: p.destinationAddress ?? null,
         }));
       }),
 
@@ -4184,7 +4222,11 @@ export const appRouter = router({
           magicNumber: trader?.magicNumber || "N/A",
           network: p.network || trader?.usdtNetwork || "TRC20",
           networkFee: parseFloat(p.networkFee || "0"),
-          usdtAddress: trader?.usdtAddress || null,
+          // Where this payment went, or null when the app did not send it.
+          // Deliberately not falling back to the trader's address now: for the
+          // 2026-11-02 row that fallback showed the restored address, which is
+          // not where the money went.
+          destinationAddress: p.destinationAddress || null,
           narration: p.narration || null,
           paymentType: p.paymentType || "Profit Share",
           payoutPeriodFrom: p.payoutPeriodFrom,
@@ -4522,6 +4564,10 @@ export const appRouter = router({
             amount: input.amount,
             transactionHash: recordedHash,
             network,
+            // The address actually passed to the wallet, captured here rather
+            // than read back later: the row must say where this transfer went
+            // even if the trader's address changes afterwards.
+            destinationAddress: trader.usdtAddress,
             paymentDate: new Date(),
             narration: input.narration,
           };
@@ -4860,6 +4906,9 @@ export const appRouter = router({
             paymentType: "Profit Share",
             payoutPeriodFrom: input.from,
             payoutPeriodTo: input.to,
+            // In Testing Mode this is our own wallet, which is the truth about
+            // where that transfer went.
+            destinationAddress: destination,
             ...recordExtras,
           };
 

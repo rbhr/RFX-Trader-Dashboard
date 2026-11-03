@@ -236,6 +236,23 @@ export const payments = mysqlTable("payments", {
   magicNumberId: int("magicNumberId").notNull(),
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
   transactionHash: varchar("transactionHash", { length: 255 }).notNull(),
+  /**
+   * The address this app actually sent to, as passed to sendUsdt /
+   * sendUsdtErc20 — not the trader's address now.
+   *
+   * Every other field of the 2026-11-02 transfer was recorded; where the money
+   * went was not, and the destination had been changed and changed back, so
+   * the only in-app trace was a narration the attacker typed. The admin
+   * Payments view and the transmission proof had been showing the trader's
+   * *current* address as though it were the payment's, which for that row was
+   * actively wrong.
+   *
+   * Null for a payment the app did not send — a manually recorded one, where
+   * the destination is whatever the chain says — and for every row written
+   * before this column existed. The UI says "not recorded" rather than
+   * substituting an address that may not be the one paid.
+   */
+  destinationAddress: varchar("destinationAddress", { length: 255 }),
   paymentDate: timestamp("paymentDate").notNull(),
   networkFee: decimal("networkFee", { precision: 15, scale: 2 }).default(
     "0.00"

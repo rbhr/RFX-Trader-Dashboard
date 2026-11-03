@@ -1,4 +1,4 @@
-import { eq, desc, isNull, isNotNull, sql, or, and, gt, gte, lt } from "drizzle-orm";
+import { eq, ne, desc, isNull, isNotNull, sql, or, and, gt, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -209,6 +209,33 @@ export async function markSessionTotpVerified(
     .update(tradingSessions)
     .set({ totpVerifiedAt: at })
     .where(eq(tradingSessions.sessionToken, sessionToken));
+}
+
+/**
+ * Ends a trader's sessions, optionally sparing the one making the request.
+ *
+ * A password change has to do this. On 2026-11-02 the attacker's three
+ * sessions stayed valid until 9 November, and rotating the password would not
+ * have touched them — the only thing that evicted them was deleting the table
+ * by hand. A stolen session is exactly what someone changes their password
+ * because of.
+ */
+export async function deleteTradingSessionsForTrader(
+  magicNumberId: number,
+  exceptToken?: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const where = exceptToken
+    ? and(
+        eq(tradingSessions.magicNumberId, magicNumberId),
+        ne(tradingSessions.sessionToken, exceptToken)
+      )
+    : eq(tradingSessions.magicNumberId, magicNumberId);
+
+  const [result] = await db.delete(tradingSessions).where(where);
+  return (result as { affectedRows?: number }).affectedRows ?? 0;
 }
 
 export async function deleteTradingSession(sessionToken: string) {

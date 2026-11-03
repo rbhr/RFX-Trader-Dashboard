@@ -776,11 +776,11 @@ export default function ManagePayments() {
                 <div className="flex justify-between py-3 border-b">
                   <span className="text-muted-foreground">Address</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm">{selectedPayment.usdtAddress || 'N/A'}</span>
-                    {selectedPayment.usdtAddress && (
+                    <span className="font-mono text-sm">{selectedPayment.destinationAddress || 'Not recorded'}</span>
+                    {selectedPayment.destinationAddress && (
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(selectedPayment.usdtAddress);
+                          navigator.clipboard.writeText(selectedPayment.destinationAddress);
                           toast.success('Address copied');
                         }}
                         className="p-1 hover:bg-accent rounded"
