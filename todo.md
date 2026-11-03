@@ -3,8 +3,12 @@
 ---
 
 ## 🔒 SECURITY INCIDENT 2026-11-02 — remediation
-**Status:** 🟢 Code complete and deployed (v4.13.0 → v4.18.0, 2026-11-02/03). Reporting is the
-only open item. Full record: `/home/rfx/.claude/plans/precious-cooking-pretzel.md`.
+**Status:** 🟢 Code complete and deployed (v4.13.0 → v4.18.3, 2026-11-02/03). Reporting is the
+only open item that blocks anything. Full record:
+`/home/rfx/.claude/plans/precious-cooking-pretzel.md`. Three review passes over the
+remediation, each reading the *fixes* rather than the original code, and each found something
+— the last found that a stolen session could move an account's Telegram and so collect the
+payout-address 2FA code itself (fixed v4.18.3).
 
 2030 USDT left the custodial TRC20 wallet at 06:27 UTC. Not a bug in the payout logic: somebody
 logged in as `admin` with the account's default password (`admin`/`admin`), pointed the
@@ -66,12 +70,107 @@ Attacker: `34.76.61.135` (2 Nov) and `35.205.223.156` (21 Oct), both Google Clou
       onboarding — the trader would have to sign in on their password first instead of just
       messaging the bot. Weighed and deferred 2026-11-03. Rebinding an established chat has
       needed a token since v4.18.1 and a password plus a code since v4.18.3.
-- [ ] **An `audit_log` table** (actor, row, field, old value, new value). The address change
-      was only inferable from `updatedAt` and an incidental onboarding log line; the previous
-      value was unrecoverable from the app. This would have made the investigation minutes
-      rather than hours. `logs` still has no actor or `magicNumberId` column.
+- [ ] **An `audit_log` table** — designed and agreed 2026-11-03, **not scheduled**. Not a
+      today-or-this-week exercise; phase 1 is about the size of v4.15.0. Design settled below
+      so it can be picked up cold.
 - [ ] **Container stdout is still the only home** for the `[Onboarding]` and `[TRON]` lines,
       and it is lost on container recreation. The window survived this time by luck.
+
+### The `audit_log` table — agreed design, not yet scheduled
+
+The only remaining item that is **detection rather than prevention**. Everything shipped in
+v4.13.0–v4.18.3 stops the 2 November attack; this tells you what happened when something gets
+through anyway.
+
+**Why.** The attacker changed the Administrator row's `usdtAddress` twice, at 06:26:57 and
+06:30:51, and nothing in the app recorded either. The whole reconstruction rested on
+`magic_numbers.updatedAt` (one timestamp, overwritten by the second change, so it pointed at
+06:30:51 and said nothing about the first), an incidental `[Onboarding]` log line that fired
+only because saving USDT details triggers the onboarding re-check and happened to log
+`password still default`, and the edge Caddy access log — which is outside the app and rolls.
+The previous address value was **unrecoverable from the app entirely**; it is known only
+because the attacker restored it and the restored value is the wallet's own address.
+
+`logs` (`drizzle/schema.ts:498`) cannot do this job: four columns — `category`, `level`,
+`message`, `createdAt`. It is prose. No actor, no target row, no field, no before/after. And
+it is narrative, so somebody has to remember to write a line — nobody writes one for a field
+they did not think was sensitive, which is exactly the field an attacker reaches for.
+`updateUsdtInfo` had no log call at all before v4.14.0.
+
+**The table.**
+
+```
+audit_log
+  id
+  createdAt
+  actorId         int, null        -- magic_numbers.id
+  actorName       varchar          -- as it read at the time; names change
+  actorSession    varchar, null    -- which session token did it
+  actorIp         varchar, null    -- clientIpOf, i.e. the end client
+  tableName       varchar          -- 'magic_numbers'
+  rowId           int
+  field           varchar
+  oldValue        text, null
+  newValue        text, null
+  redacted        boolean          -- true = value deliberately not stored
+```
+
+One row per field changed, not per request. Indexes `(tableName, rowId, createdAt)`,
+`(actorId, createdAt)`, `(createdAt)` — "history of this row", "what did this person or
+session do", and the window scan.
+
+**The five decisions, as agreed 2026-11-03:**
+
+1. **The actor reaches the db layer through `AsyncLocalStorage`**, set once in
+   `tradingProcedure`. There is no such context in the codebase today — checked, nothing uses
+   `async_hooks`. The alternative, an explicit `updateMagicNumber(id, data, actor)`, touches 22
+   call sites and lets every future caller forget it, which is the failure mode this whole
+   remediation has been about (`tradingProcedure` over `adminProcedure`;
+   `cleanupExpiredTwoFactorCodes` with no caller). A missing context fails *silently*, so the
+   audit writer records `actorId: null` **and** emits a `warn` log line — an unattributed
+   write must be noisy, not invisible. Background monitors legitimately have no actor and get
+   an explicit `system` marker.
+2. **Old values come from a `SELECT` of the affected fields inside the audited write.**
+   `updateMagicNumber` takes a partial patch and never reads the row first, so there is no way
+   round one extra read per write. On a 33-row table with human-paced changes that cost is
+   nil. MySQL triggers are a **phase 3 complement, not a substitute**: a trigger would also
+   catch writes made by hand in the mysql shell — not hypothetical, two `ALTER`s were applied
+   that way on 3 November — but it cannot know the actor.
+3. **Two opposite defaults, deliberately.** *Audit* everything except an explicit exclusion
+   list, so a new column is audited unless somebody decides otherwise — excluded: the
+   high-churn bookkeeping that would drown the signal (`updatedAt`, `totpLastStep` which moves
+   on every login, `liveCopiersActivatedAt`, cached balances). *Store values* only for fields
+   on an explicit safe list, so a new column's contents are redacted unless somebody decides
+   otherwise — never stored: `password`, `totpSecret`, `totpPendingSecret`,
+   `totpRecoveryCodes`, `mtPassword`, `telegramLinkToken`, email sender tokens, which record
+   the field and the fact of the change with `redacted = true`. Reverse those two defaults and
+   you either miss the next sensitive field or turn the audit table into the richest secret
+   store in the database — and it is the one table you would least want to prune.
+4. **Keep it indefinitely. Delete nothing.** 33 traders and human-paced edits is on the order
+   of a few thousand rows a year. Add a row-count check to the existing daily sweep
+   (`server/_core/index.ts:116`) that **warns** past a threshold. A 30-day window would not
+   have covered the 12-day reconnaissance gap with any margin, and the lesson of 24 July is
+   that you need the thing you threw away.
+5. **The audit row goes in the same transaction as the `UPDATE`.** `logEvent` is
+   fire-and-forget — "never let logging break the caller" — which is right for narrative logs
+   and wrong for evidence: a failed write means an unrecorded change. The change and its
+   record land together or not at all.
+
+**Phasing.**
+
+- **Phase 1** — `magic_numbers` only, behind `updateMagicNumber` (22 callers) plus
+  `setProfitShareBaseline` and `setProfitAdjustment`. That is where the payout destination,
+  the password, the `isAdmin` flag and the Telegram binding live, and where the incident
+  happened. Schema change, so it needs a `db:push`. About the size of v4.15.0.
+- **Phase 2** — the read surface: a per-trader history panel in Edit Trader, and a filterable
+  Audit tab beside `/admin/logs`. Until this exists the table is queryable only from the mysql
+  shell, which is fine for forensics and useless for noticing. A comparable chunk again.
+- **Phase 3** — `payments` and `admin_settings`; optionally MySQL triggers recording
+  out-of-band writes as actor `direct-sql`.
+
+Deliberately **not** covered: `trading_sessions` and `trusted_devices` (creation and
+revocation already log an actor, and auditing them would add a great many rows for little),
+and `two_factor_codes`.
 
 ### Worth knowing, learned the hard way
 - `docker compose run --rm --no-deps rfx-app pnpm db:push` **hangs** on an enum change:
