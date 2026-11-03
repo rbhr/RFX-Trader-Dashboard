@@ -123,7 +123,14 @@ export function startTelegramPolling(): void {
           }
 
           const wasLinked = !!trader.telegramChatId;
-          await updateMagicNumber(trader.id, { telegramChatId: String(chatId) });
+          await updateMagicNumber(trader.id, {
+            telegramChatId: String(chatId),
+            // Moving an established chat holds payouts for the cool-off: this
+            // channel is where the code authorising an address change lands,
+            // so taking it over is a step towards taking over the
+            // destination. A first link has nothing to take over.
+            ...(wasLinked ? { telegramChangedAt: new Date() } : {}),
+          });
           const lang = toLanguage(trader.language);
           await pollingBot.sendMessage(
             chatId,

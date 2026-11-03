@@ -185,6 +185,13 @@ export const ur: Translations = {
       "جس ڈیوائس پر آپ یہ لنک کھولیں گے، اس کی Telegram ایپ سے یہ اکاؤنٹ منسلک ہو جائے گا۔ اکاؤنٹ کو کسی دوسرے Telegram پر منتقل کرنے کے لیے یہی استعمال کریں۔",
     telegramConnectIssued:
       "جس ڈیوائس پر Telegram ہے، اس پر {minutes} منٹ کے اندر یہ لنک کھولیں۔ یہ ایک بار کام کرے گا:",
+    telegramConnectConfirm:
+      "اپنے پاس ورڈ سے تصدیق کریں۔ آپ کے تصدیقی کوڈ Telegram ہی پر آتے ہیں، اس لیے اسے منتقل کرنے کو ادائیگی کا ایڈریس بدلنے جتنی ہی احتیاط سے لیا جاتا ہے۔",
+    telegramConnectConfirmFactor:
+      "اپنے پاس ورڈ اور ایک کوڈ سے تصدیق کریں، تاکہ ہمیں یقین ہو کہ جو Telegram آپ چھوڑ رہے ہیں وہ اب بھی آپ کے پاس ہے۔",
+    telegramConnectHold:
+      "اکاؤنٹ کو کسی دوسرے Telegram پر منتقل کرنے سے اس کی ادائیگیاں {hours} گھنٹے کے لیے روک دی جاتی ہیں۔",
+    telegramConnectGetLink: "لنک حاصل کریں",
     connected: "منسلک ہے",
     notConnected: "منسلک نہیں — @RFXTraderBot کو /start بھیجیں",
     sendTestMessage: "ٹیسٹ پیغام بھیجیں",
@@ -375,6 +382,7 @@ export const ur: Translations = {
     purposeReset: "پاس ورڈ ری سیٹ",
     purposeChange: "پاس ورڈ کی تبدیلی",
     purposeUsdtChange: "ادائیگی کے ایڈریس کی تبدیلی",
+    purposeTelegramRelink: "اس اکاؤنٹ کو کسی دوسرے Telegram پر منتقل کرنا",
     usdtAddressChanged:
       "[Magic {magicNumber}] 🔑 <b>ادائیگی کا ایڈریس تبدیل ہو گیا</b>\n\n{greeting}\n\nجس USDT ایڈریس پر آپ کی ادائیگیاں بھیجی جاتی ہیں وہ تبدیل کر دیا گیا ہے:\n\n<code>{newAddress}</code>\n\nپچھلا ایڈریس: <code>{previousAddress}</code>\n\nاگلے {holdHours} گھنٹے تک نئے ایڈریس پر کوئی ادائیگی نہیں بھیجی جائے گی۔ <b>اگر یہ تبدیلی آپ نے نہیں کی تو فوراً RFX سے رابطہ کریں</b> اور اپنا پاس ورڈ تبدیل کریں۔",
     test:

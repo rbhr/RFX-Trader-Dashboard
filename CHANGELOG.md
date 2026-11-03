@@ -5,6 +5,58 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.18.3] — 2026-11-03
+
+### Security
+
+- **Moving an account to a different Telegram now takes the password and the factor already on
+  the account.** `createTelegramLinkToken` asked only for a signed-in session. Telegram is
+  where this account's second factor is delivered, so a stolen session could rebind the chat
+  to the attacker's own, then receive the code for a payout-address change itself — satisfying
+  the 2FA added in 4.14.0 rather than being stopped by it, and pointing the next payout run at
+  the attacker's wallet. That is the 2 November attack reassembled out of the parts built to
+  prevent it.
+
+  The current password is now required, and so is the existing factor: an authenticator code,
+  or a Telegram code sent to the chat being moved *away from*, which proves the caller still
+  holds the channel they are abandoning. A first link has neither to prove and the password
+  stands alone — there is nothing to take over yet, and an account with no Telegram can already
+  change its address without a code. A wrong password is capped at five attempts in five
+  minutes and logged with the client address.
+
+- **Moving the Telegram chat holds payouts for `USDT_ADDRESS_COOL_OFF_HOURS`.** The same hold
+  as an address change, because it protects the same thing: a code proves someone holds the
+  channel now, which is worth nothing if they took it over a minute ago. Stamped on a rebind
+  and on an admin unlink; a first link does not stamp it. `payoutAddressHold.ts` now reads both
+  timestamps and names which one is holding the payout
+  (`assertPayoutSettled` / `payoutHoldReason`, formerly the address-only pair).
+
+- **An admin can unlink a trader's Telegram** (Edit Trader → Unlink Telegram). This is the way
+  out of the check above: a trader who has lost the Telegram their codes go to cannot read the
+  code that would let them re-link, and they are the person who most needs to. Rather than
+  weaken the rule for everybody, the escape hatch is an admin doing it on request, by hand,
+  logged, and with payouts held afterwards.
+
+### Fixed
+
+- **Confirming an authenticator enrolment is now a compare-and-swap.** `completeTotpEnrolment`
+  verified the code against the pending secret it had loaded and then wrote unconditionally.
+  Two confirmations of one enrolment — a double-tap, or two tabs — both verified the same code
+  (there is deliberately no spent-step guard on a first enrolment) and each generated its own
+  ten recovery codes, so both reported success while only the last set stayed valid: the first
+  caller was shown ten codes that were already dead. A stale confirmation could also overwrite
+  a newer enrolment. `claimPendingTotpSecret` now promotes the secret only if the row still
+  holds exactly the pending and active secrets that were verified, and the confirmation that
+  loses the race is told so. Same pattern as `claimTotpStep` and `claimRecoveryCodes` in
+  4.18.1, applied to the one place that had been missed.
+
+### Schema
+
+- `magic_numbers.telegramChangedAt` — when the Telegram chat was last moved or cleared.
+- `two_factor_codes.purpose` gains `telegram_relink`. **An enum widening, so apply the SQL by
+  hand before `db:push`** (drizzle-kit classes it as a data-loss change and waits at an
+  interactive prompt).
+
 ## [4.18.2] — 2026-11-03
 
 ### Security

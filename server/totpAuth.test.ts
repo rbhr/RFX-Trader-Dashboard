@@ -6,10 +6,13 @@ import { TRPCError } from "@trpc/server";
 const updateMagicNumber = vi.fn();
 const claimTotpStep = vi.fn(async () => true);
 const claimRecoveryCodes = vi.fn(async () => true);
+const claimPendingTotpSecret = vi.fn(async () => true);
 vi.mock("./db", () => ({
   updateMagicNumber: (...args: unknown[]) => updateMagicNumber(...args),
   claimTotpStep: (...args: unknown[]) => claimTotpStep(...args),
   claimRecoveryCodes: (...args: unknown[]) => claimRecoveryCodes(...args),
+  claimPendingTotpSecret: (...args: unknown[]) =>
+    claimPendingTotpSecret(...args),
 }));
 vi.mock("./emailTokenCrypto", () => ({
   encryptToken: (s: string) => `enc:${s}`,
@@ -58,6 +61,7 @@ beforeEach(() => {
   updateMagicNumber.mockReset();
   claimTotpStep.mockReset().mockResolvedValue(true);
   claimRecoveryCodes.mockReset().mockResolvedValue(true);
+  claimPendingTotpSecret.mockReset().mockResolvedValue(true);
 });
 
 describe("totpEnabled", () => {
@@ -189,7 +193,7 @@ describe("completeTotpEnrolment", () => {
     const codes = await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
 
     expect(codes).toHaveLength(10);
-    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    const [, , patch] = claimPendingTotpSecret.mock.calls[0]!;
     expect(patch.totpEnabledAt).toEqual(now);
     expect(patch.totpLastStep).toBe(STEP);
     const stored: string[] = JSON.parse(patch.totpRecoveryCodes);
@@ -203,6 +207,58 @@ describe("completeTotpEnrolment", () => {
       TRPCError
     );
     expect(updateMagicNumber).not.toHaveBeenCalled();
+    expect(claimPendingTotpSecret).not.toHaveBeenCalled();
+  });
+
+  /**
+   * One enrolment, confirmed twice — a double-tap, or two tabs. Both verify
+   * the same code against the same pending secret (there is no spent-step
+   * guard on a first enrolment, on purpose), and each has generated its own
+   * ten recovery codes by the time it writes. An unconditional UPDATE let
+   * both report success while only the last set stayed valid, so the first
+   * caller was shown ten codes that were already dead.
+   */
+  it("fails the confirmation that did not win the race", async () => {
+    const t = trader({ totpEnabledAt: null, totpPendingSecret: `enc:${SECRET}` });
+    claimPendingTotpSecret.mockResolvedValue(false);
+
+    let thrown: unknown;
+    try {
+      await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("CONFLICT");
+  });
+
+  it("claims against the state it verified, so a stale confirm cannot land", async () => {
+    const pending = generateTotpSecret();
+    const t = trader({ totpPendingSecret: `enc:${pending}` });
+    await completeTotpEnrolment(t, totpCodeForStep(pending, STEP), now);
+
+    const [id, expected] = claimPendingTotpSecret.mock.calls[0]!;
+    expect(id).toBe(t.id);
+    // Both halves matter: the pending secret pins which enrolment this is,
+    // and the active secret pins what it is allowed to displace.
+    expect(expected).toEqual({
+      pendingSecret: `enc:${pending}`,
+      activeSecret: `enc:${SECRET}`,
+    });
+  });
+
+  it("claims against a null active secret on a first enrolment", async () => {
+    const t = trader({
+      totpSecret: null,
+      totpEnabledAt: null,
+      totpPendingSecret: `enc:${SECRET}`,
+    });
+    await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
+    const [, expected] = claimPendingTotpSecret.mock.calls[0]!;
+    expect(expected).toEqual({
+      pendingSecret: `enc:${SECRET}`,
+      activeSecret: null,
+    });
   });
 
 
@@ -267,7 +323,7 @@ describe("the hold after an authenticator changes", () => {
     updateMagicNumber.mockReset();
     const t = trader({ totpPendingSecret: `enc:${SECRET}` });
     await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
-    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    const [, , patch] = claimPendingTotpSecret.mock.calls[0]!;
     expect(patch.totpChangedAt).toEqual(now);
   });
 
@@ -278,7 +334,7 @@ describe("the hold after an authenticator changes", () => {
       totpPendingSecret: `enc:${SECRET}`,
     });
     await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
-    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    const [, , patch] = claimPendingTotpSecret.mock.calls[0]!;
     expect(patch.totpChangedAt).toBeUndefined();
   });
 
@@ -296,7 +352,7 @@ describe("the hold after an authenticator changes", () => {
   it("is not tripped by confirming a first enrolment", async () => {
     const t = trader({ totpEnabledAt: null, totpPendingSecret: `enc:${SECRET}` });
     await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
-    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    const [, , patch] = claimPendingTotpSecret.mock.calls[0]!;
     expect(patch.totpChangedAt).toBeUndefined();
   });
 });
@@ -343,9 +399,11 @@ describe("starting an enrolment leaves a working authenticator alone", () => {
       now
     );
     expect(codes).toHaveLength(10);
-    const [, patch] = updateMagicNumber.mock.calls.at(-1)!;
+    const [, expected, patch] = claimPendingTotpSecret.mock.calls.at(-1)!;
     expect(patch.totpSecret).toBe(`enc:${pending}`);
-    expect(patch.totpPendingSecret).toBeNull();
+    // Clearing the pending secret is the claim's own doing, so it is not in
+    // the patch — what the caller promises is which pending secret it saw.
+    expect(expected.pendingSecret).toBe(`enc:${pending}`);
   });
 
   it("refuses to confirm when no enrolment was started", async () => {

@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 
 import {
+  claimPendingTotpSecret,
   claimRecoveryCodes,
   claimTotpStep,
   updateMagicNumber,
@@ -129,14 +130,34 @@ export async function completeTotpEnrolment(
   // is stamped — and only when something was displaced.
   const replacing = totpEnabled(trader);
   const { codes, hashes } = generateRecoveryCodes();
-  await updateMagicNumber(trader.id, {
-    totpSecret: trader.totpPendingSecret,
-    totpPendingSecret: null,
-    totpEnabledAt: now,
-    totpLastStep: step,
-    totpRecoveryCodes: JSON.stringify(hashes),
-    ...(replacing ? { totpChangedAt: now } : {}),
-  });
+  // The database decides whether this enrolment is the one that lands. Two
+  // confirmations can verify the same code against the same pending secret —
+  // there is no spent-step guard on a first enrolment, deliberately — and each
+  // has generated its own recovery codes by this point. Only the request whose
+  // conditional UPDATE actually moved the row may return its set; the other
+  // caller must be told it failed rather than shown ten dead codes.
+  const claimed = await claimPendingTotpSecret(
+    trader.id,
+    {
+      pendingSecret: trader.totpPendingSecret,
+      activeSecret: trader.totpSecret ?? null,
+    },
+    {
+      totpSecret: trader.totpPendingSecret,
+      totpEnabledAt: now,
+      totpLastStep: step,
+      totpRecoveryCodes: JSON.stringify(hashes),
+      ...(replacing ? { totpChangedAt: now } : {}),
+    }
+  );
+  if (!claimed) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message:
+        "That setup is no longer the current one. Start the authenticator " +
+        "setup again and confirm it once.",
+    });
+  }
   return codes;
 }
 

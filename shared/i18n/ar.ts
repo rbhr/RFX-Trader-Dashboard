@@ -186,6 +186,13 @@ export const ar: Translations = {
       "يربط هذا الحساب بتطبيق Telegram على الجهاز الذي تفتح منه الرابط. استخدمه لنقل الحساب إلى Telegram آخر.",
     telegramConnectIssued:
       "افتح هذا الرابط على الجهاز الذي يحتوي Telegram خلال {minutes} دقيقة. يعمل مرة واحدة:",
+    telegramConnectConfirm:
+      "أكّد بكلمة المرور. تُرسل رموز التحقق الخاصة بك إلى Telegram، لذلك يُعامل نقله بالحذر نفسه الذي يُعامل به تغيير عنوان الدفع.",
+    telegramConnectConfirmFactor:
+      "أكّد بكلمة المرور ورمز، لنتأكد أنك ما زلت تملك حساب Telegram الذي تنتقل منه.",
+    telegramConnectHold:
+      "نقل الحساب إلى Telegram آخر يُعلّق مدفوعاته لمدة {hours} ساعة.",
+    telegramConnectGetLink: "الحصول على الرابط",
     connected: "متصل",
     notConnected: "غير متصل — أرسل /start إلى @RFXTraderBot",
     sendTestMessage: "إرسال رسالة تجريبية",
@@ -376,6 +383,7 @@ export const ar: Translations = {
     purposeReset: "إعادة تعيين كلمة المرور",
     purposeChange: "تغيير كلمة المرور",
     purposeUsdtChange: "تغيير عنوان الدفع",
+    purposeTelegramRelink: "نقل هذا الحساب إلى Telegram آخر",
     usdtAddressChanged:
       "[Magic {magicNumber}] 🔑 <b>تم تغيير عنوان الدفع</b>\n\n{greeting}\n\nتم تغيير عنوان USDT الذي تُرسل إليه مدفوعاتك إلى:\n\n<code>{newAddress}</code>\n\nالعنوان السابق: <code>{previousAddress}</code>\n\nلن يُرسل أي مبلغ إلى العنوان الجديد مدة {holdHours} ساعة. <b>إذا لم تقم بهذا التغيير فاتصل بـ RFX فوراً</b> وغيّر كلمة مرورك.",
     test:

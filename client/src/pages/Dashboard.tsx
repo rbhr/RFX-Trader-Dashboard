@@ -268,10 +268,42 @@ export default function Dashboard(props: {
   // A one-time link is the only way to move an account to a different Telegram:
   // the bot will not rebind an established chat id from a username match.
   const [telegramLink, setTelegramLink] = useState<{ url: string; minutes: number } | null>(null);
+  // Getting that link needs the current password, and the factor already on
+  // the account when there is one: Telegram is where the code authorising a
+  // payout-address change is delivered, so a session on its own must not be
+  // able to move it. The server decides which factor; these only drive the form.
+  const [telegramStep, setTelegramStep] = useState<"idle" | "confirm">("idle");
+  const [telegramPassword, setTelegramPassword] = useState("");
+  const [telegramCode, setTelegramCode] = useState("");
+  const [telegramNeeds, setTelegramNeeds] = useState<"2fa" | "totp" | null>(null);
+  const resetTelegramConfirm = () => {
+    setTelegramStep("idle");
+    setTelegramPassword("");
+    setTelegramCode("");
+    setTelegramNeeds(null);
+  };
   const telegramLinkMutation = trpc.trading.createTelegramLinkToken.useMutation({
-    onSuccess: data => setTelegramLink({ url: data.url, minutes: data.minutes }),
+    onSuccess: data => {
+      if (!data.success) {
+        setTelegramNeeds(data.requiresTotp ? "totp" : "2fa");
+        setTelegramCode("");
+        if (data.requires2FA) toast.info(t("common.codeSentToTelegram"));
+        return;
+      }
+      setTelegramLink({ url: data.url, minutes: data.minutes });
+      resetTelegramConfirm();
+    },
     onError: error => toast.error(tError(error.message)),
   });
+  const submitTelegramLink = () =>
+    telegramLinkMutation.mutate({
+      password: telegramPassword,
+      ...(telegramNeeds === "totp"
+        ? { totpCode: telegramCode }
+        : telegramNeeds === "2fa"
+          ? { twoFactorCode: telegramCode }
+          : {}),
+    });
   const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
   const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
   const markAllReadMutation = trpc.trading.markAllNotificationsRead.useMutation();
@@ -1349,16 +1381,90 @@ export default function Dashboard(props: {
                               {telegramLink.url}
                             </a>
                           </div>
+                        ) : telegramStep === "confirm" ? (
+                          <div className="space-y-3">
+                            <p className="text-xs text-muted-foreground">
+                              {telegramNeeds
+                                ? t("settings.telegramConnectConfirmFactor")
+                                : t("settings.telegramConnectConfirm")}
+                            </p>
+                            {session?.telegramConnected && (
+                              <p className="text-xs text-muted-foreground">
+                                {t("settings.telegramConnectHold", {
+                                  hours: String(USDT_ADDRESS_COOL_OFF_HOURS),
+                                })}
+                              </p>
+                            )}
+                            <div className="space-y-2">
+                              <Label htmlFor="telegramPassword">
+                                {t("login.password")}
+                              </Label>
+                              <Input
+                                id="telegramPassword"
+                                type="password"
+                                dir="ltr"
+                                value={telegramPassword}
+                                onChange={e => setTelegramPassword(e.target.value)}
+                                disabled={telegramLinkMutation.isPending}
+                                autoFocus
+                              />
+                            </div>
+                            {telegramNeeds && (
+                              <div className="space-y-2">
+                                <Label htmlFor="telegramCode">
+                                  {telegramNeeds === "totp"
+                                    ? t("login.authenticatorCode")
+                                    : t("common.verificationCode")}
+                                </Label>
+                                <Input
+                                  id="telegramCode"
+                                  type="text"
+                                  dir="ltr"
+                                  maxLength={telegramNeeds === "totp" ? 16 : 6}
+                                  value={telegramCode}
+                                  onChange={e =>
+                                    setTelegramCode(
+                                      telegramNeeds === "totp"
+                                        ? e.target.value.trim()
+                                        : e.target.value.replace(/\D/g, "")
+                                    )
+                                  }
+                                  placeholder={t("common.enterSixDigitCode")}
+                                  disabled={telegramLinkMutation.isPending}
+                                  autoFocus
+                                  className="text-center text-lg tracking-widest font-mono"
+                                />
+                              </div>
+                            )}
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              onClick={submitTelegramLink}
+                              disabled={
+                                telegramLinkMutation.isPending ||
+                                !telegramPassword ||
+                                (!!telegramNeeds && telegramCode.length < 6)
+                              }
+                            >
+                              {telegramLinkMutation.isPending
+                                ? t("common.verifying")
+                                : t("settings.telegramConnectGetLink")}
+                            </Button>
+                            <button
+                              type="button"
+                              className="w-full text-sm text-muted-foreground hover:text-primary"
+                              onClick={resetTelegramConfirm}
+                            >
+                              {t("common.cancel")}
+                            </button>
+                          </div>
                         ) : (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => telegramLinkMutation.mutate()}
-                            disabled={telegramLinkMutation.isPending}
+                            onClick={() => setTelegramStep("confirm")}
                           >
-                            {telegramLinkMutation.isPending
-                              ? t("common.saving")
-                              : t("settings.telegramConnect")}
+                            {t("settings.telegramConnect")}
                           </Button>
                         )}
                       </div>

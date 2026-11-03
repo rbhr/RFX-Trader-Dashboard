@@ -16,6 +16,12 @@ import { USDT_ADDRESS_COOL_OFF_HOURS } from "@shared/const";
  *
  * Enforced at send time rather than at change time, because the send is where
  * the address is read.
+ *
+ * The same hold covers the account's Telegram chat, because that chat is what
+ * authorises an address change: a code sent there is the second factor. An
+ * attacker who moves the chat can then change the address with a code they
+ * receive themselves, which would satisfy the 2FA rather than defeat it — so
+ * moving the channel waits out the same cool-off as moving the address.
  */
 
 const COOL_OFF_MS = USDT_ADDRESS_COOL_OFF_HOURS * 60 * 60 * 1000;
@@ -40,32 +46,86 @@ export function addressHoldUntil(
   return until.getTime() > now.getTime() ? until : null;
 }
 
+/**
+ * When the hold from moving the account's Telegram chat lifts, or null.
+ *
+ * The same cool-off, because it protects the same thing. A trader's
+ * payout-address change is authorised by a code sent to their Telegram, so
+ * whoever controls that chat controls the destination — moving the chat is a
+ * step towards moving the address, and gets the same waiting period. Stamped
+ * on a rebind and on an admin unlink; a first link does not stamp it, as
+ * there was no channel to take over.
+ */
+export function telegramHoldUntil(
+  trader: { telegramChangedAt?: Date | null },
+  now: Date = new Date()
+): Date | null {
+  const changedAt = trader.telegramChangedAt;
+  if (!changedAt) return null;
+  const until = new Date(changedAt.getTime() + COOL_OFF_MS);
+  return until.getTime() > now.getTime() ? until : null;
+}
+
+export type PayoutHoldTrader = {
+  usdtAddressUpdatedAt?: Date | null;
+  telegramChangedAt?: Date | null;
+};
+
+/** Which hold is in force, and until when — the later one if both are. */
+export function payoutHold(
+  trader: PayoutHoldTrader,
+  now: Date = new Date()
+): { until: Date; what: "address" | "telegram" } | null {
+  const address = addressHoldUntil(trader, now);
+  const telegram = telegramHoldUntil(trader, now);
+  if (address && (!telegram || address.getTime() >= telegram.getTime())) {
+    return { until: address, what: "address" };
+  }
+  if (telegram) return { until: telegram, what: "telegram" };
+  return null;
+}
+
+/** When any hold on paying this trader lifts, or null if none is in force. */
+export function payoutHoldUntil(
+  trader: PayoutHoldTrader,
+  now: Date = new Date()
+): Date | null {
+  return payoutHold(trader, now)?.until ?? null;
+}
+
 /** The reason a payout list shows for a held trader, or null if not held. */
-export function addressHoldReason(
-  trader: { usdtAddressUpdatedAt?: Date | null },
+export function payoutHoldReason(
+  trader: PayoutHoldTrader,
   now: Date = new Date()
 ): string | null {
-  const until = addressHoldUntil(trader, now);
-  return until ? `Address changed — held until ${utcMinute(until)}` : null;
+  const hold = payoutHold(trader, now);
+  if (!hold) return null;
+  const what = hold.what === "address" ? "Address changed" : "Telegram moved";
+  return `${what} — held until ${utcMinute(hold.until)}`;
 }
 
 /**
- * Refuses a payout whose destination address changed within the cool-off.
- * Throws CONFLICT, the same code the payout-cycle waiting period uses, so the
- * admin UI already renders it as "not yet due" rather than as a failure.
+ * Refuses a payout whose destination — or the channel that authorises changing
+ * that destination — moved within the cool-off. Throws CONFLICT, the same code
+ * the payout-cycle waiting period uses, so the admin UI already renders it as
+ * "not yet due" rather than as a failure.
  */
-export function assertAddressSettled(
-  trader: { name: string; usdtAddressUpdatedAt?: Date | null },
+export function assertPayoutSettled(
+  trader: { name: string } & PayoutHoldTrader,
   now: Date = new Date()
 ): void {
-  const until = addressHoldUntil(trader, now);
-  if (!until) return;
+  const hold = payoutHold(trader, now);
+  if (!hold) return;
+  const what =
+    hold.what === "address"
+      ? "payout address was changed"
+      : "Telegram account was moved";
   throw new TRPCError({
     code: "CONFLICT",
     message:
-      `${trader.name}'s payout address was changed less than ` +
-      `${USDT_ADDRESS_COOL_OFF_HOURS} hours ago. Payouts to it are held until ` +
-      `${utcMinute(until)}. If that change was not expected, confirm it with ` +
-      `the trader before releasing the payout.`,
+      `${trader.name}'s ${what} less than ` +
+      `${USDT_ADDRESS_COOL_OFF_HOURS} hours ago. Payouts are held until ` +
+      `${utcMinute(hold.until)}. If that change was not expected, confirm it ` +
+      `with the trader before releasing the payout.`,
   });
 }

@@ -148,6 +148,15 @@ export const magicNumbers = mysqlTable("magic_numbers", {
    */
   telegramLinkToken: varchar("telegramLinkToken", { length: 64 }),
   telegramLinkTokenExpiresAt: timestamp("telegramLinkTokenExpiresAt"),
+  /**
+   * When the Telegram chat behind this account was last moved or cleared —
+   * null for a first link, and for every row written before this existed.
+   *
+   * Telegram is the channel that authorises a payout-address change, so
+   * moving it is as good as moving the address: the payout hold reads both
+   * (see server/payoutAddressHold.ts).
+   */
+  telegramChangedAt: timestamp("telegramChangedAt"),
   // Set once the trader completes onboarding (Telegram linked, password changed,
   // USDT details set) and their live copiers are activated. One-way: never cleared.
   liveCopiersActivatedAt: timestamp("liveCopiersActivatedAt"),
@@ -462,6 +471,7 @@ export const twoFactorCodes = mysqlTable("two_factor_codes", {
     "password_reset",
     "password_change",
     "usdt_address_change",
+    "telegram_relink",
   ]).notNull(),
   used: boolean("used").notNull().default(false),
   expiresAt: timestamp("expiresAt").notNull(),

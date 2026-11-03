@@ -111,12 +111,22 @@ flag, is derived from. `clientIpOf` (`server/clientIp.ts`) walks on through Clou
 unify them: 100.64.0.0/10 is carrier-grade NAT space real mobile networks hand out, so an end
 client can hold a 100.x address while being nowhere near the tailnet.
 
-Every code fix from that incident shipped over v4.13.0–v4.18.0. What is left is in
+**Telegram is a second factor, so moving it is guarded like one.**
+`createTelegramLinkToken` takes the current password *and* the factor already on the account —
+an authenticator code, or a Telegram code to the chat being moved away from. A session alone
+used to be enough, which meant a stolen session could rebind the chat and then change the
+payout address with the 2FA code arriving in its own Telegram: the 4.14.0 check satisfied
+rather than defeated. Moving the chat also holds payouts for `USDT_ADDRESS_COOL_OFF_HOURS`
+(`server/payoutAddressHold.ts` reads both `usdtAddressUpdatedAt` and `telegramChangedAt`).
+A trader who has lost that Telegram cannot clear the bar themselves, so
+`admin.unlinkTelegram` — Edit Trader → Unlink Telegram — is the recovery path.
+
+Every code fix from that incident shipped over v4.13.0–v4.18.3. What is left is in
 `/home/rfx/.claude/plans/precious-cooking-pretzel.md` and `SECURITY_CHECKPOINT.md`: reporting
-the destination address, `verifyPassword`'s plaintext fallback (#2, two lines), the Telegram
-username binding (#3, the remaining account-takeover path), a signed device cookie for
-`hasSeenDevice` (#4), and an `audit_log` table — the 2 November address change was only
-inferable from `updatedAt` and an incidental log line, and `logs` still records no actor.
+the destination address; the Telegram **first**-link username binding, open by decision (a
+token for every link would change onboarding); and an `audit_log` table — the 2 November
+address change was only inferable from `updatedAt` and an incidental log line, and `logs`
+still records no actor.
 
 ## Translations (English / Urdu / Arabic)
 

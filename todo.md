@@ -58,13 +58,14 @@ Attacker: `34.76.61.135` (2 Nov) and `35.205.223.156` (21 Oct), both Google Clou
       2030. Evidence as above.
 - [ ] **Treat everything from 2026-10-21 07:04 UTC as seen** — that session pulled the full
       trader roster, wallet balance and payment history.
-- [ ] **`verifyPassword`'s plaintext fallback** — see `SECURITY_CHECKPOINT.md` #2. Two lines,
-      no behavioural change today, and the cheapest item left.
-- [ ] **Telegram username binding** — `SECURITY_CHECKPOINT.md` #3. The remaining
-      account-takeover path, and the one tried first on 2 November before the attacker pivoted
-      to the admin account. Needs token-based linking.
-- [ ] **Signed device cookie** for `hasSeenDevice`, instead of an IP — `SECURITY_CHECKPOINT.md`
-      #4. Hardening; real IPs already made the comparison meaningful.
+- [ ] **Telegram *first*-link username binding** — `SECURITY_CHECKPOINT.md`, "What is left".
+      Open by decision, not oversight: a bare `/start` still binds to an account with no chat
+      id whose handle matches the sender's username, so someone who acquires an abandoned
+      username an admin has already typed in can capture that account's code channel before
+      the trader does. Closing it means a dashboard token for **every** link, which changes
+      onboarding — the trader would have to sign in on their password first instead of just
+      messaging the bot. Weighed and deferred 2026-11-03. Rebinding an established chat has
+      needed a token since v4.18.1 and a password plus a code since v4.18.3.
 - [ ] **An `audit_log` table** (actor, row, field, old value, new value). The address change
       was only inferable from `updatedAt` and an incidental onboarding log line; the previous
       value was unrecoverable from the app. This would have made the investigation minutes

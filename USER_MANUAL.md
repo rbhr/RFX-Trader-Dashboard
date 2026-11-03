@@ -135,6 +135,16 @@ Click the **gear icon** to open Settings. There are three tabs:
   - A green dot appears when connected
   - Use **Send Test Message** to verify the connection
 
+**Moving the account to a different Telegram.** Use **Connect Telegram**, which gives you a
+one-time link to open on the device that has Telegram. Because your verification codes are
+sent to Telegram, moving it is treated as carefully as changing your payout address: you are
+asked for your password, and — if an authenticator or a Telegram chat is already on the
+account — for a code as well. A Telegram code goes to the chat you are moving *away from*,
+which is how we know it is still you. Afterwards, no payout is sent for four hours.
+
+If you have lost the Telegram account your codes go to, you cannot read that code — ask RFX to
+unlink it for you, then connect the new one with your password.
+
 #### Payments Tab
 
 **USDT Payment Details:**

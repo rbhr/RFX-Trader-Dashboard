@@ -123,6 +123,33 @@ Reviewed 2026-07-24 and 2026-11-03; status updated 2026-11-03.
 - **Now:** a password written from there evicts every session for that account and logs the
   count.
 
+### 8. A stolen session could move the account's Telegram — FIXED v4.18.3
+- **Was:** `createTelegramLinkToken` issued a rebinding link on a session cookie alone. Telegram
+  is where this account's second factor is delivered, so a session was enough to redirect the
+  channel: rebind the chat, then change the payout address with the 2FA code now arriving in
+  the attacker's own Telegram, and wait for the next payout run. The 4.14.0 address 2FA would
+  have been *satisfied* rather than defeated — the 2 November attack rebuilt out of the parts
+  built to stop it. It is also what was tried first on 2 November, at 06:17, against trader
+  51190.
+- **Now:** the current password is required, plus the factor already on the account — an
+  authenticator code, or a Telegram code to the chat being moved away from, which proves the
+  caller still holds the channel they are abandoning. A first link has neither to prove and
+  the password stands alone. Moving the chat holds payouts for the same cool-off as moving the
+  address, stamped on a rebind and on an admin unlink. An admin can unlink
+  (Edit Trader → Unlink Telegram) for a trader who has genuinely lost that Telegram, since
+  they cannot read the code themselves — logged, and the hold applies.
+
+### 9. Confirming an authenticator enrolment was not atomic — FIXED v4.18.3
+- **Was:** `completeTotpEnrolment` verified against the pending secret it had loaded and then
+  wrote unconditionally. Two confirmations of one enrolment both verified the same code — there
+  is deliberately no spent-step guard on a first enrolment — and each generated its own ten
+  recovery codes, so both reported success while only the last set stayed valid. The first
+  caller was shown ten dead codes. A stale confirmation could also overwrite a newer enrolment.
+  The same class as #6, in the one place the 4.18.1 fix had missed.
+- **Now:** `claimPendingTotpSecret` promotes the secret only if the row still holds exactly the
+  pending *and* active secrets that were verified, and must affect one row. The losing
+  confirmation is told it failed rather than handed codes that will not work.
+
 ## Resolved since the 2026-07-24 review
 
 - **`server/tron.ts` treated broadcast as success** — a TRC20 transfer that reverted on-chain
@@ -136,9 +163,34 @@ Reviewed 2026-07-24 and 2026-11-03; status updated 2026-11-03.
 
 ## What is left
 
-Nothing on this list. Every finding from both review passes is fixed and deployed. The thing to carry forward is not any individual
-finding but the two review passes themselves: the first was written and shelved, and the
-account it described was emptied four months later. The second read the *fixes* rather than
-the original code and found three fresh holes in work that had typechecked, passed its tests
-and shipped the same day — including one where a comment asserted a safety the code did not
-provide. Review the remediation, not only the thing being remediated.
+One item, open by decision rather than by oversight.
+
+### A first Telegram link still trusts a username — OPEN, accepted 2026-11-03
+`server/telegram.ts` binds a bare `/start` to any account whose `telegramHandle` matches the
+sender's current Telegram username, provided that account has no chat id yet. A rebind has
+needed a dashboard token since 4.18.1, and now a password and a code as well (#8), but the
+*first* link does not.
+
+- **The exposure:** a Telegram username can be abandoned and re-registered by somebody else.
+  Someone who acquires a username an admin has already typed into a trader's record can
+  capture that account's verification channel before the real trader links it — and they would
+  then receive the login 2FA codes for an account that has never been used.
+- **Why it is open:** closing it means a dashboard-issued token for every link, which changes
+  onboarding. Today an admin types the handle and the trader messages the bot; after a fix the
+  trader has to sign in on their password first and open a link. That is a workflow decision,
+  not a defect, and it was weighed and deferred on 2026-11-03.
+- **Mitigations in place:** the window is only ever between an admin typing a handle and the
+  trader linking; every link is logged; and an account with no Telegram has no second factor to
+  steal yet — the attacker gains the channel for codes, not the password.
+- **If it is ever taken up:** require a token for the first link too, and keep admin unlink
+  (#8) as the recovery path, since it reopens the username branch for exactly one account at a
+  time and on purpose.
+
+Everything else from both review passes is fixed and deployed. The thing to carry forward is
+not any individual finding but the review passes themselves: the first was written and
+shelved, and the account it described was emptied four months later. The second and third read
+the *fixes* rather than the original code, and each found fresh holes in work that had
+typechecked, passed its tests and shipped the same day — including one where a comment
+asserted a safety the code did not provide, and one where the fix for a race was applied
+everywhere but the place it started. Review the remediation, not only the thing being
+remediated.

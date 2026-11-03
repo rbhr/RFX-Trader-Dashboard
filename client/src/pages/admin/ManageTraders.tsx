@@ -795,6 +795,21 @@ export default function ManageTraders() {
     },
   });
 
+  // The way out of the second factor on moving Telegram: a trader who has lost
+  // the Telegram account their codes go to cannot read the code that would let
+  // them re-link, so an admin clears it for them. Payouts hold for the cool-off
+  // afterwards, since whoever asked may not be the trader.
+  const unlinkTelegram = trpc.admin.unlinkTelegram.useMutation({
+    onSuccess: () => {
+      utils.admin.listTraders.invalidate();
+      toast.success(
+        "Telegram unlinked. The trader can link a new one from Settings → " +
+          "Account, and payouts are held for the cool-off."
+      );
+    },
+    onError: error => toast.error(error.message),
+  });
+
   const createTrader = trpc.admin.createTrader.useMutation({
     onSuccess: data => {
       utils.admin.listTraders.invalidate();
@@ -2475,6 +2490,42 @@ export default function ManageTraders() {
                       }
                       placeholder="@username"
                     />
+                    {selectedTrader?.telegramConnected ? (
+                      <div className="space-y-1 pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (!selectedTrader) return;
+                            if (
+                              !window.confirm(
+                                `Unlink Telegram from ${selectedTrader.name} (magic ` +
+                                  `${selectedTrader.magicNumber})? Their codes will stop ` +
+                                  `arriving at the current chat, and payouts to them are ` +
+                                  `held for the cool-off. Only do this if the trader has ` +
+                                  `asked — they cannot re-link without it.`
+                              )
+                            ) {
+                              return;
+                            }
+                            unlinkTelegram.mutate({
+                              magicNumberId: selectedTrader.id,
+                            });
+                          }}
+                          disabled={unlinkTelegram.isPending}
+                        >
+                          {unlinkTelegram.isPending
+                            ? "Unlinking…"
+                            : "Unlink Telegram"}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          For a trader who has lost the Telegram their codes go
+                          to. Re-linking needs their password and a code to that
+                          chat, which they cannot read.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

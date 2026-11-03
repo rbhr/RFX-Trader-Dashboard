@@ -1033,6 +1033,45 @@ export async function claimRecoveryCodes(
   return ((result as { affectedRows?: number }).affectedRows ?? 0) === 1;
 }
 
+/**
+ * Promotes a pending TOTP secret to the active one, but only if the row still
+ * holds exactly the pending and active secrets the caller verified against.
+ *
+ * Compare-and-swap, for the same reason as `claimTotpStep` above: two
+ * confirmations of one enrolment each generate their own recovery codes, and
+ * an unconditional write would let both report success while only the last
+ * set stayed valid — leaving the first caller holding ten dead codes. It also
+ * stops a stale confirmation from overwriting a newer enrolment.
+ */
+export async function claimPendingTotpSecret(
+  magicNumberId: number,
+  expected: { pendingSecret: string; activeSecret: string | null },
+  next: {
+    totpSecret: string;
+    totpEnabledAt: Date;
+    totpLastStep: number;
+    totpRecoveryCodes: string;
+    totpChangedAt?: Date;
+  }
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const [result] = await db
+    .update(magicNumbers)
+    .set({ ...next, totpPendingSecret: null })
+    .where(
+      and(
+        eq(magicNumbers.id, magicNumberId),
+        eq(magicNumbers.totpPendingSecret, expected.pendingSecret),
+        expected.activeSecret === null
+          ? isNull(magicNumbers.totpSecret)
+          : eq(magicNumbers.totpSecret, expected.activeSecret)
+      )
+    );
+  return ((result as { affectedRows?: number }).affectedRows ?? 0) === 1;
+}
+
 export async function cleanupExpiredTwoFactorCodes() {
   const db = await getDb();
   if (!db) return;

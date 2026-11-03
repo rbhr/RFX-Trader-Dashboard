@@ -153,8 +153,8 @@ import {
   totpEnabled,
 } from "./totpAuth";
 import {
-  addressHoldReason,
-  assertAddressSettled,
+  assertPayoutSettled,
+  payoutHoldReason,
 } from "./payoutAddressHold";
 import { assertAdminNetwork } from "./adminNetwork";
 import { clientIpOf } from "./clientIp";
@@ -372,7 +372,9 @@ async function generateAndSend2FACode(
         ? "telegram.purposeReset"
         : purpose === "usdt_address_change"
           ? "telegram.purposeUsdtChange"
-          : "telegram.purposeChange";
+          : purpose === "telegram_relink"
+            ? "telegram.purposeTelegramRelink"
+            : "telegram.purposeChange";
 
   const lang: Language = toLanguage(language);
   const message = translate(lang, "telegram.verificationCode", {
@@ -1915,27 +1917,144 @@ export const appRouter = router({
      * a Telegram username can be abandoned and re-registered by somebody else,
      * and the codes delivered to that chat are the ones that reset a password.
      * A token issued to a signed-in session is the authority instead.
+     *
+     * Which is why a session alone must not be enough to get one. Telegram is
+     * where this account's second factor is delivered: a stolen session that
+     * could move the chat would receive the code for a payout-address change
+     * itself, satisfy the 2FA added in 4.14.0, and point the next payout run
+     * at its own wallet — the 2 November attack rebuilt out of the parts meant
+     * to stop it. So the current password is required, and so is the factor
+     * already on the account: an authenticator code, or a Telegram code to the
+     * chat being moved away from, which proves the caller still holds the
+     * channel they are abandoning.
+     *
+     * A first link has neither to prove, and the password stands alone — there
+     * is no channel to take over yet, and an account with no Telegram can
+     * already change its address without a code.
+     *
+     * A trader who has genuinely lost their Telegram cannot clear this bar;
+     * that is what `unlinkTelegram` is for, which an admin runs for them.
      */
-    createTelegramLinkToken: tradingProcedure.mutation(async ({ ctx }) => {
-      const trader = ctx.tradingSession.magicNumber;
-      const token = nanoid(32);
-      const expiresAt = new Date(Date.now() + TELEGRAM_LINK_TOKEN_MINUTES * 60_000);
-      await setTelegramLinkToken(trader.id, token, expiresAt);
+    createTelegramLinkToken: tradingProcedure
+      .input(
+        z.object({
+          password: z.string().min(1),
+          twoFactorCode: z.string().length(6).optional(),
+          totpCode: z.string().min(6).max(16).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const trader = ctx.tradingSession.magicNumber;
 
-      const url = await telegramDeepLink(token);
-      if (!url) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Telegram is not configured on this server.",
-        });
-      }
-      logEvent(
-        "telegram",
-        `Telegram link issued for ${trader.name} (magic ${trader.magicNumber}), ` +
-          `valid ${TELEGRAM_LINK_TOKEN_MINUTES} minutes`
-      );
-      return { url, expiresAt, minutes: TELEGRAM_LINK_TOKEN_MINUTES };
-    }),
+        // A password check reachable from a session is a password oracle, so
+        // it gets the same cap as a 2FA code.
+        const limitKey = `tglink:${trader.id}`;
+        if (!checkRateLimit(limitKey, 5, 5 * 60 * 1000)) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many attempts. Wait a few minutes and try again.",
+          });
+        }
+        if (!(await verifyPassword(input.password, trader.password))) {
+          logEvent(
+            "telegram",
+            `Telegram link refused — wrong password for ${trader.name} ` +
+              `(magic ${trader.magicNumber}) from ` +
+              `${clientIpOf(ctx.req) ?? "unknown IP"}`,
+            "warn"
+          );
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Current password is incorrect",
+          });
+        }
+        resetRateLimit(limitKey);
+
+        const rebinding = !!trader.telegramChatId;
+        if (totpEnabled(trader)) {
+          if (!input.totpCode) {
+            return {
+              success: false as const,
+              requires2FA: false,
+              requiresTotp: true,
+            };
+          }
+          if (!(await consumeTotpCode(trader, input.totpCode))) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid authenticator code",
+            });
+          }
+        } else if (rebinding) {
+          if (!input.twoFactorCode) {
+            const sent = await generateAndSend2FACode(
+              trader.id,
+              trader.telegramHandle,
+              trader.telegramChatId,
+              trader.name,
+              trader.magicNumber,
+              "telegram_relink",
+              trader.language
+            );
+            if (!sent) {
+              // A chat id with no handle, or Telegram refusing the send: the
+              // trader cannot clear this bar on their own. Say so rather than
+              // leaving them tapping a button that returns nothing.
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message:
+                  "We could not send a code to the Telegram currently linked " +
+                  "to this account. Ask an admin to unlink it for you.",
+              });
+            }
+            return {
+              success: false as const,
+              requires2FA: true,
+              requiresTotp: false,
+            };
+          }
+
+          const codeValid = await verifyTwoFactorCodeWithCap(
+            trader.id,
+            input.twoFactorCode,
+            "telegram_relink"
+          );
+          if (!codeValid) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid or expired verification code",
+            });
+          }
+        }
+
+        const token = nanoid(32);
+        const expiresAt = new Date(Date.now() + TELEGRAM_LINK_TOKEN_MINUTES * 60_000);
+        await setTelegramLinkToken(trader.id, token, expiresAt);
+
+        const url = await telegramDeepLink(token);
+        if (!url) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Telegram is not configured on this server.",
+          });
+        }
+        logEvent(
+          "telegram",
+          `Telegram ${rebinding ? "re-link" : "link"} issued for ${trader.name} ` +
+            `(magic ${trader.magicNumber}) from ` +
+            `${clientIpOf(ctx.req) ?? "unknown IP"}, ` +
+            `valid ${TELEGRAM_LINK_TOKEN_MINUTES} minutes`,
+          rebinding ? "warn" : "info"
+        );
+        return {
+          success: true as const,
+          requires2FA: false,
+          requiresTotp: false,
+          url,
+          expiresAt,
+          minutes: TELEGRAM_LINK_TOKEN_MINUTES,
+        };
+      }),
 
     // Update Telegram handle for current trader
     updateTelegramHandle: tradingProcedure
@@ -2966,6 +3085,63 @@ export const appRouter = router({
       }),
 
     // Update trader
+    /**
+     * Clears the Telegram chat behind a trader's account, so they can link a
+     * new one.
+     *
+     * This is the way out of `createTelegramLinkToken`'s second factor. That
+     * procedure wants a code sent to the chat being moved away from, which a
+     * trader who has lost that Telegram account cannot read — exactly the
+     * person who most needs to re-link. Rather than weaken the check for
+     * everyone, the escape hatch is an admin doing it on request, by hand and
+     * on the record.
+     *
+     * The handle is left in place, so a plain `/start` from it will link again
+     * (a first link, the chat id now being empty). That is the one path a
+     * Telegram username alone can still take, and it opens only for an
+     * account an admin has just unlinked on purpose.
+     *
+     * Payouts are held for the cool-off afterwards, as for any other move of
+     * this channel: whoever asked for the unlink is not necessarily the
+     * trader.
+     */
+    unlinkTelegram: tradingProcedure
+      .input(z.object({ magicNumberId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.tradingSession.magicNumber.isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Admin access required",
+          });
+        }
+        const trader = await getMagicNumberById(input.magicNumberId);
+        if (!trader) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trader not found" });
+        }
+        if (!trader.telegramChatId) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "That account has no Telegram linked.",
+          });
+        }
+
+        await updateMagicNumber(trader.id, {
+          telegramChatId: null,
+          telegramLinkToken: null,
+          telegramLinkTokenExpiresAt: null,
+          telegramChangedAt: new Date(),
+        });
+        logEvent(
+          "telegram",
+          `⚠️ Telegram unlinked from ${trader.name} (magic ${trader.magicNumber}) ` +
+            `by ${ctx.tradingSession.magicNumber.name}. Chat ${trader.telegramChatId} ` +
+            `will no longer receive this account's codes; payouts held for ` +
+            `${USDT_ADDRESS_COOL_OFF_HOURS} hours`,
+          "warn"
+        );
+        return { success: true };
+      }),
+
     updateTrader: tradingProcedure
       .input(
         z.object({
@@ -4667,7 +4843,7 @@ export const appRouter = router({
               message: "Trader has no USDT address or network configured",
             });
           }
-          assertAddressSettled(trader);
+          assertPayoutSettled(trader);
           assertPaymentElevation(ctx);
 
           const network = trader.usdtNetwork as "TRC20" | "ERC20";
@@ -4854,9 +5030,9 @@ export const appRouter = router({
           } else if (!t.usdtAddress || !t.usdtNetwork) {
             payable = false;
             reason = "No USDT address set";
-          } else if (addressHoldReason(t)) {
+          } else if (payoutHoldReason(t)) {
             payable = false;
-            reason = addressHoldReason(t);
+            reason = payoutHoldReason(t);
           } else if (!waitOk) {
             payable = false;
             const nextDue = lastPayoutAt
@@ -4993,7 +5169,7 @@ export const appRouter = router({
                 message: "Trader has no USDT address or network configured",
               });
             }
-            assertAddressSettled(trader);
+            assertPayoutSettled(trader);
             destination = trader.usdtAddress;
             network = trader.usdtNetwork as "TRC20" | "ERC20";
           }

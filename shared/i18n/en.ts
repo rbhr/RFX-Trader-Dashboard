@@ -195,6 +195,13 @@ export const en = {
       "Connects this account to the Telegram app on the device you open it from. Use this to move an account to a different Telegram.",
     telegramConnectIssued:
       "Open this link on the device that has Telegram, within {minutes} minutes. It works once:",
+    telegramConnectConfirm:
+      "Confirm with your password. Telegram is where your verification codes are sent, so moving it is treated as carefully as changing your payout address.",
+    telegramConnectConfirmFactor:
+      "Confirm with your password and a code, so we know you still hold the Telegram you are moving away from.",
+    telegramConnectHold:
+      "Moving an account to a different Telegram holds its payouts for {hours} hours.",
+    telegramConnectGetLink: "Get Link",
     connected: "Connected",
     notConnected: "Not connected — send /start to @RFXTraderBot",
     sendTestMessage: "Send Test Message",
@@ -390,6 +397,7 @@ export const en = {
     purposeReset: "password reset",
     purposeChange: "password change",
     purposeUsdtChange: "payout address change",
+    purposeTelegramRelink: "moving this account to a different Telegram",
     usdtAddressChanged:
       "[Magic {magicNumber}] 🔑 <b>Payout Address Changed</b>\n\n{greeting}\n\nThe USDT address your payouts are sent to has been changed to:\n\n<code>{newAddress}</code>\n\nPrevious address: <code>{previousAddress}</code>\n\nNo payout will be sent to the new address for {holdHours} hours. <b>If you did not make this change, contact RFX immediately</b> and change your password.",
     test:
