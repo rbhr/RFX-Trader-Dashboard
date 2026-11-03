@@ -44,7 +44,18 @@ Trading P&L dashboard for RFX traders. Full-stack TypeScript app with tRPC for e
     BUILD_HASH=$(git -C RFX-Trader-Dashboard rev-parse --short HEAD) \
     docker compose up -d --build rfx-app
   ```
-- **DB migrations**: `docker exec -it rfx-trader-dashboard pnpm db:push`
+- **DB migrations**: `docker exec -it rfx-trader-dashboard pnpm db:push`, or from a one-off
+  container against the newly built image:
+  `cd /home/rfx && docker compose run --rm --no-deps rfx-app pnpm db:push`. Two traps, both met
+  on 2026-11-02:
+  - **`compose run` uses the built image, not the working tree.** Run `docker compose build
+    rfx-app` first or push compares the schema baked into the old image and reports "No changes
+    detected" while doing nothing. The version it prints on startup tells you which image you
+    got.
+  - **It hangs on an enum change.** drizzle-kit classes *widening* an enum as a data-loss
+    change and waits at an interactive menu, which with `-T` can never be answered and defaults
+    to abort. Drop `-T`, or apply explicit SQL and then re-run push to confirm "No changes
+    detected". Plain column adds are non-interactive.
 - **View logs**: `docker logs rfx-trader-dashboard --tail 50 -f`
 - **DB shell**: `docker compose exec dashboard-mysql mysql -urfx -p rfx_trader`
   (MySQL data is bind-mounted at `data/mysql` on the host, so it survives container recreation.)
@@ -78,6 +89,13 @@ session does not inherit it. The client asks *before* the first transfer
 (`client/src/components/PaymentStepUp.tsx`): re-running a half-finished payout run would pay
 the traders at the top of the list twice.
 
+**The admin's own account is managed at `/admin/security`** (sidebar → Security), not through
+the trader Settings dialog, which is unreachable from `/admin`: `/admin/dashboard` renders the
+trader dashboard with a `viewAsTraderId`, and the Settings button is hidden while viewing as
+somebody else. Authenticator enrolment and password change are shared components
+(`client/src/components/AuthenticatorCard.tsx`, `ChangePasswordCard.tsx`) used by both that
+page and the trader dialog, so the two cannot drift. Put anything else account-level there.
+
 The app-side check lives in **`tradingProcedure`**, not `adminProcedure`: most admin
 procedures take a plain `tradingProcedure` and test `isAdmin` inline — `sendWalletPayment`
 among them — so the session middleware is the only chokepoint that cannot be forgotten. Put
@@ -93,11 +111,12 @@ flag, is derived from. `clientIpOf` (`server/clientIp.ts`) walks on through Clou
 unify them: 100.64.0.0/10 is carrier-grade NAT space real mobile networks hand out, so an end
 client can hold a 100.x address while being nowhere near the tailnet.
 
-Still open from that incident, in `/home/rfx/.claude/plans/precious-cooking-pretzel.md`:
-`updateUsdtInfo` lets an account change its own payout address with no 2FA, no logging and no
-cool-off; `payments` records no destination address; `trading_sessions.ipAddress` stores
-Cloudflare's address rather than `CF-Connecting-IP`, so `hasSeenDevice` is near-meaningless;
-and a password change does not invalidate sessions.
+Every code fix from that incident shipped over v4.13.0–v4.18.0. What is left is in
+`/home/rfx/.claude/plans/precious-cooking-pretzel.md` and `SECURITY_CHECKPOINT.md`: reporting
+the destination address, `verifyPassword`'s plaintext fallback (#2, two lines), the Telegram
+username binding (#3, the remaining account-takeover path), a signed device cookie for
+`hasSeenDevice` (#4), and an `audit_log` table — the 2 November address change was only
+inferable from `updatedAt` and an incidental log line, and `logs` still records no actor.
 
 ## Translations (English / Urdu / Arabic)
 
@@ -127,6 +146,8 @@ change** — Claude writes the translations.
 
 - Always provide full Docker commands for any server/DB operations — never assume the user will translate `pnpm db:push` into the Docker equivalent
 - When making schema changes, include the Docker migration command in the summary
+- **Bump only the patch digit** of `package.json`'s version per release — 4.18.1, 4.18.2 and so
+  on — unless asked for a minor or major. (Set 2026-11-03, after 4.13.0→4.18.0 in two days.)
 
 ## Conventions
 

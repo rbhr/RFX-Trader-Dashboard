@@ -7,9 +7,21 @@ A full-stack TypeScript P&L dashboard for RFX traders running on MetaCopier.io. 
 ### Authentication & Security
 - **Magic number authentication** — traders log in with their trading account identifier + password
 - **bcrypt password hashing** — passwords are stored as bcrypt hashes (12 rounds), never plaintext
-- **Two-factor authentication** — short-lived codes delivered via Telegram for login, password reset, and password change
-- **Admin OAuth** — admin portal authenticates via OAuth
-- **JWT session cookies** — secure HTTP-only cookies with configurable expiration
+- **Two-factor authentication** — short-lived codes delivered via Telegram for login from a new
+  device, password reset and password change
+- **Authenticator app (TOTP)** — RFC 6238, optional for traders and required for admins; asked
+  for at every sign-in, with ten one-time recovery codes
+- **Admin access is restricted to the RFX tailnet** — `tda.rfx.capital`, enforced at the edge
+  and again per account in the app. An admin session is refused on the public hostnames
+- **A fresh code before money moves** — one clears a 5-minute window, so a payout run asks
+  once; an admin account with no authenticator cannot send at all
+- **Four-hour holds** on payouts after the destination address changes, or after the
+  authenticator is removed or replaced — the second factor and the destination are the two
+  things an attacker must change, so neither can be changed and used in one sitting
+- **Opaque session cookies** — HTTP-only, looked up server-side, 7 days (30 with "remember me",
+  1 for admins); a password change signs out every other session
+- See `SECURITY_CHECKPOINT.md` for the standing findings list, and
+  `/home/rfx/.claude/plans/precious-cooking-pretzel.md` for the 2026-11-02 incident record
 
 ### Trader Dashboard
 - **Real-time P&L** — today (realized + floating), weekly, monthly, and all-time
@@ -39,7 +51,7 @@ A full-stack TypeScript P&L dashboard for RFX traders running on MetaCopier.io. 
 - **Frontend**: React 19 + TypeScript, Wouter (routing), TanStack Query (server state), shadcn/ui + Radix on Tailwind CSS
 - **Backend**: Node.js + Express, tRPC 11, Drizzle ORM (MySQL 8.0)
 - **External**: MetaCopier.io REST API, Telegram Bot API, TRON (`tronweb`) + EVM (`ethers`) for payouts
-- **Auth**: bcrypt, JWT cookies, OAuth (admin)
+- **Auth**: bcrypt, opaque server-side session cookies, TOTP (`node:crypto`), Telegram 2FA
 
 ## Project Structure
 

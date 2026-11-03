@@ -1,101 +1,107 @@
 # Security Checkpoint
 
-Findings from a focused security review of auth/JWT/2FA, custodial USDT payout
-wallets, and the admin↔trader authorization boundary. Dated **2026-07-24**.
-Nothing here has been fixed yet — this is a to-do list to return to.
+A standing list of findings from security reviews of auth/2FA, the custodial USDT payout
+wallets, and the admin↔trader authorization boundary.
+
+**Finding #1 below was exploited on 2026-11-02 before it was fixed.** It had been written
+down on 2026-07-24, with the attack described almost exactly as it happened: *"the single
+admin account can move funds from the custodial wallet, yet is protected by password only —
+no second factor, any IP. Password phish → attacker logs in → drains hot wallet."* What
+actually happened was simpler, because the admin password was still the account default. The
+incident record is `/home/rfx/.claude/plans/precious-cooking-pretzel.md`; the remediation
+shipped over v4.13.0–v4.18.0.
+
+The lesson worth keeping is not about the finding. It is that a known, written-down,
+ranked-first finding sat unactioned for four months, while the app logged
+`password still default` for that account on every onboarding re-check — including twice
+during the theft. Detection without action is not a control.
+
+Reviewed 2026-07-24; status updated 2026-11-03.
 
 ## Context: what's already solid (no action needed)
 
-- **Authorization boundary** — 44 admin procedures, 44 matching `isAdmin` guards,
-  no gaps. `viewAsTraderId` / `masterAccountId` gated behind an admin /
-  `showAllData` check that traders cannot set on themselves. No cross-tenant read
+- **Authorization boundary** — admin procedures all carry an `isAdmin` guard, and since
+  v4.13.0 `tradingProcedure` itself refuses an admin session off the tailnet, so a new admin
+  procedure cannot forget either check. `viewAsTraderId` / `masterAccountId` are gated behind
+  an admin / `showAllData` check that traders cannot set on themselves. No cross-tenant read
   or action.
-- **Payouts** — recipient address and amount always come from trusted DB values,
-  never client input. Fund-sending is admin-only. In-flight guards prevent
-  double-sends.
-- **Monitors** — the only one that closes positions (`missedTradeMonitor`) acts
-  solely on server-sourced account IDs and fails *closed* at every branch. The
-  protected demo/slave account is never a target.
-- **OTP/2FA mechanics** — CSPRNG codes, 5-min expiry, single-use, bound to
-  trader+purpose, 5-attempt cap. JWT pinned to HS256 (no alg-confusion).
+- **Payouts** — recipient address and amount always come from trusted DB values, never client
+  input. Fund-sending is admin-only, needs a fresh authenticator code, and refuses a
+  destination that moved in the last four hours. In-flight guards prevent double-sends, and
+  the destination is now recorded on the payment row.
+- **Monitors** — the only one that closes positions (`missedTradeMonitor`) acts solely on
+  server-sourced account IDs and fails *closed* at every branch. The protected demo/slave
+  account is never a target.
+- **OTP/2FA mechanics** — CSPRNG codes, 5-min expiry, single-use, bound to trader+purpose,
+  5-attempt cap. TOTP is RFC 6238 over node:crypto, tested against the published vectors, with
+  replay refused by step and a 5-attempt cap. JWT pinned to HS256 (no alg-confusion).
 
-## Findings to action (ranked)
+## Findings
 
-### 1. Admin login bypasses 2FA — MEDIUM→HIGH in context
-- **Location:** `server/routers.ts:628-632` — the new-device 2FA challenge ends
-  with `&& !magicNumberData.isAdmin`, so admins are explicitly excluded.
-- **Why it matters:** the single admin account can move funds from the custodial
-  wallet, yet is protected by password only — no second factor, any IP. Password
-  phish → attacker logs in → drains hot wallet in $10k increments (create trader →
-  set its payout address → `sendWalletPayment` as admin). 2FA is disabled for
-  precisely the highest-value account.
-- **Fix:** invert the logic so admins are *always* challenged for 2FA on login
-  (at minimum for admins, not instead of them).
+### 1. Admin login bypasses 2FA — FIXED v4.13.0–v4.15.0, after being exploited
+- **Was:** `server/routers.ts` ended the new-device 2FA challenge with
+  `&& !magicNumberData.isAdmin`, so admins were explicitly excluded. The admin row also had
+  no `telegramChatId`, so it was exempt twice over and could never have received a code.
+- **Exploited 2026-11-02**: login as `admin`/`admin` from a Google Cloud box, payout address
+  of the Administrator row pointed at an attacker wallet, 2030 USDT sent, address restored.
+  234 seconds.
+- **Now:** the admin account is reachable only from the tailnet (`tda.rfx.capital`, three
+  independent layers — unroutable address, a Caddy `remote_ip` guard, and the app's own check
+  in `tradingProcedure`); an authenticator is required at sign-in and before any money moves;
+  and the account default password can no longer go unnoticed, because the account is renamed
+  and rotated. The `!isAdmin` clause still exists but is now unreachable in practice for the
+  one admin account, which has TOTP enrolled.
 
-### 2. Plaintext password fallback — MEDIUM, currently dormant
-- **Location:** `server/routers.ts:176-179` — `verifyPassword` falls back to
-  `password === hash` for any non-bcrypt stored value.
-- **Status:** verified against the DB on 2026-07-24 — **0 rows are non-bcrypt**,
-  so not currently exploitable. Latent foot-gun: if any future seed/import writes
-  a plaintext password it silently "works," and a DB read would expose usable
-  credentials.
-- **Fix:** remove the fallback — return `false` for any non-bcrypt hash. Zero
-  behavioral impact today.
+### 2. Plaintext password fallback — STILL OPEN
+- **Location:** `server/routers.ts`, `verifyPassword` — falls back to `password === hash` for
+  any stored value that is not `$2a$`/`$2b$`-shaped.
+- **Status:** re-checked 2026-11-02 during the incident — **0 rows are non-bcrypt**, so it was
+  not how the attacker got in and is not currently exploitable. Latent foot-gun unchanged: any
+  future seed or import that writes a plaintext password silently "works", and a database read
+  would then expose usable credentials.
+- **Fix:** return `false` for any non-bcrypt hash. Zero behavioural impact today; it is a
+  two-line change and the cheapest item on this list.
 
-### 3. Telegram username-binding takeover — MEDIUM, conditional
-- **Location:** `server/telegram.ts:66-94` — on `/start`, the bot binds the
-  sender's chat ID to every trader whose stored `telegramHandle` equals the
-  sender's *current* Telegram username, overwriting any existing binding.
-- **Why it matters:** 2FA and password-reset codes go to that chat ID. If a
-  trader's stored handle is an **unregistered or renamed** Telegram username, an
-  attacker can register it, `/start`, capture the binding, then run password reset
-  → account takeover. Narrow (needs a stale/free handle) but a real path.
-- **Fix:** don't overwrite an established `telegramChatId` without re-verification;
-  bind via a dashboard-generated one-time token rather than raw username match.
+### 3. Telegram username-binding takeover — STILL OPEN
+- **Location:** `server/telegram.ts` — on `/start`, the bot binds the sender's chat ID to
+  every trader whose stored `telegramHandle` equals the sender's *current* Telegram username,
+  overwriting any existing binding.
+- **Why it matters:** Telegram 2FA and password-reset codes go to that chat ID. If a trader's
+  stored handle is an **unregistered or renamed** username, somebody can register it, `/start`,
+  capture the binding, then run a password reset → account takeover. Narrow (needs a stale or
+  free handle) but a real path.
+- **Mitigated slightly** since v4.15.0: an account with an authenticator takes TOTP instead of
+  the Telegram code for login and password change, so a captured binding is not sufficient for
+  those. A password *reset* still goes through Telegram, and no trader has TOTP yet.
+- **Fix:** don't overwrite an established `telegramChatId` without re-verification; bind via a
+  dashboard-generated one-time token rather than a raw username match.
 
-### 4. IP-based "known device" skips 2FA — LOW
-- **Location:** `server/routers.ts:626` — any active session from the same egress
-  IP is treated as trusted, skipping 2FA.
-- **Why it matters:** on shared NAT/CGNAT, an attacker with the password and the
-  same IP skips 2FA.
-- **Fix:** use a device cookie instead of / in addition to the IP match.
+### 4. IP-based "known device" skips 2FA — HALF FIXED v4.16.0
+- **Was:** any active session from the same egress IP was treated as trusted, skipping 2FA —
+  and every stored IP was a *Cloudflare edge* address, so unrelated traders were matching each
+  other. A trader's 2FA could be skipped for anybody who happened through the same edge.
+- **Now:** `server/clientIp.ts` records the real client address, so the comparison is between
+  actual devices. It also made the per-IP login rate limiter meaningful, which had been
+  bucketing unrelated traders together.
+- **Still open:** the recommendation to key device recognition on a **signed device cookie**
+  rather than an IP. Mobile addresses rotate, so a real device still looks new sometimes —
+  which errs towards asking for 2FA, the safe direction.
 
-## Non-security correctness note (not a vuln)
+## Resolved since the 2026-07-24 review
 
-- `server/tron.ts:303` treats broadcast as success — a TRC20 transfer that reverts
-  on-chain still records as paid and raises the trader's payout baseline (silent
-  underpayment). The ERC20 path handles this correctly (`tx.wait` + revert check).
-  Worth fixing when that path is next touched.
-
-## UX gotcha — "Load failed" on already-successful payouts (not a vuln)
-
-- **Symptom:** processing a batch of profit-share payouts, the client toast reports
-  a trader as "Load failed" (Safari's fetch-timeout message) even though that
-  payout actually completed. Observed 2026-07-24: a 3-payout batch showed "2/3 OK,
-  1 load failed" for Varun (81308, $27.14) — yet on-chain that tx
-  (`858bd3d9…`) confirmed SUCCESS to the correct wallet. All three were verified
-  good on-chain (correct amount + recipient).
-- **Cause:** each trader's payout is a separate `processProfitSharePayout` request.
-  A slow TRON broadcast/confirm (~6 min here) outlasts the browser fetch timeout,
-  so the client reports failure while the server completes the send, records the
-  payment, sends the Telegram receipt, and raises the baseline. A **false
-  negative**, not a lost payment.
-- **Why it's low-risk today:** a naive retry of the "failed" payout is already
-  blocked — the `inFlightWalletPayments` guard plus the baseline advance mean the
-  recompute returns $0 owed on the next attempt, so no double-send. But the toast
-  is misleading and invites a manual re-check every time.
-- **Fix when touching the payout path:** either raise the client request timeout
-  for payout mutations, or make the send fire-and-record server-side (return
-  immediately with a "processing" state and reconcile status from the payments
-  table / on-chain), so a slow broadcast doesn't surface as a scary "Load failed".
-  Verification recipe used this time: match `payments` rows by time, then confirm
-  each `transactionHash` via TronGrid `gettransactioninfobyid`
-  (`receipt.result: SUCCESS`) and `/v1/transactions/{tx}/events` (recipient +
-  amount vs the trader's `usdtAddress`).
+- **`server/tron.ts` treated broadcast as success** — a TRC20 transfer that reverted on-chain
+  recorded as paid and raised the payout baseline (silent underpayment). Now the send returns
+  a `confirmed` flag, an unconfirmed payout is recorded `Pending`, and `paymentConfirmer`
+  settles it to Confirmed or Failed and can undo the baseline advance.
+- **"Load failed" on an already-successful payout** — a slow TRON broadcast outlasted the
+  browser fetch timeout, so the client reported failure for a payout that completed. The send
+  now returns as soon as it is broadcast and the UI says "Payment broadcast — confirming
+  on-chain" rather than claiming either outcome.
 
 ## Suggested order when resuming
 
-#1 and #2 are small, safe, high-value fixes (invert the admin 2FA check + harden
-`verifyPassword`). #3 needs a small design change (token-based Telegram linking).
-#4 is a hardening improvement. The Tron note is correctness, bundle it with any
-payout-path work.
+**#2** first: two lines, no behavioural change today, and it is the last way a database read
+could yield a usable credential. **#3** next, and it needs a small design change (token-based
+Telegram linking) — it is the remaining account-takeover path, and the one the 2 November
+attacker tried first, at 06:17, before pivoting to the admin account. **#4**'s device cookie
+is hardening and can wait.

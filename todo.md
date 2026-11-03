@@ -2,6 +2,92 @@
 
 ---
 
+## 🔒 SECURITY INCIDENT 2026-11-02 — remediation
+**Status:** 🟢 Code complete and deployed (v4.13.0 → v4.18.0, 2026-11-02/03). Reporting is the
+only open item. Full record: `/home/rfx/.claude/plans/precious-cooking-pretzel.md`.
+
+2030 USDT left the custodial TRC20 wallet at 06:27 UTC. Not a bug in the payout logic: somebody
+logged in as `admin` with the account's default password (`admin`/`admin`), pointed the
+Administrator row's payout address at their own wallet, sent, and pointed it back — 234 seconds
+end to end. Reconnaissance from the same party twelve days earlier, on 21 October.
+
+Attacker: `34.76.61.135` (2 Nov) and `35.205.223.156` (21 Oct), both Google Cloud,
+`bc.googleusercontent.com`. Destination `TSbChitRNXntmP8EGDvbvWaGSEjVKq3bqy`, tx
+`757139cb20e700bf6ba849614522b7717526cb9edf66abf10f2bd34232e270c9`, GasFree transfer
+`fb8416f4-f3ef-4c64-9eda-521d0e412b97`.
+
+### Done
+- [x] **Admin password rotated** and the login id renamed `admin` → `RFXAdmin` (2 Nov).
+- [x] **All sessions revoked** — 391 live / 3,190 rows deleted. Snapshot kept at
+      `/home/rfx/incident-2026-11-02-trading-sessions-snapshot.tsv` (mode 600, git-ignored).
+- [x] **Admin reachable only from the tailnet** — v4.13.0. `tda.rfx.capital` (DNS-only, the
+      host's Tailscale address), a Caddy `remote_ip` guard, and `assertAdminNetwork` in
+      `tradingProcedure` — which is the chokepoint because most admin procedures check
+      `isAdmin` inline rather than using `adminProcedure`.
+- [x] **Port 3000 no longer published** — v4.13.0. It had put Express on `0.0.0.0` past TLS,
+      the rate limiters and the new gate.
+- [x] **`trading.getMagicNumbers` deleted** — v4.13.0. An unauthenticated endpoint returning
+      every active trader's magic number and name; no client had called it since the login
+      dropdown became a text input. The 21 October recon used it.
+- [x] **Payout-address changes gated** — v4.14.0. 2FA to replace an address already on file,
+      logged, announced to the trader on Telegram and in-app, and **payouts held four hours**
+      afterwards (`server/payoutAddressHold.ts`). The hold is the part that works; 2FA and
+      logging only make it noisy.
+- [x] **Authenticator (TOTP) second factor** — v4.15.0. `server/totp.ts` (RFC 6238 over
+      node:crypto, published vectors in the tests) + `server/totpAuth.ts`. Required at
+      sign-in, and a fresh code clears a 5-minute window before money moves, recorded on the
+      session so a second stolen session does not inherit it. Ten recovery codes.
+- [x] **Holding payouts when the authenticator changes** — v4.15.0. Removing or replacing a
+      working one stamps a four-hour hold; a first enrolment and a recovery-code sign-in do not.
+- [x] **Real client IPs** — v4.16.0. `server/clientIp.ts`. Every IP in `trading_sessions` had
+      been a Cloudflare edge address. Caddy *replaces* `X-Forwarded-For` with its peer unless
+      `trusted_proxies` is configured, so the client only arrives in `CF-Connecting-IP`, which
+      is believed only when a Cloudflare address is provably in the chain.
+- [x] **`payments.destinationAddress`** — v4.17.0. Where the money went was the one field not
+      recorded, and the proof dialog had been showing the trader's *current* address as though
+      it were the payment's. Row 510217 backfilled from the chain.
+- [x] **Sessions end with the password** — v4.17.0. A change evicts every other session for the
+      account, a reset evicts all; admin sessions last a day regardless of "remember me".
+- [x] **Admin Security page** — v4.15.0/v4.18.0, `/admin/security`. Enrolment and password
+      change were unreachable for an admin: `/admin/dashboard` renders the trader dashboard
+      with a `viewAsTraderId`, which hides the Settings button.
+
+### Open
+- [ ] **Report `TSbChitRNXntmP8EGDvbvWaGSEjVKq3bqy`** to Tether (freeze request) and to
+      GasFree, and to any exchange it forwards into. The only step that might recover the
+      2030. Evidence as above.
+- [ ] **Treat everything from 2026-10-21 07:04 UTC as seen** — that session pulled the full
+      trader roster, wallet balance and payment history.
+- [ ] **`verifyPassword`'s plaintext fallback** — see `SECURITY_CHECKPOINT.md` #2. Two lines,
+      no behavioural change today, and the cheapest item left.
+- [ ] **Telegram username binding** — `SECURITY_CHECKPOINT.md` #3. The remaining
+      account-takeover path, and the one tried first on 2 November before the attacker pivoted
+      to the admin account. Needs token-based linking.
+- [ ] **Signed device cookie** for `hasSeenDevice`, instead of an IP — `SECURITY_CHECKPOINT.md`
+      #4. Hardening; real IPs already made the comparison meaningful.
+- [ ] **An `audit_log` table** (actor, row, field, old value, new value). The address change
+      was only inferable from `updatedAt` and an incidental onboarding log line; the previous
+      value was unrecoverable from the app. This would have made the investigation minutes
+      rather than hours. `logs` still has no actor or `magicNumberId` column.
+- [ ] **Container stdout is still the only home** for the `[Onboarding]` and `[TRON]` lines,
+      and it is lost on container recreation. The window survived this time by luck.
+
+### Worth knowing, learned the hard way
+- `docker compose run --rm --no-deps rfx-app pnpm db:push` **hangs** on an enum change:
+  drizzle-kit classes widening an enum as data-loss and waits at an interactive menu that
+  cannot be answered without a TTY. Drop `-T`, or apply explicit SQL. Plain column adds are
+  fine.
+- `docker compose run rfx-app` uses the **built image**, not the working tree — `db:push` from
+  it compares the schema in that image. Build first, or it reports "No changes detected" and
+  does nothing.
+- Never `sed -i` `/home/rfx/Caddyfile`: it is bind-mounted as a file, so replacing the inode
+  silently detaches the running container's view of it.
+- A fix can typecheck, pass its tests and still be wrong in production: v4.16.0 recorded
+  Cloudflare addresses anyway, because Caddy replaces `X-Forwarded-For` rather than appending.
+  Only reading a real log line after deploying caught it.
+
+---
+
 ## 🚀 RELEASE MILESTONE - v1.5
 **Status:** 🟢 Shipped — current version **v1.5.10**. Remaining unchecked items below are still open for a future release.
 
@@ -16,6 +102,8 @@
 
 ### Security
 - [x] **Hash magic number passwords** — passwords in `magic_numbers` are bcrypt-hashed (12 rounds); login verifies with `bcrypt.compare()`; `hash-existing-passwords.mjs` migrated the existing rows. Also added Telegram-delivered 2FA for login (new device), password reset, and password change.
+- See **🔒 SECURITY INCIDENT 2026-11-02** at the top of this file for everything since: the
+  admin account had been left out of all of the above, and was taken.
 
 ### Data & Reporting
 - [ ] **Export Manage Traders to CSV** — download button that exports currently visible columns (respecting column visibility toggle) to a CSV file (note: payment history CSV export is done; the Manage Traders table export is not)
