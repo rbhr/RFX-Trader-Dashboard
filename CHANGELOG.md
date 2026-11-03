@@ -54,7 +54,14 @@ hash.
 
   `server/clientIp.ts` walks the chain itself, newest hop first — the socket
   peer, then `X-Forwarded-For` right to left — and takes the first address that
-  is not a proxy we put there. Caddy appends the real peer to the right of
+  is not a proxy we put there. For traffic through Cloudflare the walk is not
+  enough, which was measured rather than assumed: Caddy *replaces*
+  `X-Forwarded-For` with its immediate peer unless that peer is in a configured
+  `trusted_proxies`, and the edge configures none, so the app receives only the
+  edge address. The client comes from `CF-Connecting-IP`, believed only when a
+  Cloudflare address is actually in the chain — Caddy put it there, so it
+  cannot be faked, and a client reaching the origin directly with its own
+  `CF-Connecting-IP` is identified by the walk instead. Caddy appends the real peer to the right of
   anything a client sent, so a client arriving at the origin directly with a
   handmade `X-Forwarded-For` is identified by the entry Caddy added rather than
   by what it claimed; `server/clientIp.test.ts` covers that, including stacked

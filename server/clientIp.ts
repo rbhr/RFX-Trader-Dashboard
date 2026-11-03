@@ -19,10 +19,23 @@ import type { Request } from "express";
  *
  * The walk goes newest first — the socket peer, then X-Forwarded-For from
  * right to left — and returns the first address that is not a proxy we trust.
- * That is what makes it unforgeable: Caddy appends the real peer to the right
- * of anything a client sent, so a client arriving at the origin directly with
- * a handmade X-Forwarded-For is identified by the entry Caddy added, not by
- * what it claimed.
+ * That is what makes it unforgeable: Caddy writes the real peer into
+ * X-Forwarded-For itself, so a client arriving at the origin directly with a
+ * handmade header is identified by Caddy's entry, not by what it claimed.
+ *
+ * For traffic through Cloudflare the walk is not enough, and this was measured
+ * rather than assumed. Caddy *replaces* X-Forwarded-For with its immediate
+ * peer unless that peer is in a configured `trusted_proxies`, and the edge
+ * configures none — so the app receives only the Cloudflare edge address and
+ * the client is nowhere in the chain. The client is in `CF-Connecting-IP`,
+ * which is believed only when a Cloudflare address is actually in the chain:
+ * Caddy put it there, so it cannot be faked, and a client hitting the origin
+ * directly with its own CF-Connecting-IP is identified by the walk instead.
+ *
+ * (The alternative is `trusted_proxies` for Cloudflare's ranges in the edge
+ * Caddyfile, which would make the walk sufficient on its own. Doing it here
+ * keeps the whole trust decision in one tested place, and works whatever the
+ * edge is configured to do.)
  */
 
 /**
@@ -70,7 +83,8 @@ const PRIVATE_IPV4 = [
   "169.254.0.0/16",
 ];
 
-const TRUSTED_IPV4 = [...PRIVATE_IPV4, ...CLOUDFLARE_IPV4].map(parseCidr);
+const CLOUDFLARE_CIDRS = CLOUDFLARE_IPV4.map(parseCidr);
+const TRUSTED_IPV4 = [...PRIVATE_IPV4.map(parseCidr), ...CLOUDFLARE_CIDRS];
 
 function parseCidr(cidr: string): { base: number; mask: number } {
   const [addr, bitsRaw] = cidr.split("/");
@@ -128,9 +142,17 @@ export function isTrustedProxy(ip: string): boolean {
  * Takes the pieces rather than a Request so the walk can be tested against
  * the chains that actually occur — and the ones an attacker would construct.
  */
+/** True for an address in one of Cloudflare's published ranges. */
+export function isCloudflare(ip: string): boolean {
+  const v4 = ipv4ToInt(normaliseIp(ip));
+  if (v4 === null) return false;
+  return CLOUDFLARE_CIDRS.some(({ base, mask }) => ((v4 & mask) >>> 0) === base);
+}
+
 export function resolveClientIp(parts: {
   peer?: string | null;
   forwardedFor?: string | string[] | null;
+  cfConnectingIp?: string | string[] | null;
 }): string | null {
   const xff = Array.isArray(parts.forwardedFor)
     ? parts.forwardedFor.join(",")
@@ -151,9 +173,24 @@ export function resolveClientIp(parts: {
   for (const ip of chain) {
     if (!isTrustedProxy(ip)) return ip;
   }
-  // Everything in the chain is a proxy we trust — which happens on the tailnet
-  // only if Tailscale ever hands out private space. Report the furthest hop
-  // rather than nothing: it is still the best answer available.
+
+  // Every hop is a proxy we trust. If one of them is Cloudflare then the
+  // request demonstrably came through it, and CF-Connecting-IP is the client.
+  if (chain.some(isCloudflare)) {
+    const raw = Array.isArray(parts.cfConnectingIp)
+      ? parts.cfConnectingIp[0]
+      : parts.cfConnectingIp;
+    if (raw) {
+      const cfClient = normaliseIp(raw);
+      // Sanity-check it looks like an address at all; Cloudflare sends IPv6
+      // for an IPv6 client, so anything with a colon is taken as given.
+      if (cfClient && (ipv4ToInt(cfClient) !== null || cfClient.includes(":"))) {
+        return cfClient;
+      }
+    }
+  }
+
+  // Nothing better available — report the furthest hop rather than nothing.
   return chain[chain.length - 1]!;
 }
 
@@ -162,5 +199,6 @@ export function clientIpOf(req: Request): string | null {
   return resolveClientIp({
     peer: req.socket?.remoteAddress ?? null,
     forwardedFor: req.headers["x-forwarded-for"] ?? null,
+    cfConnectingIp: req.headers["cf-connecting-ip"] ?? null,
   });
 }

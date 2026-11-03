@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { clientIpOf, isTrustedProxy, normaliseIp, resolveClientIp } from "./clientIp";
+import {
+  clientIpOf,
+  isCloudflare,
+  isTrustedProxy,
+  normaliseIp,
+  resolveClientIp,
+} from "./clientIp";
 
 /**
  * Every IP in `trading_sessions` was Cloudflare's, so the attacker's address
@@ -170,5 +176,112 @@ describe("clientIpOf", () => {
   it("copes with a request that has neither", () => {
     const req = { headers: {} } as unknown as Parameters<typeof clientIpOf>[0];
     expect(clientIpOf(req)).toBeNull();
+  });
+});
+
+describe("CF-Connecting-IP, which is where the client really is", () => {
+  // Measured, not assumed: Caddy replaces X-Forwarded-For with its immediate
+  // peer unless that peer is in a configured `trusted_proxies`, and the edge
+  // configures none. So for traffic through Cloudflare the app receives only
+  // the edge address, and the client is in CF-Connecting-IP.
+  const CHAIN_VIA_CLOUDFLARE = { peer: CADDY, forwardedFor: CF_EDGE };
+
+  it("takes the client from the header when Cloudflare is in the chain", () => {
+    expect(
+      resolveClientIp({ ...CHAIN_VIA_CLOUDFLARE, cfConnectingIp: "176.9.46.69" })
+    ).toBe("176.9.46.69");
+  });
+
+  it("takes an IPv6 client from it too", () => {
+    expect(
+      resolveClientIp({
+        ...CHAIN_VIA_CLOUDFLARE,
+        cfConnectingIp: "2403:580d:8c15:0:3138:a34c:9d9c:a4a5",
+      })
+    ).toBe("2403:580d:8c15:0:3138:a34c:9d9c:a4a5");
+  });
+
+  it("accepts it as an array, as Node may parse it", () => {
+    expect(
+      resolveClientIp({ ...CHAIN_VIA_CLOUDFLARE, cfConnectingIp: ["176.9.46.69"] })
+    ).toBe("176.9.46.69");
+  });
+
+  it("ignores it when no Cloudflare address is in the chain", () => {
+    // Straight at the origin with a handmade header. The walk identifies the
+    // caller by the entry Caddy wrote, and the claim is discarded.
+    expect(
+      resolveClientIp({
+        peer: CADDY,
+        forwardedFor: "203.0.113.9",
+        cfConnectingIp: "8.8.8.8",
+      })
+    ).toBe("203.0.113.9");
+    // Even from inside the container network, where every hop is trusted.
+    expect(
+      resolveClientIp({
+        peer: CADDY,
+        forwardedFor: "10.0.0.9",
+        cfConnectingIp: "8.8.8.8",
+      })
+    ).toBe("10.0.0.9");
+  });
+
+  it("ignores a tailnet request's header entirely", () => {
+    expect(
+      resolveClientIp({
+        peer: CADDY,
+        forwardedFor: "100.96.146.4",
+        cfConnectingIp: "8.8.8.8",
+      })
+    ).toBe("100.96.146.4");
+  });
+
+  it("falls back to the edge address when the header is missing or junk", () => {
+    expect(resolveClientIp({ ...CHAIN_VIA_CLOUDFLARE, cfConnectingIp: null })).toBe(
+      CF_EDGE
+    );
+    expect(
+      resolveClientIp({ ...CHAIN_VIA_CLOUDFLARE, cfConnectingIp: "not-an-ip" })
+    ).toBe(CF_EDGE);
+    expect(resolveClientIp({ ...CHAIN_VIA_CLOUDFLARE, cfConnectingIp: "" })).toBe(
+      CF_EDGE
+    );
+  });
+
+  it("prefers a real hop over the header when the walk already found one", () => {
+    // A properly appending proxy in front: the chain answers, so the header is
+    // not consulted even though Cloudflare is present.
+    expect(
+      resolveClientIp({
+        peer: CADDY,
+        forwardedFor: `176.9.46.69, ${CF_EDGE}`,
+        cfConnectingIp: "8.8.8.8",
+      })
+    ).toBe("176.9.46.69");
+  });
+});
+
+describe("isCloudflare", () => {
+  it("knows the edge addresses that actually appear in the logs", () => {
+    for (const ip of ["104.23.239.70", "172.71.148.60", "162.158.94.216", "172.70.91.110"]) {
+      expect(isCloudflare(ip), ip).toBe(true);
+    }
+  });
+
+  it("does not mistake private space or the attacker for Cloudflare", () => {
+    for (const ip of ["172.19.0.4", "10.0.0.101", "34.76.61.135", "176.9.46.69"]) {
+      expect(isCloudflare(ip), ip).toBe(false);
+    }
+  });
+});
+
+describe("clientIpOf, through Cloudflare", () => {
+  it("reads the header off the request", () => {
+    const req = {
+      socket: { remoteAddress: CADDY },
+      headers: { "x-forwarded-for": CF_EDGE, "cf-connecting-ip": "176.9.46.69" },
+    } as unknown as Parameters<typeof clientIpOf>[0];
+    expect(clientIpOf(req)).toBe("176.9.46.69");
   });
 });
