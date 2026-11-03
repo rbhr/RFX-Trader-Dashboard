@@ -234,7 +234,8 @@ export const ur: Translations = {
     totpRecoverySaved: "میں نے محفوظ کر لیے ہیں",
     totpRecoveryRemaining: "{count} ریکوری کوڈ باقی ہیں",
     changePassword: "پاس ورڈ تبدیل کریں",
-    changePasswordDesc: "اپنے اکاؤنٹ کا پاس ورڈ اپ ڈیٹ کریں",
+    changePasswordDesc:
+      "اپنے اکاؤنٹ کا پاس ورڈ اپ ڈیٹ کریں۔ آپ کی دوسری ڈیوائسز سائن آؤٹ ہو جائیں گی۔",
     currentPassword: "موجودہ پاس ورڈ",
     currentPasswordPlaceholder: "موجودہ پاس ورڈ درج کریں",
     newPassword: "نیا پاس ورڈ",

@@ -244,7 +244,8 @@ export const en = {
     totpRecoverySaved: "I have saved them",
     totpRecoveryRemaining: "{count} recovery codes left",
     changePassword: "Change Password",
-    changePasswordDesc: "Update your account password",
+    changePasswordDesc:
+      "Update your account password. Your other devices are signed out.",
     currentPassword: "Current Password",
     currentPasswordPlaceholder: "Enter current password",
     newPassword: "New Password",

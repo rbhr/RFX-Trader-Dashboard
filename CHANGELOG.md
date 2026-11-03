@@ -5,6 +5,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.18.0] — 2026-11-03
+
+### Added
+
+- **Password change on the admin Security page.** The admin could enrol an
+  authenticator there but still had to change the account password through the
+  database, for the same reason: the trader Settings dialog is unreachable from
+  `/admin`, because `/admin/dashboard` renders the trader dashboard with a
+  `viewAsTraderId` and the Settings button is hidden while viewing as somebody
+  else. The card is now a shared component, used by both the dialog and the
+  admin page, so the two cannot drift. It carries the second-factor step with
+  it: the server decides whether an authenticator code or a Telegram one is
+  required, and the field takes either.
+
+### Changed
+
+- The password card now says that changing it signs your other devices out,
+  which has been true since 4.17.0 and was not stated anywhere.
+
 ## [4.17.0] — 2026-11-03
 
 ### Security

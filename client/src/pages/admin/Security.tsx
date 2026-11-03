@@ -1,5 +1,6 @@
 import AdminLayout from "@/components/AdminLayout";
 import { AuthenticatorCard } from "@/components/AuthenticatorCard";
+import { ChangePasswordCard } from "@/components/ChangePasswordCard";
 import { trpc } from "@/lib/trpc";
 import {
   Card,
@@ -44,6 +45,8 @@ export default function Security() {
         </div>
 
         <AuthenticatorCard />
+
+        <ChangePasswordCard />
 
         <Card>
           <CardHeader>

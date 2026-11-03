@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { USDT_ADDRESS_COOL_OFF_HOURS } from "@shared/const";
 import { AuthenticatorCard } from "@/components/AuthenticatorCard";
+import { ChangePasswordCard } from "@/components/ChangePasswordCard";
 import { useTradingSession } from "@/hooks/useTradingSession";
 import { useLivePositions } from "@/hooks/useLivePositions";
 import { Button } from "@/components/ui/button";
@@ -186,11 +187,6 @@ export default function Dashboard(props: {
   const [usdtNetwork, setUsdtNetwork] = useState<"TRC20" | "ERC20" | "">("")
   const [usdtAddressError, setUsdtAddressError] = useState<string | null>(null);
   const [telegramHandle, setTelegramHandle] = useState<string>("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [passwordChangeStep, setPasswordChangeStep] = useState<"form" | "2fa">("form");
-  const [passwordChangeCode, setPasswordChangeCode] = useState("");
   // Replacing a payout address already on file needs a Telegram code, the
   // same two-step flow as a password change.
   const [usdtChangeStep, setUsdtChangeStep] = useState<"form" | "2fa">("form");
@@ -270,28 +266,6 @@ export default function Dashboard(props: {
   });
   const updateTelegramMutation = trpc.trading.updateTelegramHandle.useMutation();
   const testTelegramMutation = trpc.trading.testTelegramMessage.useMutation();
-  const changePasswordMutation = trpc.trading.changePassword.useMutation({
-    onSuccess: (data) => {
-      if (data.requiresTotp) {
-        setPasswordChangeStep("2fa");
-        return;
-      }
-      if (data.requires2FA) {
-        setPasswordChangeStep("2fa");
-        toast.info(t("common.codeSentToTelegram"));
-        return;
-      }
-      toast.success(t("settings.passwordChanged"));
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setPasswordChangeCode("");
-      setPasswordChangeStep("form");
-    },
-    onError: (error) => {
-      toast.error(tError(error.message));
-    },
-  });
   const markNotificationReadMutation = trpc.trading.markNotificationRead.useMutation();
   const markAllReadMutation = trpc.trading.markAllNotificationsRead.useMutation();
 
@@ -1546,142 +1520,7 @@ export default function Dashboard(props: {
             <TabsContent value="security" className="space-y-4 mt-4">
               <AuthenticatorCard />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">{t("settings.changePassword")}</CardTitle>
-                  <CardDescription>
-                    {t("settings.changePasswordDesc")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {passwordChangeStep === "form" ? (
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="currentPassword">{t("settings.currentPassword")}</Label>
-                        <Input
-                          id="currentPassword"
-                          type="password"
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder={t("settings.currentPasswordPlaceholder")}
-                          disabled={changePasswordMutation.isPending}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="newPassword">{t("settings.newPassword")}</Label>
-                        <Input
-                          id="newPassword"
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder={t("common.atLeastSixCharacters")}
-                          disabled={changePasswordMutation.isPending}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="confirmNewPassword">{t("settings.confirmNewPassword")}</Label>
-                        <Input
-                          id="confirmNewPassword"
-                          type="password"
-                          value={confirmNewPassword}
-                          onChange={(e) => setConfirmNewPassword(e.target.value)}
-                          placeholder={t("settings.confirmNewPasswordPlaceholder")}
-                          disabled={changePasswordMutation.isPending}
-                        />
-                      </div>
-                      {newPassword && confirmNewPassword && newPassword !== confirmNewPassword && (
-                        <p className="text-xs text-red-500">{t("common.passwordsDoNotMatch")}</p>
-                      )}
-                      <Button
-                        className="w-full"
-                        onClick={() => {
-                          if (newPassword !== confirmNewPassword) {
-                            toast.error(t("common.passwordsDoNotMatch"));
-                            return;
-                          }
-                          if (newPassword.length < 6) {
-                            toast.error(t("common.passwordTooShort"));
-                            return;
-                          }
-                          changePasswordMutation.mutate({
-                            currentPassword,
-                            newPassword,
-                          });
-                        }}
-                        disabled={
-                          changePasswordMutation.isPending ||
-                          !currentPassword ||
-                          !newPassword ||
-                          !confirmNewPassword ||
-                          newPassword !== confirmNewPassword
-                        }
-                      >
-                        {changePasswordMutation.isPending ? t("settings.changing") : t("settings.changePassword")}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        {selfSession?.totpEnabled
-                          ? t("login.authenticatorSubtitle")
-                          : t("settings.codeSentEnterBelow")}
-                      </p>
-                      <div className="space-y-2">
-                        <Label htmlFor="passwordChangeCode">
-                          {selfSession?.totpEnabled
-                            ? t("login.authenticatorCode")
-                            : t("common.verificationCode")}
-                        </Label>
-                        <Input
-                          id="passwordChangeCode"
-                          type="text"
-                          dir="ltr"
-                          maxLength={selfSession?.totpEnabled ? 16 : 6}
-                          value={passwordChangeCode}
-                          // A recovery code has letters and a dash in it, so
-                          // only the Telegram code is narrowed to digits.
-                          onChange={(e) =>
-                            setPasswordChangeCode(
-                              selfSession?.totpEnabled
-                                ? e.target.value.trim()
-                                : e.target.value.replace(/\D/g, "")
-                            )
-                          }
-                          placeholder={t("common.enterSixDigitCode")}
-                          disabled={changePasswordMutation.isPending}
-                          autoFocus
-                          className="text-center text-2xl tracking-widest font-mono"
-                        />
-                      </div>
-                      <Button
-                        className="w-full"
-                        onClick={() => {
-                          changePasswordMutation.mutate({
-                            currentPassword,
-                            newPassword,
-                            ...(selfSession?.totpEnabled
-                              ? { totpCode: passwordChangeCode }
-                              : { twoFactorCode: passwordChangeCode }),
-                          });
-                        }}
-                        disabled={changePasswordMutation.isPending || passwordChangeCode.length < 6}
-                      >
-                        {changePasswordMutation.isPending ? t("common.verifying") : t("settings.verifyAndChange")}
-                      </Button>
-                      <button
-                        type="button"
-                        className="w-full text-sm text-muted-foreground hover:text-primary"
-                        onClick={() => {
-                          setPasswordChangeStep("form");
-                          setPasswordChangeCode("");
-                        }}
-                      >
-                        {t("common.cancel")}
-                      </button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <ChangePasswordCard />
             </TabsContent>
           </Tabs>
         </DialogContent>

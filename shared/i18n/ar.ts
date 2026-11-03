@@ -235,7 +235,8 @@ export const ar: Translations = {
     totpRecoverySaved: "لقد حفظتها",
     totpRecoveryRemaining: "بقي {count} من رموز الاستعادة",
     changePassword: "تغيير كلمة المرور",
-    changePasswordDesc: "حدّث كلمة مرور حسابك",
+    changePasswordDesc:
+      "حدّث كلمة مرور حسابك. سيتم تسجيل الخروج من أجهزتك الأخرى.",
     currentPassword: "كلمة المرور الحالية",
     currentPasswordPlaceholder: "أدخل كلمة المرور الحالية",
     newPassword: "كلمة المرور الجديدة",
