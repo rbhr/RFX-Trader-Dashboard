@@ -58,7 +58,9 @@ import {
   createTwoFactorCode,
   verifyTwoFactorCode,
   invalidateTwoFactorCodes,
-  hasSeenDevice,
+  isTrustedDevice,
+  revokeTrustedDevices,
+  trustDevice,
   getAdminSetting,
   setAdminSetting,
 } from "./db";
@@ -156,6 +158,12 @@ import {
 } from "./payoutAddressHold";
 import { assertAdminNetwork } from "./adminNetwork";
 import { clientIpOf } from "./clientIp";
+import {
+  DEVICE_COOKIE,
+  TRUSTED_DEVICE_DAYS,
+  newDeviceToken,
+  describeDevice,
+} from "./trustedDevice";
 import { socketStatus, reconnectMetaCopierSocket } from "./metacopierSocket";
 import {
   getWalletAddress as getTronWalletAddress,
@@ -1241,9 +1249,9 @@ export const appRouter = router({
           });
         }
         // An authenticator, where one is enrolled, replaces both the Telegram
-        // code and the known-device exemption. It is asked for on every login:
-        // `hasSeenDevice` matches on an IP that is always Cloudflare's, so
-        // "this device is known" means almost nothing.
+        // code and the trusted-device exemption, and is asked for on every
+        // login. A second factor you carry is worth more than a device we
+        // remember, and the accounts that have one can move money.
         if (totpEnabled(magicNumberData)) {
           if (!input.totpCode) {
             return {
@@ -1282,7 +1290,11 @@ export const appRouter = router({
             );
           }
         } else if (
-          !(await hasSeenDevice(magicNumberData.id, clientIp)) &&
+          !(await isTrustedDevice(
+            magicNumberData.id,
+            ctx.req.cookies?.[DEVICE_COOKIE],
+            clientIp
+          )) &&
           magicNumberData.telegramChatId &&
           !magicNumberData.isAdmin
         ) {
@@ -1346,6 +1358,24 @@ export const appRouter = router({
         ctx.res.cookie(TRADING_SESSION_COOKIE, sessionToken, {
           ...cookieOptions,
           maxAge: sessionDays * 24 * 60 * 60 * 1000,
+        });
+
+        // Remember the device, now that this login has satisfied whatever
+        // challenge applied to it — so the next one here is not challenged for
+        // having moved network, and nobody else's device is mistaken for it.
+        // Reuse the cookie's existing token when there is one, so a browser
+        // signing in to several accounts keeps a single device identity.
+        const deviceToken =
+          ctx.req.cookies?.[DEVICE_COOKIE] || newDeviceToken();
+        await trustDevice({
+          magicNumberId: magicNumberData.id,
+          token: deviceToken,
+          userAgent: describeDevice(ctx.req.headers["user-agent"]),
+          ipAddress: clientIp,
+        });
+        ctx.res.cookie(DEVICE_COOKIE, deviceToken, {
+          ...cookieOptions,
+          maxAge: TRUSTED_DEVICE_DAYS * 24 * 60 * 60 * 1000,
         });
 
         resetRateLimit(magicKey);
@@ -1463,10 +1493,12 @@ export const appRouter = router({
         // none to spare: anyone holding one is signed out. Somebody resetting
         // a password they have lost control of needs exactly that.
         const evicted = await deleteTradingSessionsForTrader(trader.id);
+        const forgotten = await revokeTrustedDevices(trader.id);
         logEvent(
           "auth",
           `Password reset for ${trader.name} (magic ${trader.magicNumber}) — ` +
-            `${evicted} session(s) signed out`
+            `${evicted} session(s) signed out, ` +
+            `${forgotten} trusted device(s) forgotten`
         );
 
         // Password change may complete onboarding → activate live copiers.
@@ -1548,11 +1580,16 @@ export const appRouter = router({
           trader.id,
           ctx.tradingSession.session.sessionToken
         );
-        if (evicted > 0) {
+        // Trusted devices go too: whatever was trusted may be in the hands of
+        // whoever the password is being changed because of. The device doing
+        // the change earns its trust back on its next login.
+        const forgotten = await revokeTrustedDevices(trader.id);
+        if (evicted > 0 || forgotten > 0) {
           logEvent(
             "auth",
             `Password changed by ${trader.name} (magic ${trader.magicNumber}) — ` +
-              `${evicted} other session(s) signed out`
+              `${evicted} other session(s) signed out, ` +
+              `${forgotten} trusted device(s) forgotten`
           );
         }
 
@@ -3015,10 +3052,12 @@ export const appRouter = router({
         // stolen session alive through exactly the response meant to kill it.
         if (data.password !== undefined) {
           const evicted = await deleteTradingSessionsForTrader(id);
+          const forgotten = await revokeTrustedDevices(id);
           logEvent(
             "auth",
             `Password reset by an admin for trader ${id} — ` +
-              `${evicted} session(s) signed out`,
+              `${evicted} session(s) signed out, ` +
+              `${forgotten} trusted device(s) forgotten`,
             "warn"
           );
         }

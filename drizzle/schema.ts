@@ -180,6 +180,30 @@ export const tradingSessions = mysqlTable("trading_sessions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+/**
+ * Devices a trader has completed a full login on, so the 2FA challenge can be
+ * skipped there without trusting an IP address — see server/trustedDevice.ts
+ * for why an IP was the wrong thing to trust.
+ *
+ * The token lives in a cookie and is stored only as a SHA-256, so a database
+ * dump does not hand over trusted devices. One row per trader per device: a
+ * browser signing in to two accounts gets a row for each, sharing one cookie.
+ */
+export const trustedDevices = mysqlTable("trusted_devices", {
+  id: int("id").autoincrement().primaryKey(),
+  magicNumberId: int("magicNumberId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  userAgent: varchar("userAgent", { length: 255 }),
+  /** The address it was last seen from — for recognising a row, not for trust. */
+  lastIpAddress: varchar("lastIpAddress", { length: 45 }),
+  lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TrustedDevice = typeof trustedDevices.$inferSelect;
+export type InsertTrustedDevice = typeof trustedDevices.$inferInsert;
+
 export type TradingSession = typeof tradingSessions.$inferSelect;
 export type InsertTradingSession = typeof tradingSessions.$inferInsert;
 

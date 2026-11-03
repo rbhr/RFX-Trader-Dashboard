@@ -22,10 +22,12 @@ import {
   logs,
   InsertLog,
   emailSenders,
+  trustedDevices,
   type EmailSender,
   type TwoFactorPurpose,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { deviceExpiry, hashDeviceToken } from "./trustedDevice";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1040,27 +1042,120 @@ export async function cleanupExpiredTwoFactorCodes() {
     .where(lt(twoFactorCodes.expiresAt, new Date()));
 }
 
-export async function hasSeenDevice(
+/**
+ * True when this device has completed a full login for this trader before.
+ *
+ * Replaces `hasSeenDevice`, which asked whether an unexpired session existed
+ * from the same IP — see server/trustedDevice.ts. Nothing should go back to
+ * trusting an address: household and carrier NAT put strangers behind one.
+ *
+ * Touches `lastSeenAt` so a device in regular use never expires out from under
+ * somebody, and records the address for recognition only.
+ */
+export async function isTrustedDevice(
   magicNumberId: number,
+  token: string | undefined,
   ipAddress: string | null
 ): Promise<boolean> {
-  if (!ipAddress) return false;
+  if (!token) return false;
   const db = await getDb();
   if (!db) return false;
 
-  const result = await db
-    .select({ id: tradingSessions.id })
-    .from(tradingSessions)
+  const hash = hashDeviceToken(token);
+  const rows = await db
+    .select({ id: trustedDevices.id })
+    .from(trustedDevices)
     .where(
       and(
-        eq(tradingSessions.magicNumberId, magicNumberId),
-        eq(tradingSessions.ipAddress, ipAddress),
-        gt(tradingSessions.expiresAt, new Date())
+        eq(trustedDevices.magicNumberId, magicNumberId),
+        eq(trustedDevices.tokenHash, hash),
+        gt(trustedDevices.expiresAt, new Date())
+      )
+    )
+    .limit(1);
+  if (rows.length === 0) return false;
+
+  await db
+    .update(trustedDevices)
+    .set({
+      lastSeenAt: new Date(),
+      lastIpAddress: ipAddress,
+      expiresAt: deviceExpiry(),
+    })
+    .where(eq(trustedDevices.id, rows[0]!.id));
+  return true;
+}
+
+/**
+ * Remembers a device for this trader, or refreshes the row it already has.
+ * Called only after a login that satisfied whatever challenge applied.
+ */
+export async function trustDevice(opts: {
+  magicNumberId: number;
+  token: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+
+  const hash = hashDeviceToken(opts.token);
+  const existing = await db
+    .select({ id: trustedDevices.id })
+    .from(trustedDevices)
+    .where(
+      and(
+        eq(trustedDevices.magicNumberId, opts.magicNumberId),
+        eq(trustedDevices.tokenHash, hash)
       )
     )
     .limit(1);
 
-  return result.length > 0;
+  if (existing.length > 0) {
+    await db
+      .update(trustedDevices)
+      .set({
+        lastSeenAt: new Date(),
+        lastIpAddress: opts.ipAddress,
+        userAgent: opts.userAgent,
+        expiresAt: deviceExpiry(),
+      })
+      .where(eq(trustedDevices.id, existing[0]!.id));
+    return;
+  }
+
+  await db.insert(trustedDevices).values({
+    magicNumberId: opts.magicNumberId,
+    tokenHash: hash,
+    userAgent: opts.userAgent,
+    lastIpAddress: opts.ipAddress,
+    expiresAt: deviceExpiry(),
+  });
+}
+
+/**
+ * Forgets every device trusted for a trader, so the next login from each is
+ * challenged again. A password change does this for the same reason it ends
+ * sessions: whatever was trusted may be in somebody else's hands.
+ */
+export async function revokeTrustedDevices(
+  magicNumberId: number
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db
+    .delete(trustedDevices)
+    .where(eq(trustedDevices.magicNumberId, magicNumberId));
+  return (result as { affectedRows?: number }).affectedRows ?? 0;
+}
+
+/** Drops rows whose trust has lapsed. */
+export async function cleanupExpiredTrustedDevices() {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.delete(trustedDevices).where(lt(trustedDevices.expiresAt, new Date()));
 }
 
 // Admin settings helpers

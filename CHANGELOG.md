@@ -5,6 +5,32 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.18.2] — 2026-11-03
+
+### Security
+
+- **A device is now recognised by a secret, not by its IP address.** The login 2FA challenge is
+  skipped on a device the trader has already proved themselves on, and "already proved" used to
+  mean *an unexpired session exists from this same address*. That was the last open finding from
+  the 2026-07-24 review, and it was wrong in both directions: household and carrier NAT put
+  strangers behind one address, while a phone changes address between cells. Recording real
+  client addresses in 4.16.0 made the comparison honest without making it precise.
+
+  A device now gets a 256-bit secret in a cookie the first time it completes a full login,
+  stored only as a SHA-256 in a new `trusted_devices` table. Trust lapses after 180 days,
+  refreshes whenever the device is used, and is **revoked by a password change or reset** —
+  alongside the sessions, for the same reason: whatever was trusted may be in the hands of
+  whoever the password is being changed because of. An authenticator still overrides all of
+  this and is asked for every time.
+
+### Fixed
+
+- **Expired rows are swept.** Neither `two_factor_codes` nor the new `trusted_devices` table
+  was ever cleaned — `cleanupExpiredTwoFactorCodes` existed but nothing had ever called it, so
+  that table had reached 1,199 rows. Both are now swept a minute after boot and daily after
+  that. Expired rows were never *read* — every lookup checks the expiry — so this is growth,
+  not correctness.
+
 ## [4.18.1] — 2026-11-03
 
 ### Security

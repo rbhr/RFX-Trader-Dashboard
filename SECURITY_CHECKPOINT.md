@@ -77,16 +77,19 @@ Reviewed 2026-07-24 and 2026-11-03; status updated 2026-11-03.
   Telegram**, `t.me/<bot>?start=<token>`, 15 minutes, spent by a conditional update so one
   token cannot bind twice).
 
-### 4. IP-based "known device" skips 2FA — HALF FIXED v4.16.0
+### 4. IP-based "known device" skips 2FA — FIXED v4.16.0 and v4.18.2
 - **Was:** any active session from the same egress IP was treated as trusted, skipping 2FA —
   and every stored IP was a *Cloudflare edge* address, so unrelated traders were matching each
   other. A trader's 2FA could be skipped for anybody who happened through the same edge.
-- **Now:** `server/clientIp.ts` records the real client address, so the comparison is between
-  actual devices. It also made the per-IP login rate limiter meaningful, which had been
-  bucketing unrelated traders together.
-- **Still open:** the recommendation to key device recognition on a **signed device cookie**
-  rather than an IP. Mobile addresses rotate, so a real device still looks new sometimes —
-  which errs towards asking for 2FA, the safe direction.
+- **v4.16.0** recorded the real client address, so the comparison became honest. It also made
+  the per-IP login rate limiter meaningful, which had been bucketing unrelated traders.
+- **v4.18.2** stopped trusting addresses altogether. A device is identified by a secret it was
+  given in a cookie the first time it completed a full login, stored as a SHA-256 in
+  `trusted_devices`. Precise in both directions: household and carrier NAT no longer make
+  strangers look like the same device, and a phone changing cells no longer looks like a new
+  one. Stateful rather than a signed stateless cookie so trust can lapse (180 days, refreshed
+  on use) and be revoked — a password change or reset forgets every device, like it ends every
+  session.
 
 ### 5. An existing authenticator could be replaced with only a session and password — FIXED v4.18.1
 - **Was:** `startTotpEnrolment` verified the password, then `beginTotpEnrolment` immediately
@@ -133,11 +136,7 @@ Reviewed 2026-07-24 and 2026-11-03; status updated 2026-11-03.
 
 ## What is left
 
-Only **#4**'s signed device cookie, which is hardening: real client addresses already made
-`hasSeenDevice` compare actual devices rather than Cloudflare edges, and a rotating mobile
-address errs towards asking for 2FA, which is the safe direction.
-
-Everything else on this list is fixed. The thing to carry forward is not any individual
+Nothing on this list. Every finding from both review passes is fixed and deployed. The thing to carry forward is not any individual
 finding but the two review passes themselves: the first was written and shelved, and the
 account it described was emptied four months later. The second read the *fixes* rather than
 the original code and found three fresh holes in work that had typechecked, passed its tests

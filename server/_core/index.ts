@@ -19,6 +19,10 @@ import { startMetaCopierSocket } from "../metacopierSocket";
 import { verifyDemoAccount } from "../metacopier";
 import { formatTrpcError } from "./trpcErrorLog";
 import { registerLiveStreamRoutes } from "../liveStream";
+import {
+  cleanupExpiredTrustedDevices,
+  cleanupExpiredTwoFactorCodes,
+} from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -104,6 +108,22 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Expired verification codes and lapsed device trust are both harmless to
+  // read — every lookup checks the expiry — but neither table was ever swept,
+  // so two_factor_codes had grown to 1,199 rows by 2026-11-03. Daily, and once
+  // shortly after boot so a long-running container is not the only thing that
+  // ever does it.
+  const sweep = () => {
+    void cleanupExpiredTwoFactorCodes().catch(e =>
+      console.warn("[Cleanup] two_factor_codes sweep failed:", e)
+    );
+    void cleanupExpiredTrustedDevices().catch(e =>
+      console.warn("[Cleanup] trusted_devices sweep failed:", e)
+    );
+  };
+  setTimeout(sweep, 60_000).unref();
+  setInterval(sweep, 24 * 60 * 60 * 1000).unref();
 
   // Start the MetaCopier real-time socket (warms the cache before monitors run).
   // No-op when MC_SOCKET_ENABLED=false.

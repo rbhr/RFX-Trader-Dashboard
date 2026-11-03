@@ -29,7 +29,9 @@ the 6-digit code from it. This takes precedence over the Telegram code, and it i
 every time rather than only on a new device.
 
 **Telegram code.** Otherwise, signing in from a **new device** with Telegram connected sends a
-6-digit code to your Telegram. Recognised devices don't ask again.
+6-digit code to your Telegram. A device is remembered for 180 days once you have signed in on
+it, so moving between wifi and mobile data does not count as a new device — but clearing your
+browser's cookies does, and changing your password deliberately forgets every device.
 
 Admins are **not** exempt from either, and must sign in from the management network — see
 [Admin access](#admin-access).
