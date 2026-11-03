@@ -134,9 +134,12 @@ import { logEvent, type LogCategory } from "./logStore";
 import type { TwoFactorPurpose } from "../drizzle/schema";
 import {
   PAYMENT_ELEVATION_MINUTES,
+  TOTP_CHANGE_COOL_OFF_HOURS,
   USDT_ADDRESS_COOL_OFF_HOURS,
 } from "@shared/const";
 import {
+  assertAuthenticatorSettled,
+  authenticatorHoldUntil,
   beginTotpEnrolment,
   clearTotp,
   completeTotpEnrolment,
@@ -238,7 +241,11 @@ const TEST_PAYOUT_ADDRESS = "TMECgXuUt9ZAuduNCGCfVeRxTFeHjVQLW9";
 function assertPaymentElevation(ctx: {
   tradingSession: {
     session: { totpVerifiedAt?: Date | null };
-    magicNumber: { totpSecret: string | null; totpEnabledAt: Date | null };
+    magicNumber: {
+      totpSecret: string | null;
+      totpEnabledAt: Date | null;
+      totpChangedAt?: Date | null;
+    };
   };
 }): void {
   if (!totpEnabled(ctx.tradingSession.magicNumber)) {
@@ -249,6 +256,9 @@ function assertPaymentElevation(ctx: {
         "Settings → Security, then try again.",
     });
   }
+  // A step-up proves somebody holds the current second factor, which is worth
+  // nothing if they installed it a minute ago.
+  assertAuthenticatorSettled(ctx.tradingSession.magicNumber);
   const verifiedAt = ctx.tradingSession.session.totpVerifiedAt;
   const expiresAt = verifiedAt
     ? verifiedAt.getTime() + PAYMENT_ELEVATION_MINUTES * 60 * 1000
@@ -1514,6 +1524,7 @@ export const appRouter = router({
             message: "Current password is incorrect",
           });
         }
+        const replacing = totpEnabled(trader);
         const { secret, uri } = await beginTotpEnrolment(trader);
         // Rendered server-side: a data URL cannot carry markup into the page,
         // and the client never needs the QR library.
@@ -1524,7 +1535,11 @@ export const appRouter = router({
         });
         logEvent(
           "auth",
-          `Authenticator setup started — ${trader.name} (magic ${trader.magicNumber})`
+          replacing
+            ? `⚠️ Authenticator being REPLACED — ${trader.name} (magic ${trader.magicNumber}). ` +
+                `Payouts held for ${TOTP_CHANGE_COOL_OFF_HOURS}h.`
+            : `Authenticator setup started — ${trader.name} (magic ${trader.magicNumber})`,
+          replacing ? "warn" : "info"
         );
         return { secret, uri, qrDataUrl };
       }),
@@ -1569,7 +1584,8 @@ export const appRouter = router({
         await clearTotp(trader.id);
         logEvent(
           "auth",
-          `⚠️ Authenticator disabled — ${trader.name} (magic ${trader.magicNumber})`,
+          `⚠️ Authenticator disabled — ${trader.name} (magic ${trader.magicNumber}). ` +
+            `Payouts held for ${TOTP_CHANGE_COOL_OFF_HOURS}h.`,
           "warn"
         );
         return { success: true };
@@ -1592,6 +1608,9 @@ export const appRouter = router({
               "Settings → Security, then try again.",
           });
         }
+        // Checked here too, so the reason arrives before somebody types a code
+        // that was never going to help.
+        assertAuthenticatorSettled(trader);
         if (!(await consumeTotpCode(trader, input.code))) {
           logEvent(
             "auth",
@@ -1637,6 +1656,9 @@ export const appRouter = router({
           // this drives the caller's Security screen and the payment prompt.
           totpEnabled: totpEnabled(ctx.tradingSession.magicNumber),
           totpRecoveryRemaining: recoveryCodesRemaining(
+            ctx.tradingSession.magicNumber
+          ),
+          authenticatorHoldUntil: authenticatorHoldUntil(
             ctx.tradingSession.magicNumber
           ),
           paymentElevationExpiresAt: ctx.tradingSession.session.totpVerifiedAt

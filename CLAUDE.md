@@ -64,6 +64,12 @@ and spending a code, including the two rules that make a correct code fail: a st
 the last one accepted is a replay, and a recovery code is deleted as it is used. The secret is
 encrypted with `EMAIL_TOKEN_KEY`.
 
+**Taking the authenticator away holds payouts**, for `TOTP_CHANGE_COOL_OFF_HOURS`.
+`clearTotp` and a `beginTotpEnrolment` over a working authenticator stamp `totpChangedAt`, and
+`assertAuthenticatorSettled` refuses payouts while it is fresh — a step-up proves someone holds
+the current factor, which is worth nothing if they installed it a minute ago. A first enrolment
+and a recovery-code sign-in deliberately do not stamp it.
+
 **Moving money needs a step-up.** `sendWalletPayment` and `processProfitSharePayout` call
 `assertPaymentElevation`, which refuses a session that has not entered a code in the last
 `PAYMENT_ELEVATION_MINUTES`, and refuses an account with no authenticator outright. The

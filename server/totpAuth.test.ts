@@ -12,8 +12,17 @@ vi.mock("./emailTokenCrypto", () => ({
   decryptToken: (s: string) => s.replace(/^enc:/, ""),
 }));
 
-const { completeTotpEnrolment, consumeTotpCode, recoveryCodesRemaining, totpEnabled } =
-  await import("./totpAuth");
+const {
+  assertAuthenticatorSettled,
+  authenticatorHoldUntil,
+  beginTotpEnrolment,
+  clearTotp,
+  completeTotpEnrolment,
+  consumeTotpCode,
+  recoveryCodesRemaining,
+  totpEnabled,
+} = await import("./totpAuth");
+const { TOTP_CHANGE_COOL_OFF_HOURS } = await import("@shared/const");
 const { generateRecoveryCodes, generateTotpSecret, totpCodeForStep, totpStep } =
   await import("./totp");
 
@@ -173,6 +182,97 @@ describe("completeTotpEnrolment", () => {
     await expect(
       completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now)
     ).rejects.toThrow(/Start the authenticator setup again/);
+  });
+});
+
+describe("the hold after an authenticator changes", () => {
+  const HOURS = 60 * 60 * 1000;
+  const ago = (hours: number) => new Date(now.getTime() - hours * HOURS);
+
+  it("does not hold an account whose authenticator has never been displaced", () => {
+    expect(authenticatorHoldUntil({ totpChangedAt: null }, now)).toBeNull();
+    expect(authenticatorHoldUntil({}, now)).toBeNull();
+  });
+
+  it("holds for the cool-off, then releases", () => {
+    expect(authenticatorHoldUntil({ totpChangedAt: ago(0.1) }, now)).not.toBeNull();
+    expect(
+      authenticatorHoldUntil({ totpChangedAt: ago(TOTP_CHANGE_COOL_OFF_HOURS - 0.1) }, now)
+    ).not.toBeNull();
+    expect(
+      authenticatorHoldUntil({ totpChangedAt: ago(TOTP_CHANGE_COOL_OFF_HOURS) }, now)
+    ).toBeNull();
+    expect(
+      authenticatorHoldUntil({ totpChangedAt: ago(TOTP_CHANGE_COOL_OFF_HOURS + 1) }, now)
+    ).toBeNull();
+  });
+
+  it("refuses a payout as a CONFLICT, naming when it lifts", () => {
+    let thrown: unknown;
+    try {
+      assertAuthenticatorSettled({ totpChangedAt: ago(1) }, now);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("CONFLICT");
+    expect((thrown as TRPCError).message).toContain("2026-11-02 15:00 UTC");
+  });
+
+  it("lets a settled account through", () => {
+    expect(() => assertAuthenticatorSettled({ totpChangedAt: null }, now)).not.toThrow();
+    expect(() =>
+      assertAuthenticatorSettled({ totpChangedAt: ago(TOTP_CHANGE_COOL_OFF_HOURS + 1) }, now)
+    ).not.toThrow();
+  });
+
+  it("stamps the hold when a working authenticator is disabled", async () => {
+    await clearTotp(99, now);
+    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    expect(patch.totpSecret).toBeNull();
+    expect(patch.totpEnabledAt).toBeNull();
+    expect(patch.totpChangedAt).toEqual(now);
+  });
+
+  it("stamps the hold when an enrolment is started over a working one", async () => {
+    await beginTotpEnrolment(trader(), now);
+    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    expect(patch.totpChangedAt).toEqual(now);
+    // The new secret is stored but inert until a code confirms it.
+    expect(patch.totpEnabledAt).toBeNull();
+  });
+
+  it("does not stamp a first enrolment — there is nothing to displace", async () => {
+    await beginTotpEnrolment(
+      trader({ totpSecret: null, totpEnabledAt: null }),
+      now
+    );
+    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    expect(patch.totpChangedAt).toBeUndefined();
+  });
+
+  it("does not stamp an abandoned enrolment being restarted", async () => {
+    // Secret present but never confirmed: not a working authenticator, so
+    // trying again is not a replacement.
+    await beginTotpEnrolment(trader({ totpEnabledAt: null }), now);
+    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    expect(patch.totpChangedAt).toBeUndefined();
+  });
+
+  it("is not tripped by signing in with a recovery code", async () => {
+    // A lost phone needs no disable, so it must not cost four hours of payouts.
+    const { codes, hashes } = generateRecoveryCodes();
+    const t = trader({ totpRecoveryCodes: JSON.stringify(hashes) });
+    await expect(consumeTotpCode(t, codes[0]!, now)).resolves.toBe("recovery");
+    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    expect(patch.totpChangedAt).toBeUndefined();
+  });
+
+  it("is not tripped by confirming a first enrolment", async () => {
+    const t = trader({ totpEnabledAt: null });
+    await completeTotpEnrolment(t, totpCodeForStep(SECRET, STEP), now);
+    const [, patch] = updateMagicNumber.mock.calls[0]!;
+    expect(patch.totpChangedAt).toBeUndefined();
   });
 });
 

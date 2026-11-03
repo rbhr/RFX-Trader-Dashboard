@@ -19,3 +19,13 @@ export const USDT_ADDRESS_COOL_OFF_HOURS = 4;
  * window of them instead. A session with no step-up cannot send at all.
  */
 export const PAYMENT_ELEVATION_MINUTES = 5;
+
+/**
+ * How long payouts are held after a working authenticator is removed or
+ * replaced. Same four hours as a payout-address change, and for the same
+ * reason: the second factor and the destination are the two things an attacker
+ * has to change to pay themselves, so neither may be changed and used in one
+ * sitting. Signing in with a recovery code does not trip this — a lost phone
+ * needs no disable.
+ */
+export const TOTP_CHANGE_COOL_OFF_HOURS = 4;

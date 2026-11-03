@@ -118,6 +118,13 @@ export const magicNumbers = mysqlTable("magic_numbers", {
   totpEnabledAt: timestamp("totpEnabledAt"),
   totpLastStep: int("totpLastStep"),
   totpRecoveryCodes: text("totpRecoveryCodes"),
+  // When a *working* authenticator was last taken away — disabled, or
+  // replaced by starting a fresh enrolment over the top of one. Payouts are
+  // held while that is recent: otherwise somebody holding the password and one
+  // code could swap the second factor for their own phone and pay themselves
+  // immediately. A first enrolment does not stamp this; there was nothing to
+  // displace, and holding it would block payouts the day the feature ships.
+  totpChangedAt: timestamp("totpChangedAt"),
   // Set once the trader completes onboarding (Telegram linked, password changed,
   // USDT details set) and their live copiers are activated. One-way: never cleared.
   liveCopiersActivatedAt: timestamp("liveCopiersActivatedAt"),

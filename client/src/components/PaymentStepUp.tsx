@@ -76,6 +76,18 @@ export function usePaymentStepUp() {
       );
       return false;
     }
+    // A code proves nothing if the authenticator itself was just swapped, so
+    // say so rather than opening a prompt that cannot succeed.
+    if (session.authenticatorHoldUntil) {
+      const until = new Date(session.authenticatorHoldUntil);
+      if (until.getTime() > Date.now()) {
+        toast.error(
+          `The authenticator on this account was changed recently, so payouts ` +
+            `are held until ${until.toISOString().slice(0, 16).replace("T", " ")} UTC.`
+        );
+        return false;
+      }
+    }
     const expiresAt = session.paymentElevationExpiresAt
       ? new Date(session.paymentElevationExpiresAt).getTime()
       : 0;
@@ -85,7 +97,11 @@ export function usePaymentStepUp() {
     return new Promise<boolean>(resolve => {
       resolver.current = resolve;
     });
-  }, [session?.totpEnabled, session?.paymentElevationExpiresAt]);
+  }, [
+    session?.totpEnabled,
+    session?.authenticatorHoldUntil,
+    session?.paymentElevationExpiresAt,
+  ]);
 
   const dialog = (
     <Dialog open={open} onOpenChange={next => (next ? setOpen(true) : settle(false))}>

@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 
 import { updateMagicNumber } from "./db";
 import { decryptToken, encryptToken } from "./emailTokenCrypto";
+import { TOTP_CHANGE_COOL_OFF_HOURS } from "@shared/const";
 import { checkRateLimit, resetRateLimit } from "./rateLimit";
 import {
   generateRecoveryCodes,
@@ -34,6 +35,7 @@ export type TotpTrader = {
   totpEnabledAt: Date | null;
   totpLastStep: number | null;
   totpRecoveryCodes: string | null;
+  totpChangedAt?: Date | null;
 };
 
 /** True once the trader has proved they can read codes off their secret. */
@@ -62,19 +64,33 @@ export function recoveryCodesRemaining(trader: TotpTrader): number {
 /**
  * Starts enrolment: a fresh secret, stored encrypted but *not* yet in force,
  * and the URI/secret to put in front of the person. Enrolment is only
- * completed by `confirmTotpEnrolment`, so a half-finished attempt can never
+ * completed by `completeTotpEnrolment`, so a half-finished attempt can never
  * lock anybody out.
+ *
+ * Starting one *over the top of a working authenticator* is a replacement, and
+ * stamps the cool-off: that is the move somebody with the password and one
+ * code would make to point the second factor at their own phone.
  */
-export async function beginTotpEnrolment(trader: {
-  id: number;
-  magicNumber: string;
-}): Promise<{ secret: string; uri: string }> {
+export async function beginTotpEnrolment(
+  trader: {
+    id: number;
+    magicNumber: string;
+    totpSecret?: string | null;
+    totpEnabledAt?: Date | null;
+  },
+  now: Date = new Date()
+): Promise<{ secret: string; uri: string }> {
+  const replacing = totpEnabled({
+    totpSecret: trader.totpSecret ?? null,
+    totpEnabledAt: trader.totpEnabledAt ?? null,
+  });
   const secret = generateTotpSecret();
   await updateMagicNumber(trader.id, {
     totpSecret: encryptToken(secret),
     totpEnabledAt: null,
     totpLastStep: null,
     totpRecoveryCodes: null,
+    ...(replacing ? { totpChangedAt: now } : {}),
   });
   return {
     secret,
@@ -118,13 +134,57 @@ export async function completeTotpEnrolment(
   return codes;
 }
 
-/** Turns TOTP off and forgets the secret and the recovery codes. */
-export async function clearTotp(traderId: number): Promise<void> {
+/**
+ * Turns TOTP off and forgets the secret and the recovery codes, stamping the
+ * cool-off so nothing can be paid out for a few hours afterwards.
+ */
+export async function clearTotp(
+  traderId: number,
+  now: Date = new Date()
+): Promise<void> {
   await updateMagicNumber(traderId, {
     totpSecret: null,
     totpEnabledAt: null,
     totpLastStep: null,
     totpRecoveryCodes: null,
+    totpChangedAt: now,
+  });
+}
+
+const CHANGE_COOL_OFF_MS = TOTP_CHANGE_COOL_OFF_HOURS * 60 * 60 * 1000;
+
+/**
+ * When the hold from removing or replacing an authenticator lifts, or null if
+ * there is none — which is the case for an account that has only ever enrolled
+ * once, and for every row written before this existed.
+ */
+export function authenticatorHoldUntil(
+  trader: { totpChangedAt?: Date | null },
+  now: Date = new Date()
+): Date | null {
+  if (!trader.totpChangedAt) return null;
+  const until = new Date(trader.totpChangedAt.getTime() + CHANGE_COOL_OFF_MS);
+  return until.getTime() > now.getTime() ? until : null;
+}
+
+/**
+ * Refuses to move money while the authenticator is freshly changed. Paired
+ * with assertPaymentElevation: on its own, a step-up proves somebody holds the
+ * current second factor, which is no help if they only just installed it.
+ */
+export function assertAuthenticatorSettled(
+  trader: { totpChangedAt?: Date | null },
+  now: Date = new Date()
+): void {
+  const until = authenticatorHoldUntil(trader, now);
+  if (!until) return;
+  throw new TRPCError({
+    code: "CONFLICT",
+    message:
+      `The authenticator on this account was changed less than ` +
+      `${TOTP_CHANGE_COOL_OFF_HOURS} hours ago, so payouts are held until ` +
+      `${until.toISOString().slice(0, 16).replace("T", " ")} UTC. If you did ` +
+      `not change it, treat the account as compromised.`,
   });
 }
 

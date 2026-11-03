@@ -38,6 +38,19 @@ hash.
   transfer, never between them: re-running a half-finished batch would pay the
   traders at the top of the list twice.
 
+- **Removing or replacing the authenticator holds payouts for four hours.** A
+  step-up proves somebody holds the current second factor, which is worth
+  nothing if they installed it a minute ago — so disabling an authenticator, or
+  starting a fresh enrolment over the top of a working one, stamps a cool-off
+  during which nothing will pay out. The second factor and the payout
+  destination are the two things an attacker has to change to pay themselves,
+  and now neither can be changed and used in one sitting.
+
+  A first enrolment does not trip it; there was nothing to displace. Nor does
+  signing in with a recovery code — a lost phone needs no disable, and should
+  not cost four hours of payouts. Both the disable and the replacement are
+  logged as warnings with the hold's expiry.
+
 - **A code cannot be replayed.** The highest 30-second step already accepted is
   stored, and anything at or below it is refused even though the arithmetic is
   correct. Five wrong codes locks the account out for five minutes. Recovery
