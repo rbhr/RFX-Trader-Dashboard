@@ -42,8 +42,12 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // One trusted proxy hop (Caddy) — makes req.ip use the real client IP
-  // from X-Forwarded-For without letting clients spoof it
+  // One trusted proxy hop (Caddy), so req.ip is the address Caddy appended —
+  // the immediate peer, which is what server/adminNetwork.ts needs, and what
+  // req.protocol (and so the session cookie's `secure` flag) is derived from.
+  // It is NOT the end client: for the public hostnames the immediate peer is a
+  // Cloudflare edge. Anything recording who a user is uses clientIpOf from
+  // server/clientIp.ts, which walks on through Cloudflare to the client.
   app.set("trust proxy", 1);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

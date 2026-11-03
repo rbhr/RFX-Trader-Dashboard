@@ -5,6 +5,45 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/). The app carries
 a single version in `package.json`, shown in the UI footer alongside the build
 hash.
 
+## [4.16.0] — 2026-11-03
+
+### Security
+
+- **Sessions now record the address the request actually came from, not
+  Cloudflare's.** Every IP in `trading_sessions` was a Cloudflare edge address,
+  because the app stored `req.ip` — the hop Caddy appends, which for the public
+  hostnames is an edge shared by everybody who passes through it. Two things
+  followed, and both bit on 2 November. The attacker's address was absent from
+  the application's own evidence entirely: it was recovered afterwards only
+  because the edge access log keeps `Cf-Connecting-Ip`, which turned out to
+  hold `34.76.61.135` for the theft and `35.205.223.156` for the reconnaissance
+  twelve days earlier — both Google Cloud. And `hasSeenDevice` was comparing
+  strangers, so a trader's login 2FA could be skipped for somebody who merely
+  happened through the same Cloudflare edge as one of their live sessions.
+
+  `server/clientIp.ts` walks the chain itself, newest hop first — the socket
+  peer, then `X-Forwarded-For` right to left — and takes the first address that
+  is not a proxy we put there. Caddy appends the real peer to the right of
+  anything a client sent, so a client arriving at the origin directly with a
+  handmade `X-Forwarded-For` is identified by the entry Caddy added rather than
+  by what it claimed; `server/clientIp.test.ts` covers that, including stacked
+  forged hops and entries claiming to be Cloudflare or private space.
+
+  Two knock-on improvements. The per-IP login limiter (30 attempts per 15
+  minutes) was keyed on the Cloudflare edge, so unrelated traders shared one
+  bucket while an attacker rotating edges got a fresh one each time; it is now
+  per client. And device recognition becomes meaningful, which means **more 2FA
+  codes at first** — existing sessions hold Cloudflare addresses, so returning
+  traders will look like new devices until they have logged in once.
+
+  `trust proxy` is deliberately unchanged at 1. It also decides `req.protocol`,
+  which the session cookie's `secure` flag is derived from, and
+  `server/adminNetwork.ts` genuinely wants the immediate peer rather than the
+  end client — 100.64.0.0/10 is carrier-grade NAT space that real mobile
+  networks hand out, so an end client can hold a 100.x address while being
+  nowhere near the tailnet. Both are commented so the two notions of "client
+  IP" do not get unified by mistake later.
+
 ## [4.15.0] — 2026-11-02
 
 ### Security

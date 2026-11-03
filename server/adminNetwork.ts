@@ -70,6 +70,14 @@ export function isTailnetAdminRequest(r: {
  * which is the one Caddy itself appends, so a client's own XFF values land
  * further left and are ignored. That holds only while Caddy is the sole way in:
  * the app deliberately publishes no host port.
+ *
+ * Deliberately NOT `clientIpOf` from server/clientIp.ts, which is for
+ * recording who a user is and keeps walking through trusted proxies to the
+ * end client. This gate asks a different question — did the connection arrive
+ * from a tailnet device — and only the immediate peer answers it. The
+ * difference matters: 100.64.0.0/10 is carrier-grade NAT space that real
+ * mobile networks hand out, so an end client can legitimately hold a 100.x
+ * address while being nowhere near the tailnet.
  */
 export function assertAdminNetwork(req: Request): void {
   if (!ENV.isProduction) return;

@@ -85,6 +85,14 @@ new admin surfaces behind `tradingProcedure`; if one must read the session cooki
 (as `server/liveStream.ts` does), repeat the check with `isTailnetAdminRequest`.
 `trading.login` refuses an admin before comparing the password and writes an `auth` log row.
 
+**There are two notions of "client IP", and they are not interchangeable.** `req.ip`
+(`trust proxy` 1) is the *immediate peer* — the hop Caddy appends — which is what
+`server/adminNetwork.ts` needs and what `req.protocol`, and so the session cookie's `secure`
+flag, is derived from. `clientIpOf` (`server/clientIp.ts`) walks on through Cloudflare to the
+*end client*, and is what records who a user is: sessions, rate limits, auth logs. Do not
+unify them: 100.64.0.0/10 is carrier-grade NAT space real mobile networks hand out, so an end
+client can hold a 100.x address while being nowhere near the tailnet.
+
 Still open from that incident, in `/home/rfx/.claude/plans/precious-cooking-pretzel.md`:
 `updateUsdtInfo` lets an account change its own payout address with no 2FA, no logging and no
 cool-off; `payments` records no destination address; `trading_sessions.ipAddress` stores

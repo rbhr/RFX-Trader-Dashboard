@@ -152,6 +152,7 @@ import {
   assertAddressSettled,
 } from "./payoutAddressHold";
 import { assertAdminNetwork } from "./adminNetwork";
+import { clientIpOf } from "./clientIp";
 import { socketStatus, reconnectMetaCopierSocket } from "./metacopierSocket";
 import {
   getWalletAddress as getTronWalletAddress,
@@ -1152,9 +1153,14 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        // req.ip respects Express "trust proxy" (set to 1 hop for Caddy),
-        // so it can't be spoofed via X-Forwarded-For by external clients.
-        const clientIp = ctx.req.ip || null;
+        // The client's own address, not Cloudflare's. `req.ip` would give the
+        // hop Caddy appends, which for the public hostnames is a Cloudflare
+        // edge shared by everybody on it — so every IP in trading_sessions was
+        // Cloudflare's, the 2026-11-02 attacker's address was absent from the
+        // app's evidence entirely, and hasSeenDevice was matching strangers
+        // against each other. See server/clientIp.ts for why this cannot be
+        // forged by a client writing its own X-Forwarded-For.
+        const clientIp = clientIpOf(ctx.req);
 
         // Brute-force protection: per-account and per-IP attempt limits
         const magicKey = `login:magic:${input.magicNumber}`;
